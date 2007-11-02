@@ -370,6 +370,37 @@ class BackendIMAP extends BackendDiff {
         return $stat;
     }
 
+    /* Creates or modifies a folder
+     * "folderid" => id of the parent folder
+     * "oldid" => if empty -> new folder created, else folder is to be renamed
+     * "displayname" => new folder name (to be created, or to be renamed to)
+     * "type" => folder type, ignored in IMAP
+     *
+     */
+    function ChangeFolder($folderid, $oldid, $displayname, $type){
+		debugLog("ChangeFolder: (parent: '$folderid'  oldid: '$oldid'  displayname: '$displayname'  type: '$type')"); 
+		
+		// go to parent mailbox
+		$this->imap_reopenFolder($folderid);
+		
+		// build name for new mailbox
+		$newname = $this->_server . imap_utf7_encode(str_replace(".", $this->_serverdelimiter, $folderid) . $this->_serverdelimiter . $displayname);
+		
+		$csts = false;
+		// if $id is set => rename mailbox, otherwise create
+		if ($oldid) {
+			$csts = imap_renamemailbox($this->_mbox, $this->_server . imap_utf7_encode(str_replace(".", $this->_serverdelimiter, $oldid)), $newname);
+		}
+		else {
+			$csts = imap_createmailbox($this->_mbox, $newname);
+		}
+		if ($csts) {
+			return $this->StatFolder($folderid . "." . $displayname);
+		}
+		else 
+			return false;
+    }
+
     /* Should return attachment data for the specified attachment. The passed attachment identifier is
      * the exact string that is returned in the 'AttName' property of an SyncAttachment. So, you should
      * encode any information you need to find the attachment in that 'attname' property.
