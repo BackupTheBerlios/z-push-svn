@@ -18,7 +18,7 @@ include_once('diffbackend.php');
 // The is an improved version of mimeDecode from PEAR that correctly
 // handles charsets and charset conversion
 include_once('mimeDecode.php');
-
+include_once('Mail/RFC822.php');
 
 class BackendIMAP extends BackendDiff {
     /* Called to logon a user. These are the three authentication strings that you must
@@ -209,7 +209,7 @@ class BackendIMAP extends BackendDiff {
         
         $messages = array();
     	$this->imap_reopenFolder($folderid, true);
-    	$overviews = imap_fetch_overview($this->_mbox, "1:*");
+    	$overviews = @imap_fetch_overview($this->_mbox, "1:*");
     
     	if (!$overviews) {
             debugLog("IMAP-GetMessageList: Failed to retrieve overview");
@@ -389,7 +389,9 @@ class BackendIMAP extends BackendDiff {
 		$csts = false;
 		// if $id is set => rename mailbox, otherwise create
 		if ($oldid) {
-			$csts = imap_renamemailbox($this->_mbox, $this->_server . imap_utf7_encode(str_replace(".", $this->_serverdelimiter, $oldid)), $newname);
+			// rename doesn't work properly with IMAP
+			// the activesync client doesn't support a 'changing ID'
+			//$csts = imap_renamemailbox($this->_mbox, $this->_server . imap_utf7_encode(str_replace(".", $this->_serverdelimiter, $oldid)), $newname);
 		}
 		else {
 			$csts = imap_createmailbox($this->_mbox, $newname);
@@ -462,7 +464,7 @@ class BackendIMAP extends BackendDiff {
      * Tasks folder will not do anything. The SyncXXX objects should be filled with as much information as possible, 
      * but at least the subject, body, to, from, etc.
      */
-    function GetMessage($folderid, $id) {
+    function GetMessage($folderid, $id, $truncsize) {
 	    debugLog("IMAP-GetMessage: (fid: '$folderid'  id: '$id' )");
 
         // Get flags, etc
@@ -470,16 +472,24 @@ class BackendIMAP extends BackendDiff {
 
     	if ($stat) {        
 	    	$this->imap_reopenFolder($folderid);
-	    	$mail = imap_fetchheader($this->_mbox, $id, FT_UID) . imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
-		   
+	    	$mail = imap_fetchheader($this->_mbox, $id, FT_PREFETCHTEXT | FT_UID) . imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
+
 	    	$mobj = new Mail_mimeDecode($mail);
 	    	$message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));
-					
+
     		$output = new SyncMail();
 	
-	    	$output->body = str_replace("\n", "\r\n", $this->getBody($message));
-	    	$output->bodysize = strlen($output->body);
-	    	$output->bodytruncated = 0;
+    		$body = str_replace("\n", "\r\n", $this->getBody($message));
+
+    		if(strlen($body) > $truncsize) {
+    		    $output->body = substr($body, 0, $truncsize);
+    		    $output->bodytruncated = 1;
+            } else {
+                $output->body = $body;
+                $output->bodytruncated = 0;
+            }
+
+	    	$output->bodysize = strlen($body);
 	    	$output->datereceived = strtotime($message->headers["date"]);
 	    	$output->displayto = $message->headers["to"];
 	    	$output->importance = isset($message->headers["x-priority"]) ? preg_replace("/\D+/", "", $message->headers["x-priority"]) : null;
