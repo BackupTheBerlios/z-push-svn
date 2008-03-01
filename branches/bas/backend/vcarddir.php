@@ -14,9 +14,23 @@
 include_once('diffbackend.php');
 
 class BackendVCDir extends BackendDiff {
+	var $_config;
 	var $_user;
 	var $_devid;
 	var $_protocolversion;
+	
+	function BackendVCDir($config){
+		$this->_config = $config;
+	}
+	
+	function Logon($username, $domain, $password) {
+		return true;
+	}
+	
+	// completing protocol
+	function Logoff() {
+		return true;
+	}
 	
 	function Setup($user, $devid, $protocolversion) {
 		$this->_user = $user;
@@ -399,7 +413,7 @@ class BackendVCDir extends BackendDiff {
 	// -----------------------------------
 	
 	function getPath() {
-		return str_replace('%u', $this->_user, VCARDDIR_DIR);
+		return str_replace('%u', $this->_user, $this->_config['VCARDDIR_DIR']);
 	}
 	
 	function escape($data){
@@ -420,4 +434,6 @@ class BackendVCDir extends BackendDiff {
 		return $data;
 	}
 };
+
+
 ?>

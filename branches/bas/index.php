@@ -15,11 +15,12 @@
 
 ob_start(false, 1048576);
 
-include_once("config.php");
-include_once("proto.php");
-include_once("request.php");
-include_once("debug.php");
-include_once("compat.php");
+include_once('zpushdefs.php');
+include_once('config.php');
+include_once('proto.php');
+include_once('request.php');
+include_once('debug.php');
+include_once('compat.php');
 
 // Attempt to set maximum execution time
 ini_set('max_execution_time', SCRIPT_TIMEOUT);
@@ -32,108 +33,134 @@ $output = fopen("php://output", "w+");
 
 // The script must always be called with authorisation info
 if(!isset($_SERVER['PHP_AUTH_PW'])) {
-    header("WWW-Authenticate: Basic realm=\"ZPush\"");
-    header("HTTP/1.0 401 Unauthorized");
-    print("Access denied. Please send authorisation information");
-    return;
+	header("WWW-Authenticate: Basic realm=\"ZPush\"");
+	header("HTTP/1.0 401 Unauthorized");
+	print("Access denied. Please send authorisation information");
+	return;
+}
+$pos = strrpos($_SERVER['PHP_AUTH_USER'], '\\');
+if($pos === false){
+	$auth_user = $_SERVER['PHP_AUTH_USER'];
+	$auth_domain = '';
+}else{
+	$auth_user = substr($_SERVER['PHP_AUTH_USER'],0,$pos);
+	$auth_domain = substr($_SERVER['PHP_AUTH_USER'],$pos+1);
+}
+$auth_pw = $_SERVER['PHP_AUTH_PW'];
+
+if(!empty($ALLOWLOGIN)){
+	if((is_array($ALLOWLOGIN) && !in_array($auth_user, $ALLOWLOGIN))||($auth_user != $ALLOWLOGIN)){
+		header("HTTP/1.0 401 Unauthorized");
+		header("WWW-Authenticate: Basic realm=\"ZPush\"");
+		print("Access denied. Username or password incorrect.");
+		return;
+	}
 }
 
-// Parse the standard GET parameters        
+if(!empty($DENYLOGIN)){
+	if((is_array($DENYLOGIN) && in_array($auth_user, $DENYLOGIN))||($auth_user == $DENYLOGIN)){
+		header("HTTP/1.0 401 Unauthorized");
+		header("WWW-Authenticate: Basic realm=\"ZPush\"");
+		print("Access denied. Username or password incorrect.");
+		return;
+	}
+}
+
+// Parse the standard GET parameters		
 if(isset($_GET["Cmd"]))
-    $cmd = $_GET["Cmd"];
+	$cmd = $_GET["Cmd"];
 if(isset($_GET["User"]))
-    $user = $_GET["User"];
+	$user = $_GET["User"];
 if(isset($_GET["DeviceId"]))
-    $devid = $_GET["DeviceId"];	
+	$devid = $_GET["DeviceId"];	
 if(isset($_GET["DeviceType"]))
-    $devtype = $_GET["DeviceType"];
+	$devtype = $_GET["DeviceType"];
 
 // The GET parameters are required
 if($_SERVER["REQUEST_METHOD"] == "POST") {
-    if(!isset($user) || !isset($devid) || !isset($devtype)) {
-        print("Your device requested the Z-Push URL without the required GET parameters");
-        return;
-    }
+	if(!isset($user) || !isset($devid) || !isset($devtype)) {
+		print("Your device requested the Z-Push URL without the required GET parameters");
+		return;
+	}
 }
 
 // Get the request headers so we can see the versions
 $requestheaders = apache_request_headers();
 if(isset($requestheaders["MS-ASProtocolVersion"])) {
-    global $protocolversion;
+	global $protocolversion;
 
-    $protocolversion = $requestheaders["MS-ASProtocolVersion"];
-    debugLog("Client supports version " . $protocolversion);
+	$protocolversion = $requestheaders["MS-ASProtocolVersion"];
+	debugLog("Client supports version " . $protocolversion);
 } else {
-    global $protocolversion;
+	global $protocolversion;
 
-    $protocolversion = "1.0";
+	$protocolversion = "1.0";
 }
 
 // Load our backend driver
 $backend_dir = opendir(BASE_PATH . "/backend");
 while($entry = readdir($backend_dir)) {
-    if(substr($entry,0,1) == ".")
-        continue;
+	if(substr($entry,0,1) == ".")
+		continue;
 
-    if (!function_exists("mapi_logon") && ($entry == "ics.php")) 
-        continue;
-        
-    include_once(BASE_PATH . "/backend/" . $entry);
+	if (!function_exists("mapi_logon") && ($entry == "ics.php")) 
+		continue;
+		
+	include_once(BASE_PATH . "/backend/" . $entry);
 }
 
 // Initialize our backend
-$backend = new $BACKEND_PROVIDER();
+eval('$backend = new '.$BACKEND_PROVIDER.'($BACKEND_CONFIG);');
 
-if($backend->Logon($_SERVER['PHP_AUTH_USER'], isset($_SERVER['PHP_AUTH_DOMAIN']) ? $_SERVER['PHP_AUTH_DOMAIN'] : "", $_SERVER['PHP_AUTH_PW']) == false) {
-    header("HTTP/1.0 401 Unauthorized");
-    header("WWW-Authenticate: Basic realm=\"ZPush\"");
-    print("Access denied. Username or password incorrect.");
-    return;
+if($backend->Logon($auth_user, $auth_domain, $auth_pw) == false) {
+	header("HTTP/1.0 401 Unauthorized");
+	header("WWW-Authenticate: Basic realm=\"ZPush\"");
+	print("Access denied. Username or password incorrect.");
+	return;
 }
 
 // $user is usually the same as the PHP_AUTH_USER. This allows you to sync the 'john' account if you
 // have sufficient privileges as user 'joe'.
 if($backend->Setup($user, $devid, $protocolversion) == false) {
-    header("HTTP/1.0 401 Unauthorized");
-    header("WWW-Authenticate: Basic realm=\"ZPush\"");
-    print("Access denied or user '$user' unknown.");
-    return;
+	header("HTTP/1.0 401 Unauthorized");
+	header("WWW-Authenticate: Basic realm=\"ZPush\"");
+	print("Access denied or user '$user' unknown.");
+	return;
 }
 
 // Do the actual request
 switch($_SERVER["REQUEST_METHOD"]) {
-    case 'OPTIONS':
-        header("MS-Server-ActiveSync: 6.5.7638.1");
-        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5");
-        header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,ResolveRecipipents,ValidateCert,Provision,Search,Ping");
-        break;
-    case 'POST':
-        header("MS-Server-ActiveSync: 6.5.7638.1");
-        debugLog("POST cmd: $cmd");
-        // Do the actual request
-        if(!HandleRequest($backend, $cmd, $devid, $protocolversion)) {
-            // Request failed. Try to output some kind of error information. We can only do this if
-            // output had not started yet. If it has started already, we can't show the user the error, and
-            // the device will give its own (useless) error message.
-            if(!headers_sent()) {
-                header("Content-type: text/html");
-                print("<BODY>\n");
-                print("<h3>Error</h3><p>\n");
-                print("There was a problem processing the <i>$cmd</i> command from your PDA.\n");
-                print("<p>Here is the debug output:<p><pre>\n");
-                print(getDebugInfo());
-                print("</pre>\n");
-                print("</BODY>\n");
-            }
-        }
-        break;
-    case 'GET':
-        header("Content-type: text/html");
-        print("<BODY>\n");
-        print("<h3>GET not supported</h3><p>\n");
-        print("This is the z-push location and can only be accessed by Microsoft ActiveSync-capable devices.");
-        print("</BODY>\n");
-        break;
+	case 'OPTIONS':
+		header("MS-Server-ActiveSync: 6.5.7638.1");
+		header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5");
+		header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,ResolveRecipipents,ValidateCert,Provision,Search,Ping");
+		break;
+	case 'POST':
+		header("MS-Server-ActiveSync: 6.5.7638.1");
+		debugLog("POST cmd: $cmd");
+		// Do the actual request
+		if(!HandleRequest($backend, $cmd, $devid, $protocolversion)) {
+			// Request failed. Try to output some kind of error information. We can only do this if
+			// output had not started yet. If it has started already, we can't show the user the error, and
+			// the device will give its own (useless) error message.
+			if(!headers_sent()) {
+				header("Content-type: text/html");
+				print("<BODY>\n");
+				print("<h3>Error</h3><p>\n");
+				print("There was a problem processing the <i>$cmd</i> command from your PDA.\n");
+				print("</BODY>\n");
+			}
+		}
+		break;
+	case 'GET':
+		header("Content-type: text/html");
+?>
+<BODY>
+<h3>GET not supported</h3><p>
+This is the z-push location and can only be accessed by Microsoft ActiveSync-capable devices.
+</BODY>
+<?php
+		break;
 }
 
 // destruct backend

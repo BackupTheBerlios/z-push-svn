@@ -11,24 +11,11 @@
 * Consult LICENSE file for details
 ************************************************/
 
-global $debugstr;
-
-function debug($str) {
-    global $debugstr;
-    $debugstr .= "$str\n";
-}
-
-function getDebugInfo() {
-    global $debugstr;
-    
-    return $debugstr;
-}
-
 function debugLog($message) {
-    @$fp = fopen(BASE_PATH . "/debug.txt","a");
-    @$date = strftime("%x %X");
-    @fwrite($fp, "$date $message\n");
-    @fclose($fp);
+	@$fp = fopen(BASE_PATH . "/debug.txt","a");
+	@$date = strftime("%x %X");
+	@fwrite($fp, "$date $message\n");
+	@fclose($fp);
 }
 
 function zarafa_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {	

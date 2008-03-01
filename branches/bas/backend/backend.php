@@ -35,47 +35,47 @@ define('EXPORT_CONTENTS', 2);
 define('BACKEND_DISCARD_DATA', 1);
 
 class ImportContentsChanges {
-    function ImportMessageChange($message) {}
+	function ImportMessageChange($message) {}
 
-    function ImportMessageDeletion($message) {}
-    
-    function ImportMessageReadStateChange($message) {}
+	function ImportMessageDeletion($message) {}
+	
+	function ImportMessageReadStateChange($message) {}
 
-    function ImportMessageMove($message) {}
+	function ImportMessageMove($message) {}
 };
 
 class ImportHierarchyChanges {
-    function ImportFolderChange($folder) {}
+	function ImportFolderChange($folder) {}
 
-    function ImportFolderDeletion($folder) {}
+	function ImportFolderDeletion($folder) {}
 };
 
 class ExportChanges {
-    // Exports (returns) changes since '$synckey' as an array of Sync* objects. $flags
-    // can be EXPORT_HIERARCHY or EXPORT_CONTENTS. $restrict contains the restriction on which
-    // messages should be filtered. Synckey is updated via reference (!)
-    function ExportChanges($importer, $folderid, $restrict, $syncstate, $flags) {}
+	// Exports (returns) changes since '$synckey' as an array of Sync* objects. $flags
+	// can be EXPORT_HIERARCHY or EXPORT_CONTENTS. $restrict contains the restriction on which
+	// messages should be filtered. Synckey is updated via reference (!)
+	function ExportChanges($importer, $folderid, $restrict, $syncstate, $flags) {}
 };
 
 class Backend {
-    var $hierarchyimporter;
-    var $contentsimporter;
-    var $exporter;
-    
-    // Returns TRUE if the logon succeeded, FALSE if not
-    function Logon($username, $domain, $password) {}
-    
-    // called before closing connection
-    function Logoff() {}
+	var $hierarchyimporter;
+	var $contentsimporter;
+	var $exporter;
+	
+	// Returns TRUE if the logon succeeded, FALSE if not
+	function Logon($username, $domain, $password) {}
+	
+	// called before closing connection
+	function Logoff() {}
 
-    // Returns an array of SyncFolder types for the entire folder hierarchy
-    // on the server (the array itself is flat, but refers to parents via the 'parent'
-    // property)
-    function GetHierarchy() {}
-    
-    // Called when a message has to be sent and the message needs to be saved to the 'sent items'
-    // folder
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {}
+	// Returns an array of SyncFolder types for the entire folder hierarchy
+	// on the server (the array itself is flat, but refers to parents via the 'parent'
+	// property)
+	function GetHierarchy() {}
+	
+	// Called when a message has to be sent and the message needs to be saved to the 'sent items'
+	// folder
+	function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {}
 };
 
 ?>
