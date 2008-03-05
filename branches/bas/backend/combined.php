@@ -191,8 +191,8 @@ class ImportContentsChangesCombinedWrap{
 		$this->_icc = &$icc;
 	}
 	
-	function Config($state) {
-		return $this->_icc->Config($state);
+	function Config($state, $flags = 0) {
+		return $this->_icc->Config($state, $flags);
 	}
 	function ImportMessageChange($id, $message){
 		return $this->_icc->ImportMessageChange($id, $message);
