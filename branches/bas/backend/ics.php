@@ -1740,7 +1740,7 @@ class BackendICS {
 
 	function Logon($user, $domain, $pass) {
 
-		$this->_session = mapi_logon_zarafa($user, $pass, MAPI_SERVER);
+		$this->_session = mapi_logon_zarafa($user, $pass, $this->_config["MAPI_SERVER"]);
 		
 		if($this->_session === false) {
 			debugLog("logon failed for user $user");

@@ -87,7 +87,7 @@ class BackendVCDir extends BackendDiff {
 			$folder = new SyncFolder();
 			$folder->serverid = $id;
 			$folder->parentid = "0";
-			$folder->displayname = "Contacts";
+			$folder->displayname = $this->_config['VCARDDIR_FOLDERNAME'];
 			$folder->type = SYNC_FOLDER_TYPE_CONTACT;
 			
 			return $folder;

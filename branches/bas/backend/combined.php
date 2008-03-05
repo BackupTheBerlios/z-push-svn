@@ -20,9 +20,9 @@ class ExportHierarchyChangesCombined{
 	var $_syncstates;
 	var $_exporters;
 	var $_importwraps;
-	function ExportHierarchyChangesCombined($backend) {
+	function ExportHierarchyChangesCombined(&$backend) {
 		debugLog('ExportHierarchyChangesCombined constructed');
-		$this->_backend = $backend;
+		$this->_backend =& $backend;
 	}
 	
 	function Config(&$importer, $folderid, $restrict, $syncstate, $flags, $truncation) {
@@ -42,10 +42,10 @@ class ExportHierarchyChangesCombined{
 			}
 			
 			if(!isset($this->_importwraps[$i])){
-				$this->_importwraps[$i] = new ImportHierarchyChangesCombinedWrap($i, $this->_backend ,&$importer);
+				$this->_importwraps[$i] = new ImportHierarchyChangesCombinedWrap($i, &$this->_backend ,&$importer);
 			}
 			
-			$this->_exporters[$i] = $b->GetExporter();
+			$this->_exporters[$i] = $this->_backend->_backends[$i]->GetExporter();
 			$this->_exporters[$i]->Config(&$this->_importwraps[$i], $folderid, $restrict, $state, $flags, $truncation);
 		}
 		debugLog('ExportHierarchyChangesCombined::Config complete');
@@ -54,21 +54,21 @@ class ExportHierarchyChangesCombined{
 		debugLog('ExportHierarchyChangesCombined::GetChangeCount()');
 		$c = 0;
 		foreach($this->_exporters as $i => $e){
-			$C += $e->GetChangeCount();
+			$C += $this->_exporters[$i]->GetChangeCount();
 		}
 		return $c;
 	}
 	function Synchronize() {
 		debugLog('ExportHierarchyChangesCombined::Synchronize()');
 		foreach($this->_exporters as $i => $e){
-			while(is_array($e->Synchronize()));
+			while(is_array($this->_exporters[$i]->Synchronize()));
 		}
 		return true;
 	}
 	function GetState() {
 		debugLog('ExportHierarchyChangesCombined::GetState()');
 		foreach($this->_exporters as $i => $e){
-			$this->_syncstates[$i] = $e->GetState();
+			$this->_syncstates[$i] = $this->_exporters[$i]->GetState();
 		}
 		return serialize($this->_syncstates);
 	}
@@ -81,8 +81,8 @@ class ImportHierarchyChangesCombined{
 	var $_backend;
 	var $_syncstates = array();
 	
-	function ImportHierarchyChangesCombined($backend) {
-		$this->_backend = $backend;
+	function ImportHierarchyChangesCombined(&$backend) {
+		$this->_backend =& $backend;
 	}
 	function Config($state) {
 		debugLog('ImportHierarchyChangesCombined::Config(...)');
@@ -150,10 +150,10 @@ class ImportHierarchyChangesCombinedWrap {
 	var $_backend;
 	var $_backendid;
 	
-	function ImportHierarchyChangesCombinedWrap($backendid, $backend, &$ihc) {
+	function ImportHierarchyChangesCombinedWrap($backendid, &$backend, &$ihc) {
 		debugLog('ImportHierarchyChangesCombinedWrap::ImportHierarchyChangesCombinedWrap('.$backendid.',...)');
 		$this->_backendid = $backendid;
-		$this->_backend = $backend;
+		$this->_backend =& $backend;
 		$this->_ihc = &$ihc;
 	}
 	
@@ -163,7 +163,8 @@ class ImportHierarchyChangesCombinedWrap {
 			$folder->parentid = $this->_backendid.$this->_backend->_config['delimiter'].$folder->parentid;
 		}
 		if(isset($this->_backend->_config['folderbackend'][$folder->type]) && $this->_backend->_config['folderbackend'][$folder->type] != $this->_backendid){
-			$folder->type = SYNC_FOLDER_TYPE_OTHER;
+			debugLog('not ussing folder: '.$folder->displayname.' ('.$folder->serverid.')');
+			return true;//$folder->type = SYNC_FOLDER_TYPE_OTHER;
 		}
 		debugLog('ImportHierarchyChangesCombinedWrap::ImportFolderChange('.$folder->serverid.')');
 		return $this->_ihc->ImportFolderChange($folder);
@@ -183,10 +184,10 @@ class ImportContentsChangesCombinedWrap{
 	var $_backend;
 	var $_folderid;
 	
-	function ImportContentsChangesCombinedWrap($folderid, $backend, &$icc){
+	function ImportContentsChangesCombinedWrap($folderid, &$backend, &$icc){
 		debugLog('ImportContentsChangesCombinedWrap::ImportContentsChangesCombinedWrap('.$folderid.',...)');
 		$this->_folderid = $folderid;
-		$this->_backend = $backend;
+		$this->_backend = &$backend;
 		$this->_icc = &$icc;
 	}
 	
@@ -233,7 +234,7 @@ class BackendCombined {
 			return false;
 		}
 		foreach ($this->_backends as $i => $b){
-			if($b->Logon($username, $domain, $password) == false){
+			if($this->_backends[$i]->Logon($username, $domain, $password) == false){
 				debugLog('Combined login failed on'. $this->_config['backends'][$i]['name']);
 				return false;
 			}
@@ -249,7 +250,7 @@ class BackendCombined {
 			return false;
 		}
 		foreach ($this->_backends as $i => $b){
-			if($b->Setup($user, $devid, $protocolversion) == false){
+			if($this->_backends[$i]->Setup($user, $devid, $protocolversion) == false){
 				debugLog('Combined::Setup failed');
 				return false;
 			}
@@ -259,8 +260,8 @@ class BackendCombined {
 	}
 	
 	function Logoff() {
-		foreach ($this->_backends as $b){
-			$b->Logoff();
+		foreach ($this->_backends as $i => $b){
+			$this->_backends[$i]->Logoff();
 		}
 		return true;
 	}
@@ -278,7 +279,7 @@ class BackendCombined {
 	//return our own hierarchy importer which send each change to the right backend
 	function GetHierarchyImporter(){
 		debugLog('Combined::GetHierarchyImporter()');
-		return new ImportHierarchyChangesCombined($this);
+		return new ImportHierarchyChangesCombined(&$this);
 	}
 	
 	//get hierarchy from all backends combined
@@ -286,7 +287,7 @@ class BackendCombined {
 		debugLog('Combined::GetHierarchy()');
 		$ha = array();
 		foreach ($this->_backends as $i => $b){
-			$h = $b->GetHierarchy();
+			$h = $this->_backends[$i]->GetHierarchy();
 			if(is_array($h)){
 				foreach($h as $j => $f){
 					$h[$j]->serverid = $i.$this->_config['delimiter'].$h[$j]->serverid;
@@ -312,7 +313,7 @@ class BackendCombined {
 				return false;
 			return $backend->GetExporter($this->GetBackendFolder($folderid));
 		}
-		return new ExportHierarchyChangesCombined($this);
+		return new ExportHierarchyChangesCombined(&$this);
 	}
 	
 	//if the wastebasket is set to one backend, return the wastebasket of that backend
@@ -323,7 +324,7 @@ class BackendCombined {
 			return $this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET].$this->_config['delimiter'].$this->_backends[$this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET]]->GetWasteBasket();
 		}
 		foreach($this->_backends as $i => $b){
-			$w = $b->GetWasteBasket();
+			$w = $this->_backends[$i]->GetWasteBasket();
 			if($w){
 				return $i.$this->_config['delimiter'].$w;
 			}
@@ -343,8 +344,8 @@ class BackendCombined {
 	//there is no way to tell which backend the attachment is from, so we try them all
 	function GetAttachmentData($attname){
 		debugLog('Combined::GetAttachmentData('.$attname.')');
-		foreach ($this->_backends as $b){
-			if($b->GetAttachmentData($attname) == true){
+		foreach ($this->_backends as $i => $b){
+			if($this->_backends[$i]->GetAttachmentData($attname) == true){
 				return true;
 			}
 		}
@@ -354,7 +355,7 @@ class BackendCombined {
 	//send mail with the first backend returning true
 	function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
 		foreach ($this->_backends as $i => $b){
-			if($b->SendMail($rfc822, $forward, $reply, $parent) == true){
+			if($this->_backends[$i]->SendMail($rfc822, $forward, $reply, $parent) == true){
 				return true;
 			}
 		}

@@ -90,6 +90,7 @@
 	// **********************
 	$BackendVCDir_config = array(
 		'VCARDDIR_DIR' => '/home/%u/.kde/share/apps/kabc/stdvcf',
+		'VCARDDIR_FOLDERNAME' => 'contacts',
 	);
 
 	$BackendFileStorage_config = array(
@@ -133,7 +134,7 @@
 			SYNC_FOLDER_TYPE_JOURNAL => array('journal'),
 		),
 	);
-
+	
 
 	// **********************
 	//  BackendCombined settings
@@ -148,6 +149,10 @@
 				'name' => 'BackendFileStorage',
 				'config' => $BackendFileStorage_config,
 			),
+//			'm' => array(
+//				'name' => 'BackendICS',
+//				'config' => $BackendICS_config,
+//			),
 			'i' => array(
 				'name' => 'BackendIMAP',
 				'config' => $BackendIMAP_config,
