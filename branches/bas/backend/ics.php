@@ -1424,31 +1424,55 @@ class PHPHierarchyImportProxy {
 	
 	// Gets the folder type by checking the default folders in MAPI
 	function _getFolderType($entryid) {
-		$storeprops = mapi_getprops($this->_store, array(PR_IPM_OUTBOX_ENTRYID, PR_IPM_WASTEBASKET_ENTRYID, PR_IPM_SENTMAIL_ENTRYID));
-		$inbox = mapi_msgstore_getreceivefolder($this->_store);
-		$inboxprops = mapi_getprops($inbox, array(PR_ENTRYID, PR_IPM_DRAFTS_ENTRYID, PR_IPM_TASK_ENTRYID, PR_IPM_APPOINTMENT_ENTRYID, PR_IPM_CONTACT_ENTRYID, PR_IPM_NOTE_ENTRYID, PR_IPM_JOURNAL_ENTRYID));
-		
-		if($entryid == $inboxprops[PR_ENTRYID])
-			return SYNC_FOLDER_TYPE_INBOX;
-		if($entryid == $inboxprops[PR_IPM_DRAFTS_ENTRYID])
-			return SYNC_FOLDER_TYPE_DRAFTS;
-		if($entryid == $storeprops[PR_IPM_WASTEBASKET_ENTRYID])
-			return SYNC_FOLDER_TYPE_WASTEBASKET;
-		if($entryid == $storeprops[PR_IPM_SENTMAIL_ENTRYID])
-			return SYNC_FOLDER_TYPE_SENTMAIL;
-		if($entryid == $storeprops[PR_IPM_OUTBOX_ENTRYID])
-			return SYNC_FOLDER_TYPE_OUTBOX;
-		if($entryid == $inboxprops[PR_IPM_TASK_ENTRYID])
-			return SYNC_FOLDER_TYPE_TASK;
-		if($entryid == $inboxprops[PR_IPM_APPOINTMENT_ENTRYID])
-			return SYNC_FOLDER_TYPE_APPOINTMENT;
-		if($entryid == $inboxprops[PR_IPM_CONTACT_ENTRYID])
-			return SYNC_FOLDER_TYPE_CONTACT;
-		if($entryid == $inboxprops[PR_IPM_NOTE_ENTRYID])
-			return SYNC_FOLDER_TYPE_NOTE;
-		if($entryid == $inboxprops[PR_IPM_JOURNAL_ENTRYID])
-			return SYNC_FOLDER_TYPE_JOURNAL;
-			
+
+		if (!isset($this->_config["MAPI_FOLDER_TYPES"])){
+
+			$storeprops = mapi_getprops($this->_store, array(PR_MDB_PROVIDER, PR_IPM_OUTBOX_ENTRYID, PR_IPM_WASTEBASKET_ENTRYID, PR_IPM_SENTMAIL_ENTRYID, PR_IPM_PUBLIC_FOLDERS_ENTRYID));
+			if($entryid == $storeprops[PR_IPM_WASTEBASKET_ENTRYID])
+				return SYNC_FOLDER_TYPE_WASTEBASKET;
+			if($entryid == $storeprops[PR_IPM_SENTMAIL_ENTRYID])
+				return SYNC_FOLDER_TYPE_SENTMAIL;
+			if($entryid == $storeprops[PR_IPM_OUTBOX_ENTRYID])
+				return SYNC_FOLDER_TYPE_OUTBOX;
+
+			if ($storeprops[PR_MDB_PROVIDER]==ZARAFA_STORE_PUBLIC_GUID){
+				// we are using the public store here...
+				if($entryid == $inboxprops[PR_ENTRYID])
+					return SYNC_FOLDER_TYPE_INBOX;
+			}else{ // normal store, so check for inbox, calendar, tasks etc
+				$inbox = mapi_msgstore_getreceivefolder($this->_store);
+				$inboxprops = mapi_getprops($inbox, array(PR_ENTRYID, PR_IPM_DRAFTS_ENTRYID, PR_IPM_TASK_ENTRYID, PR_IPM_APPOINTMENT_ENTRYID, PR_IPM_CONTACT_ENTRYID, PR_IPM_NOTE_ENTRYID, PR_IPM_JOURNAL_ENTRYID));
+	
+				if($entryid == $inboxprops[PR_ENTRYID])
+					return SYNC_FOLDER_TYPE_INBOX;
+				if($entryid == $inboxprops[PR_IPM_TASK_ENTRYID])
+					return SYNC_FOLDER_TYPE_TASK;
+				if($entryid == $inboxprops[PR_IPM_APPOINTMENT_ENTRYID])
+					return SYNC_FOLDER_TYPE_APPOINTMENT;
+				if($entryid == $inboxprops[PR_IPM_CONTACT_ENTRYID])
+					return SYNC_FOLDER_TYPE_CONTACT;
+				if($entryid == $inboxprops[PR_IPM_NOTE_ENTRYID])
+					return SYNC_FOLDER_TYPE_NOTE;
+				if($entryid == $inboxprops[PR_IPM_JOURNAL_ENTRYID])
+					return SYNC_FOLDER_TYPE_JOURNAL;
+				if($entryid == $inboxprops[PR_IPM_DRAFTS_ENTRYID])
+					return SYNC_FOLDER_TYPE_DRAFTS;
+			}
+
+		}else{ // custom folder types
+			$folder = mapi_msgstore_openentry($this->_store, $entryid);
+			if (mapi_last_hresult())
+				return SYNC_FOLDER_TYPE_OTHER;
+
+			$folderProps = mapi_getprops($folder, array(PR_DISPLAY_NAME));
+			foreach($this->_config["MAPI_FOLDER_TYPES"] as $type=>$name){
+				if ($name == $folderProps[PR_DISPLAY_NAME])
+					return $type;
+				if (is_array($name) && in_array($folderProps[PR_DISPLAY_NAME], $name))
+					return $type;
+			}
+		}
+
 		return SYNC_FOLDER_TYPE_OTHER;
 	}
 
@@ -1747,22 +1771,29 @@ class BackendICS {
 			return false;
 		}
 			
-		// Get/open default store
-		$this->_defaultstore = $this->_openDefaultMessageStore($this->_session);
+		if (isset($this->_config["MAPI_USE_PUBLICSTORE"])&&$this->_config["MAPI_USE_PUBLICSTORE"]){
+			debugLog("Use only PublicStore");
+			$this->_defaultstore = $this->_openPublicMessageStore($this->_session);
+
+		}else{
+			// Get/open default store
+			$this->_defaultstore = $this->_openDefaultMessageStore($this->_session);
 		
+		}
+
 		if($this->_defaultstore === false) {
-			debugLog("user $user has no default store");
+			debugLog("can't open store for $user");
 			return false;
 		}
 		
-		debugLog("User $user logged on");
+		debugLog("ICS: User $user logged on");
 		return true;
 	}
 	
 	function Setup($user, $devid) {
 		$this->_user = $user;
 		$this->_devid = $devid;
-		
+		debugLog("ICS: setup: ".$this->_user);
 		return true;
 	}
 
@@ -2142,7 +2173,7 @@ class BackendICS {
 		$entryid = false;
 
 		if ($result == NOERROR){
-			$rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_DEFAULT_STORE, PR_MDB_PROVIDER));
+			$rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_DEFAULT_STORE));
 			$result = mapi_last_hresult();
 
 			foreach($rows as $row) {
@@ -2159,6 +2190,33 @@ class BackendICS {
 			return false;
 		}
 	}
+
+	function _openPublicMessageStore($session)
+	{
+		// Find the default store
+		$storestables = mapi_getmsgstorestable($session);
+		$result = mapi_last_hresult();
+		$entryid = false;
+
+		if ($result == NOERROR){
+			$rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_MDB_PROVIDER));
+			$result = mapi_last_hresult();
+
+			foreach($rows as $row) {
+				if ($row[PR_MDB_PROVIDER] == ZARAFA_STORE_PUBLIC_GUID){
+					$entryid = $row[PR_ENTRYID];
+					break;
+				}
+			}
+		}
+
+		if($entryid) {
+			return mapi_openmsgstore($session, $entryid);
+		} else {
+			return false;
+		}
+	}
+
 	
 	// Adds all folders in $mapifolder to $list, recursively
 	function _getFoldersRecursive($mapifolder, $parent, &$list) {

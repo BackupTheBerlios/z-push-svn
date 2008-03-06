@@ -19,12 +19,9 @@
 	define('BASE_PATH', dirname($_SERVER['SCRIPT_FILENAME']) . "/");
 
 	// Define the include paths
-	set_include_path(get_include_path() . PATH_SEPARATOR .
-					 BASE_PATH. "include/" . PATH_SEPARATOR .
+	set_include_path(		 BASE_PATH. "include/" . PATH_SEPARATOR .
 					 BASE_PATH. PATH_SEPARATOR .
-					 "/usr/share/php/" . PATH_SEPARATOR .
-					 "/usr/share/php5/" . PATH_SEPARATOR .
-					 "/usr/share/pear/");
+					 get_include_path());
 
 	define('STATE_DIR', 'state');
 
@@ -47,6 +44,17 @@
 	
 	// Defines the server to which we want to connect
 	$BackendICS_config = array('MAPI_SERVER' => 'file:///var/run/zarafa');
+	$BackendICSPublic_config = array(
+		'MAPI_SERVER'			=>	'file:///var/run/zarafa',
+		'MAPI_USE_PUBLICSTORE'	=>	true,
+		'MAPI_FOLDER_TYPES'		=>	array(),
+/*		'MAPI_FOLDER_TYPES'		=>	array(
+			SYNC_FOLDER_TYPE_INBOX			=> "Public Folders",
+			SYNC_FOLDER_TYPE_APPOINTMENT	=> "Calendar",
+			SYNC_FOLDER_TYPE_CONTACT		=> "Contacts",
+		)
+*/
+	);
 	
 	
 	// ************************
@@ -153,6 +161,10 @@
 //				'name' => 'BackendICS',
 //				'config' => $BackendICS_config,
 //			),
+//			"p" => array(
+//				"name" => "BackendICS",
+//				"config" => $BackendICSPublic_config,
+//			),
 			'i' => array(
 				'name' => 'BackendIMAP',
 				'config' => $BackendIMAP_config,
@@ -188,6 +200,6 @@
 		//creating a new folder in the root folder should create a folder in one backend
 		'rootcreatefolderbackend' => 'i',
 	);
-	
+
 	eval('$BACKEND_CONFIG = $'.$BACKEND_PROVIDER.'_config;');
 ?>
