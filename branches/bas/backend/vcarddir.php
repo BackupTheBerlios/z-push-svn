@@ -411,6 +411,7 @@ class BackendVCDir extends BackendDiff {
 			}else{
 				$name = 'unknown';
 			}
+			$name = preg_replace('/[^a-z0-9 _-]/i', '', $name);
 			$id = $name.'.vcf';
 			$i = 0;
 			while(file_exists($this->getPath().'/'.$id)){
