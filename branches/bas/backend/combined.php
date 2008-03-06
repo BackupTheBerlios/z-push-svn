@@ -273,13 +273,17 @@ class BackendCombined {
 		$backend = $this->GetBackend($folderid);
 		if($backend === false)
 			return false;
-		return new ImportContentsChangesCombinedWrap($folderid, $this, $backend->GetContentsImporter($this->GetBackendFolder($folderid)));
+		$importer = $backend->GetContentsImporter($this->GetBackendFolder($folderid));
+		if($importer){
+			return new ImportContentsChangesCombinedWrap($folderid, &$this, &$importer);
+		}
+		return false;
 	}
 	
 	//return our own hierarchy importer which send each change to the right backend
 	function GetHierarchyImporter(){
 		debugLog('Combined::GetHierarchyImporter()');
-		return new ImportHierarchyChangesCombined(&$this);
+		return new ImportHierarchyChangesCombined($this);
 	}
 	
 	//get hierarchy from all backends combined
@@ -321,7 +325,11 @@ class BackendCombined {
 	function GetWasteBasket(){
 		debugLog('Combined::GetWasteBasket()');
 		if(isset($this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET])){
-			return $this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET].$this->_config['delimiter'].$this->_backends[$this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET]]->GetWasteBasket();
+			$wb = $this->_backends[$this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET]]->GetWasteBasket();
+			if($wb){
+				return $this->_config['folderbackend'][SYNC_FOLDER_TYPE_WASTEBASKET].$this->_config['delimiter'].$wb;
+			}
+			return false;
 		}
 		foreach($this->_backends as $i => $b){
 			$w = $this->_backends[$i]->GetWasteBasket();
