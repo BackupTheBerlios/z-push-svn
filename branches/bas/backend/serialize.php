@@ -197,7 +197,7 @@ function BackendSerialize($config){
 		$data = serialize($message);
 		file_put_contents($this->getPath($folderid) . '/' . $id, $data);
 		
-		return $id;
+		return $this->StatMessage($folderid, $id);
 	}
 	
 	function MoveMessage($folderid, $id, $newfolderid) {

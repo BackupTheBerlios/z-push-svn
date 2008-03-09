@@ -420,7 +420,7 @@ class BackendVCDir extends BackendDiff {
 			}
 		}
 		file_put_contents($this->getPath().'/'.$id, $data);
-		return $id;
+		return $this->StatMessage($folderid, $id);
 	}
 	
 	function MoveMessage($folderid, $id, $newfolderid) {
