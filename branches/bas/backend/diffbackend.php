@@ -212,8 +212,8 @@ class ImportContentsChangesDiff extends DiffState {
 				
 		$stat = $this->_backend->ChangeMessage($this->_folderid, $id, $message);
 		
-		if(empty($stat))
-			return false;
+		if(!is_array($stat))
+			return $stat;
 		
 		// Record the state of the message
 		$this->updateState("change", $stat);
