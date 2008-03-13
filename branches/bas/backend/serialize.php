@@ -19,11 +19,12 @@ class BackendSerialize extends BackendDiff {
 	var $_devid;
 	var $_protocolversion;
 	
-function BackendSerialize($config){
-	$this->_config = $config;
+	function BackendSerialize($config){
+		$this->_config = $config;
 		if(empty($this->_config['SERIALIZE_DELIMITER'])){
 			$this->_config['SERIALIZE_DELIMITER'] = '/';
 		}
+		$this->_ignoreflagchanges = true;
 	}
 	
 	function Logon($username, $domain, $password) {

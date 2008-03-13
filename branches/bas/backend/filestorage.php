@@ -21,6 +21,7 @@ class BackendFileStorage extends BackendDiff {
 	
 	function BackendFileStorage($config){
 		$this->_config = $config;
+		$this->_ignoreflagchanges = true;
 	}
 	
 	function Logon($username, $domain, $password) {

@@ -22,7 +22,7 @@ include_once('backend.php');
 
 
 
-function GetDiff($old, $new) {
+function GetDiff($old, $new, $ignoreflagchanges = false) {
 	$changes = array();
 	
 	// Sort both arrays in the same way by ID
@@ -42,7 +42,7 @@ function GetDiff($old, $new) {
 			
 		if($old[$iold]["id"] == $new[$inew]["id"]) {
 			// Both messages are still available, compare flags and mod
-			if(isset($old[$iold]["flags"]) && isset($new[$inew]["flags"]) && $old[$iold]["flags"] != $new[$inew]["flags"]) {
+			if(!$ignoreflagchanges && isset($old[$iold]["flags"]) && isset($new[$inew]["flags"]) && $old[$iold]["flags"] != $new[$inew]["flags"]) {
 				// Flags changed
 				$change["type"] = "flags";
 				$change["id"] = $new[$inew]["id"];
@@ -313,10 +313,12 @@ class ExportChangesDiff extends DiffState {
 	var $_restrict;
 	var $_flags;
 	var $_user;
+	var $_ignoreflagchanges;
 	
-	function ExportChangesDiff($backend, $folderid) {
+	function ExportChangesDiff($backend, $folderid, $ignoreflagchanges = false) {
 		$this->_backend = $backend;
 		$this->_folderid = $folderid;
+		$this->_ignoreflagchanges = $ignoreflagchanges;
 	}
 	
 	function Config(&$importer, $folderid, $restrict, $syncstate, $flags, $truncation) {
@@ -344,7 +346,7 @@ class ExportChangesDiff extends DiffState {
 			if(!isset($this->_syncstate) || !$this->_syncstate)
 				$this->_syncstate = array();
 
-			$this->_changes = GetDiff($this->_syncstate, $msglist);
+			$this->_changes = GetDiff($this->_syncstate, $msglist, $this->_ignoreflagchanges);
 
 			debugLog("Found " . count($this->_changes) . " message changes");
 		} else {
@@ -511,6 +513,7 @@ class BackendDiff {
 	var $_user;
 	var $_devid;
 	var $_protocolversion;
+	var $_ignoreflagchanges = false;
 	
 	function Logon($username, $domain, $password) {
 		return true;
@@ -538,7 +541,7 @@ class BackendDiff {
 	}
 	
 	function GetExporter($folderid = false) {
-		return new ExportChangesDiff($this, $folderid);
+		return new ExportChangesDiff($this, $folderid, $this->_ignoreflagchanges);
 	}
 
 	function GetHierarchy() {
