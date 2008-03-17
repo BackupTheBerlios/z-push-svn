@@ -11,15 +11,15 @@
 * Consult LICENSE file for details
 ************************************************/
 	// Defines the default time zone
-	if (function_exists("date_default_timezone_set")){
-		date_default_timezone_set("Europe/Amsterdam");
+	if (function_exists('date_default_timezone_set')){
+		date_default_timezone_set('Europe/Amsterdam');
 	}
 
 	// Defines the base path on the server, terminated by a slash
-	define('BASE_PATH', dirname($_SERVER['SCRIPT_FILENAME']) . "/");
+	define('BASE_PATH', dirname($_SERVER['SCRIPT_FILENAME']) . '/');
 
 	// Define the include paths
-	set_include_path(		 BASE_PATH. "include/" . PATH_SEPARATOR .
+	set_include_path(		 BASE_PATH. 'include/' . PATH_SEPARATOR .
 					 BASE_PATH. PATH_SEPARATOR .
 					 get_include_path());
 
@@ -29,7 +29,7 @@
 	define('SCRIPT_TIMEOUT', 0);
 
 	// The data provider that we are using (see configuration below)
-	$BACKEND_PROVIDER = "BackendCombined";
+	$BACKEND_PROVIDER = 'BackendCombined';
 
 	// only allow login for these users
 	$ALLOWLOGIN = array();
@@ -49,9 +49,9 @@
 		'MAPI_USE_PUBLICSTORE'	=>	true,
 		'MAPI_FOLDER_TYPES'		=>	array(),
 /*		'MAPI_FOLDER_TYPES'		=>	array(
-			SYNC_FOLDER_TYPE_INBOX			=> "Public Folders",
-			SYNC_FOLDER_TYPE_APPOINTMENT	=> "Calendar",
-			SYNC_FOLDER_TYPE_CONTACT		=> "Contacts",
+			SYNC_FOLDER_TYPE_INBOX			=> 'Public Folders',
+			SYNC_FOLDER_TYPE_APPOINTMENT	=> 'Calendar',
+			SYNC_FOLDER_TYPE_CONTACT		=> 'Contacts',
 		)
 */
 	);
@@ -142,7 +142,13 @@
 			SYNC_FOLDER_TYPE_JOURNAL => array('journal'),
 		),
 	);
-	
+
+	$BackendRSS_config = array(
+		'RSS_CACHE_DIR' => '/tmp/',
+		'RSS_EXPIRES' => 10,
+		'RSS_FEEDS_CONFIG' => '/home/%u/rssfeeds.cfg',
+		'RSS_INBOX_FEED' => 'tweakers',
+	);
 
 	// **********************
 	//  BackendCombined settings
@@ -169,9 +175,9 @@
 //				'name' => 'BackendICS',
 //				'config' => $BackendICS_config,
 //			),
-//			"p" => array(
-//				"name" => "BackendICS",
-//				"config" => $BackendICSPublic_config,
+//			'p' => array(
+//				'name' => 'BackendICS',
+//				'config' => $BackendICSPublic_config,
 //			),
 			'i' => array(
 				'name' => 'BackendIMAP',
@@ -188,6 +194,10 @@
 			's' => array(
 				'name' => 'BackendSerialize',
 				'config' => $BackendSerialize_config,
+			),
+			'r' => array(
+				'name' => 'BackendRSS',
+				'config' => $BackendRSS_config,
 			),
 		),
 		'delimiter' => '/',
