@@ -19,6 +19,7 @@ class ExportHierarchyChangesCombined{
 	var $_backend;
 	var $_syncstates;
 	var $_exporters;
+	var $_importer;
 	var $_importwraps;
 	function ExportHierarchyChangesCombined(&$backend) {
 		debugLog('ExportHierarchyChangesCombined constructed');
@@ -30,6 +31,7 @@ class ExportHierarchyChangesCombined{
 		if($folderid){
 			return false;
 		}
+		$this->_importer =& $importer;
 		$this->_syncstates = unserialize($syncstate);
 		if(!is_array($this->_syncstates)){
 			$this->_syncstates = array();
@@ -54,13 +56,22 @@ class ExportHierarchyChangesCombined{
 		debugLog('ExportHierarchyChangesCombined::GetChangeCount()');
 		$c = 0;
 		foreach($this->_exporters as $i => $e){
-			$C += $this->_exporters[$i]->GetChangeCount();
+			$c += $this->_exporters[$i]->GetChangeCount();
 		}
 		return $c;
 	}
 	function Synchronize() {
 		debugLog('ExportHierarchyChangesCombined::Synchronize()');
 		foreach($this->_exporters as $i => $e){
+			if(!empty($this->_backend->_config['backends'][$i]['subfolder']) && !isset($this->_syncstates[$i])){
+				// first sync and subfolder backend
+				$f = new SyncFolder();
+				$f->serverid = $i.$this->_backend->_config['delimiter'].'0';
+				$f->parentid = '0';
+				$f->displayname = $this->_backend->_config['backends'][$i]['subfolder'];
+				$f->type = SYNC_FOLDER_TYPE_OTHER;
+				$this->_importer->ImportFolderChange($f);
+			}
 			while(is_array($this->_exporters[$i]->Synchronize()));
 		}
 		return true;
@@ -102,6 +113,9 @@ class ImportHierarchyChangesCombined{
 			$backendid = $this->_backend->GetBackendId($parent);
 			$parent = $this->_backend->GetBackendFolder($parent);
 		}
+		if(!empty($this->_backend->_config['backends'][$backendid]['subfolder']) && $id == $backendid.$this->_backend->_config['delimiter'].'0'){
+			return false; //we can not change a static subfolder
+		}
 		if($id != false){
 			if($backendid != $this->_backend->GetBackendId($id))
 				return false;//we can not move a folder from 1 backend to an other backend
@@ -122,19 +136,23 @@ class ImportHierarchyChangesCombined{
 	}
 	function ImportFolderDeletion($id, $parent) {
 		debugLog('ImportHierarchyChangesCombined::ImportFolderDeletion('.$id.', '.$parent.')');
+		$backendid = $this->_backend->GetBackendId($id);
+		if(!empty($this->_backend->_config['backends'][$backendid]['subfolder']) && $id == $backendid.$this->_backend->_config['delimiter'].'0'){
+			return false; //we can not change a static subfolder
+		}
 		$backend = $this->_backend->GetBackend($id);
 		$id = $this->_backend->GetBackendFolder($id);
 		if($parent != '0')
 			$parent = $this->_backend->GetBackendFolder($parent);
 		$importer = $backend->GetHierarchyImporter();
-		if(isset($this->_syncstates[$this->_backend->GetBackendId($id)])){
-			$state = $this->_syncstates[$this->_backend->GetBackendId($id)];
+		if(isset($this->_syncstates[$backendid])){
+			$state = $this->_syncstates[$backendid];
 		}else{
 			$state = '';
 		}
 		$importer->Config($state);
 		$res = $importer->ImportFolderDeletion($id, $parent);
-		$this->_syncstates[$this->_backend->GetBackendId($id)] = $importer->GetState();
+		$this->_syncstates[$backendid] = $importer->GetState();
 		return $res;
 	}
 	function GetState(){
@@ -159,7 +177,7 @@ class ImportHierarchyChangesCombinedWrap {
 	
 	function ImportFolderChange($folder) {
 		$folder->serverid = $this->_backendid.$this->_backend->_config['delimiter'].$folder->serverid;
-		if($folder->parentid != '0'){
+		if($folder->parentid != '0' || !empty($this->_backend->_config['backends'][$this->_backendid]['subfolder'])){
 			$folder->parentid = $this->_backendid.$this->_backend->_config['delimiter'].$folder->parentid;
 		}
 		if(isset($this->_backend->_config['folderbackend'][$folder->type]) && $this->_backend->_config['folderbackend'][$folder->type] != $this->_backendid){
@@ -234,7 +252,22 @@ class BackendCombined {
 			return false;
 		}
 		foreach ($this->_backends as $i => $b){
-			if($this->_backends[$i]->Logon($username, $domain, $password) == false){
+			$u = $username;
+			$d = $domain;
+			$p = $password;
+			if(isset($this->_config['backends'][$i]['users'])){
+				if(!isset($this->_config['backends'][$i]['users'][$username])){
+					unset($this->_backends[$i]);
+					continue;
+				}
+				if(isset($this->_config['backends'][$i]['users'][$username]['username']))
+					$u = $this->_config['backends'][$i]['users'][$username]['username'];
+				if(isset($this->_config['backends'][$i]['users'][$username]['password']))
+					$p = $this->_config['backends'][$i]['users'][$username]['password'];
+				if(isset($this->_config['backends'][$i]['users'][$username]['domain']))
+					$d = $this->_config['backends'][$i]['users'][$username]['domain'];				
+			}
+			if($this->_backends[$i]->Logon($u, $d, $p) == false){
 				debugLog('Combined login failed on'. $this->_config['backends'][$i]['name']);
 				return false;
 			}
@@ -250,7 +283,11 @@ class BackendCombined {
 			return false;
 		}
 		foreach ($this->_backends as $i => $b){
-			if($this->_backends[$i]->Setup($user, $devid, $protocolversion) == false){
+			$u = $user;
+			if(isset($this->_config['backends'][$i]['users']) && isset($this->_config['backends'][$i]['users'][$user]['username'])){
+					$u = $this->_config['backends'][$i]['users'][$user]['username'];
+			}
+			if($this->_backends[$i]->Setup($u, $devid, $protocolversion) == false){
 				debugLog('Combined::Setup failed');
 				return false;
 			}
@@ -291,11 +328,19 @@ class BackendCombined {
 		debugLog('Combined::GetHierarchy()');
 		$ha = array();
 		foreach ($this->_backends as $i => $b){
+			if(!empty($this->_config['backends'][$i]['subfolder'])){
+				$f = new SyncFolder();
+				$f->serverid = $i.$this->_config['delimiter'].'0';
+				$f->parentid = '0';
+				$f->displayname = $this->_config['backends'][$i]['subfolder'];
+				$f->type = SYNC_FOLDER_TYPE_OTHER;
+				$ha[] = $f;
+			}
 			$h = $this->_backends[$i]->GetHierarchy();
 			if(is_array($h)){
 				foreach($h as $j => $f){
 					$h[$j]->serverid = $i.$this->_config['delimiter'].$h[$j]->serverid;
-					if($h[$j]->parentid != '0'){
+					if($h[$j]->parentid != '0' || !empty($this->_config['backends'][$i]['subfolder'])){
 						$h[$j]->parentid = $i.$this->_config['delimiter'].$h[$j]->parentid;
 					}
 					if(isset($this->_config['folderbackend'][$h[$j]->type]) && $this->_config['folderbackend'][$h[$j]->type] != $i){

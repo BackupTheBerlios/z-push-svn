@@ -156,6 +156,14 @@
 			'f' => array(
 				'name' => 'BackendFileStorage',
 				'config' => $BackendFileStorage_config,
+				'users' => array(
+					'deviceusername' => array(
+						'username'=>'backendusername',
+						'password'=>'backendpassword',
+						'domain' => 'backenddomain'
+					),
+				),
+				'subfolder' => 'files',
 			),
 //			'm' => array(
 //				'name' => 'BackendICS',
@@ -176,7 +184,6 @@
 			'v' => array(
 				'name' => 'BackendVCDir',
 				'config' => $BackendVCDir_config,
-				'folders' => array(SYNC_FOLDER_TYPE_CONTACT),
 			),
 			's' => array(
 				'name' => 'BackendSerialize',
