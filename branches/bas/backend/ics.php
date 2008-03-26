@@ -223,7 +223,15 @@ class MAPIMapping {
 				}
 				
 				// decode base64 value
-				if($mapiprop == PR_RTF_COMPRESSED) $value = base64_decode($value);
+				if($mapiprop == PR_RTF_COMPRESSED){
+					$value = base64_decode($value);
+					if(strlen($value) == 0)
+						continue; // PDA will sometimes give us an empty RTF, which we'll ignore.
+					
+					// Note that you can still remove notes because when you remove notes it gives
+					// a valid compressed RTF with nothing in it.
+					
+				}
 				
 				mapi_setprops($mapimessage, array($mapiprop => $value));
 			}
@@ -318,16 +326,6 @@ class MAPIMapping {
 					  0, 0, $tz["dststartmonth"], $tz["dststartday"], $tz["dststartweek"], $tz["dststarthour"], $tz["dststartminute"], $tz["dststartsecond"], $tz["dststartmillis"]);
 					  
 		return $packed;
-	}
-	
-	function _getZeroSyncBlob() {
-		$tz = array();
-		
-		$tz["bias"] = $tz["dstendmonth"] = $tz["dstendday"] = $tz["dstendweek"] = $tz["dstendhour"] = $tz["dstendminute"] = $tz["dstendsecond"] = $tz["dstendmillis"] = 0;
-		$tz["stdbias"] = $tz["dststartmonth"] = $tz["dststartday"] = $tz["dststartweek"] = $tz["dststarthour"] = $tz["dststartminute"] = $tz["dststartsecond"] = $tz["dststartmillis"] = 0;
-		$tz["dstbias"] = 0;
-		
-		return $this->_getSyncBlobFromTZ($tz);
 	}
 	
 	// Checks the date to see if it is in DST, and returns correct GMT date accordingly
@@ -697,10 +695,11 @@ class ImportContentsChangesICS extends MAPIMapping {
 			
 			$starttime = $this->gmtime($localstart);
 			$endtime = $this->gmtime($localend);
+			$duration = ($localend - $localstart)/60;
 			
 			$recur["startocc"] = $starttime["tm_hour"] * 60 + $starttime["tm_min"];
-			$recur["endocc"] = $endtime["tm_hour"] * 60 + $endtime["tm_min"];
-
+			$recur["endocc"] = $recur["startocc"] + $duration; // Note that this may be > 24*60 if multi-day
+			
 			// "start" and "end" are in GMT when passing to class.recurrence
 			$recur["start"] = $this->_getDayStartOfTimestamp($this->_getGMTTimeByTz($localstart, $tz));
 			$recur["end"] = $this->_getDayStartOfTimestamp(0x7fffffff); // Maximum GMT value for end by default
@@ -1068,7 +1067,11 @@ class PHPContentsImportProxy extends MAPIMapping {
 			case 0x23:
 				// never ends
 			}
-			  
+			
+			// Correct 'alldayevent' because outlook fails to set it on recurring items of 24 hours or longer
+			if($recurrence->recur["endocc"] - $recurrence->recur["startocc"] >= 1440)
+			$message->alldayevent = true;
+			
 			// Interval is different according to the type/subtype
 			switch($recurrence->recur["type"]) {
 			case 10: 
@@ -1239,7 +1242,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 			if(isset($recurprops[$timezonetag])) {
 				$tz = $this->_getTZFromMAPIBlob($recurprops[$timezonetag]);
 			} else {
-				$tz = $this->_getZeroSyncBlob();
+				$tz = $this->_getGMTTZ();
 			}
 			
 			if($tz) {

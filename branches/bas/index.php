@@ -101,7 +101,7 @@ if(isset($requestheaders["MS-ASProtocolVersion"])) {
 // Load our backend driver
 $backend_dir = opendir(BASE_PATH . "/backend");
 while($entry = readdir($backend_dir)) {
-	if(substr($entry,0,1) == ".")
+	if(substr($entry,0,1) == "." || substr($entry,-4) != ".php")
 		continue;
 
 	if (!function_exists("mapi_logon") && ($entry == "ics.php")) 

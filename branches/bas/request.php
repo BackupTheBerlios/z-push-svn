@@ -792,16 +792,17 @@ function HandlePing($backend, $devid) {
 	$decoder = new WBXMLDecoder($input, $zpushdtd);
 	$encoder = new WBXMLEncoder($output, $zpushdtd);
 
-	// Get previous defaults
-	$ping = unserialize(file_get_contents(BASE_PATH . STATE_DIR . "/" . $devid));
-	$collections = $ping["collections"];
-	$lifetime = $ping["lifetime"];
+	$collections = array();
+	$lifetime = 0;
+
+	// Get previous defaults if they exist
+	$file = BASE_PATH . STATE_DIR . "/" . $devid;
+	if (file_exists($file)) {
+		$ping = unserialize(file_get_contents($file));
+		$collections = $ping["collections"];
+		$lifetime = $ping["lifetime"];
+	}
 	
-	if(!isset($collections))
-		$collections = array();
-	if(!isset($lifetime))
-		$lifetime = 0;
-		
 	if($decoder->getElementStartTag(SYNC_PING_PING)) {
 		debugLog("Ping init");
 		if($decoder->getElementStartTag(SYNC_PING_LIFETIME)) {
@@ -811,7 +812,7 @@ function HandlePing($backend, $devid) {
 
 		if($decoder->getElementStartTag(SYNC_PING_FOLDERS)) {
 			$collections = array();
-	   
+
 			while($decoder->getElementStartTag(SYNC_PING_FOLDER)) {
 				$collection = array();
 				

@@ -148,13 +148,14 @@ class BackendIMAP extends BackendDiff {
 
 			// all other headers stay 							
 			if ($headers) $headers .= "\n";
-			$headers .= ucfirst($k) . ":". $v;
+			$headers .= ucfirst($k) . ": ". $v;
 		}
 		if(!empty($this->_config['IMAP_FORCEFROM']) && !$changedfrom){
 			$v = $this->_config['IMAP_FORCEFROM'];
 			$v = str_replace('%u', $this->_username, $v);
 			$v = str_replace('%d', $this->_domain, $v);
-			$headers .= 'From:'.$v;
+			if ($headers) $headers .= "\n";
+			$headers .= 'From: '.$v;
 		}
 			
 		// if this is a multipart message with a boundary, we must use the original body
