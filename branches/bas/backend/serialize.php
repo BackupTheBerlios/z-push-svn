@@ -184,6 +184,7 @@ class BackendSerialize extends BackendDiff {
 	}
 	
 	function DeleteMessage($folderid, $id) {
+		debugLog('Serialize::DeleteMessage('.$folderid.', '.$id.')');
 		return unlink($this->getPath($folderid) . '/' . $id);
 	}
 	
@@ -192,6 +193,7 @@ class BackendSerialize extends BackendDiff {
 	}
 	
 	function ChangeMessage($folderid, $id, $message) {
+		debugLog('Serialize::ChangeMessage('.$folderid.', '.$id.', ...)');
 		if($id === false){
 			$id = md5(mt_rand().mt_rand().mt_rand().mt_rand());
 		}
@@ -202,6 +204,7 @@ class BackendSerialize extends BackendDiff {
 	}
 	
 	function MoveMessage($folderid, $id, $newfolderid) {
+		debugLog('Serialize::MoveMessage('.$folderid.', '.$id.', '.$newfolderid.')');
 		return rename($this->getPath($folderid). '/'.$id, $this->getPath($newfolderid). '/'.$id);
 	}
 	

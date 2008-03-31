@@ -50,19 +50,21 @@ if($pos === false){
 $auth_pw = $_SERVER['PHP_AUTH_PW'];
 
 if(!empty($ALLOWLOGIN)){
-	if((is_array($ALLOWLOGIN) && !in_array($auth_user, $ALLOWLOGIN))||($auth_user != $ALLOWLOGIN)){
+	if((is_array($ALLOWLOGIN) && !in_array($auth_user, $ALLOWLOGIN))||(is_string($ALLOWLOGIN) && $auth_user != $ALLOWLOGIN)){
 		header("HTTP/1.0 401 Unauthorized");
 		header("WWW-Authenticate: Basic realm=\"ZPush\"");
 		print("Access denied. Username or password incorrect.");
+		debugLog('Not allowed login: "'.$auth_user.'"');
 		return;
 	}
 }
 
 if(!empty($DENYLOGIN)){
-	if((is_array($DENYLOGIN) && in_array($auth_user, $DENYLOGIN))||($auth_user == $DENYLOGIN)){
+	if((is_array($DENYLOGIN) && in_array($auth_user, $DENYLOGIN))||(is_string($DENYLOGIN) && $auth_user == $DENYLOGIN)){
 		header("HTTP/1.0 401 Unauthorized");
 		header("WWW-Authenticate: Basic realm=\"ZPush\"");
 		print("Access denied. Username or password incorrect.");
+		debugLog('Denied login: "'.$auth_user.'"');
 		return;
 	}
 }

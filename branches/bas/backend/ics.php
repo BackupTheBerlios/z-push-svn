@@ -611,6 +611,19 @@ class ImportContentsChangesICS extends MAPIMapping {
 		
 		$this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
 
+		if(!empty($appointment->uid)){
+			if(substr($appointment->uid, 0, 40) == "040000008200E00074C5B7101A82E00800000000"){
+				$uid = hex2bin($appointment->uid);
+			}else{
+				$uid = "\x04\x00\x00\x00\x82\x00\xE0\x00\x74\xC5\xB7\x10\x1A\x82\xE0\x08\x00\x00\x00\x00\x00\x00\x00\x00";
+				$uid .= pack('l', strlen($appointment->uid)+13);
+				$uid .= "vCal-Uid\x01\x00\x00\x00";
+				$uid .= $appointment->uid;
+				$uid .= "\x00";
+			}
+			mapi_setprops($mapimessage, array($this->_getPropIDFromString("PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x3") => $uid));
+		}
+
 		// Get timezone info
 		if(isset($appointment->timezone))
 			$tz = $this->_getTZFromSyncBlob(base64_decode($appointment->timezone));
@@ -995,11 +1008,17 @@ class PHPContentsImportProxy extends MAPIMapping {
 
 		if(!isset($messageprops[$reminderset]) || $messageprops[$reminderset] == false)
 			$message->reminder = "";
-		  
-		$messageprops = mapi_getprops($mapimessage, array ( PR_SOURCE_KEY ));
+		
+		$uidpropid = $this->_getPropIDFromString("PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x3");
+		$messageprops = mapi_getprops($mapimessage, array ($uidpropid, PR_SOURCE_KEY ));
 
-		if(!isset($message->uid))
-			$message->uid = $messageprops[PR_SOURCE_KEY];
+		if(!isset($messageprops[$uidpropid])){
+			$message->uid = bin2hex($messageprops[PR_SOURCE_KEY]);
+		}elseif(substr($messageprops[$uidpropid], 40, 12) == "vCal-Uid\x01\x00\x00\x00")){
+			$message->uid = substr($messageprops[$uidpropid], 52, -1);
+		}else{
+			$message->uid = bin2hex($messageprops[$uidpropid]);
+		}
 
 		$isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
 		$recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216");

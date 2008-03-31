@@ -153,7 +153,9 @@ function HandleGetHierarchy($backend, $protocolversion) {
 	$encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDERS);
 	
 	foreach ($folders as $folder) {
+		$encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDER);
 		$folder->encode($encoder);
+		$encoder->endTag();
 	}
 	
 	$encoder->endTag();
