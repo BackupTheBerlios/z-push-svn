@@ -547,7 +547,7 @@ class BackendIMAP extends BackendDiff {
 					else $attname = "unknown attachment";
 					
 					$attachment->displayname = $attname;
-					$attachment->attname = base64_encode(seialize(array($folderid, $id , $n)));
+					$attachment->attname = base64_encode(serialize(array($folderid, $id , $n)));
 					$attachment->attmethod = 1;
 					$attachment->attoid = isset($part->headers['content-id']) ? $part->headers['content-id'] : "";
 					array_push($output->attachments, $attachment);
