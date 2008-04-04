@@ -396,7 +396,7 @@ class BackendCombined {
 		$backend = $this->GetBackend($folderid);
 		if($backend == false)
 			return false;
-		return $backend->Fetch($this->GetBackendFolder($folder), $id);
+		return $backend->Fetch($this->GetBackendFolder($folderid), $id);
 	}
 	
 	//there is no way to tell which backend the attachment is from, so we try them all
