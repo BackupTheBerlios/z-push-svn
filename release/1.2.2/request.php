@@ -343,6 +343,7 @@ function HandleSync($backend, $protocolversion, $devid) {
             return false;
 
         $collection["class"] = $decoder->getElementContent();
+        debugLog("Sync folder:{$collection["class"]}");
 
         if(!$decoder->getElementEndTag())
             return false;
