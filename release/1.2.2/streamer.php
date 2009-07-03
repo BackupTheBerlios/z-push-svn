@@ -3,12 +3,12 @@
 * File      :   streamer.php
 * Project   :   Z-Push
 * Descr     :   This file handles streaming of
-*               WBXML objects. It must be
-*               subclassed so the internals of
-*               the object can be specified via
-*               $mapping. Basically we set/read
-*               the object variables of the
-*               subclass according to the mappings
+*                WBXML objects. It must be
+*                subclassed so the internals of
+*                the object can be specified via
+*                $mapping. Basically we set/read
+*                the object variables of the
+*                subclass according to the mappings
 *
 *
 * Created   :   01.10.2007
@@ -213,6 +213,12 @@ class Streamer {
 
     function parseDate($ts) {
         if(preg_match("/(\d{4})[^0-9]*(\d{2})[^0-9]*(\d{2})T(\d{2})[^0-9]*(\d{2})[^0-9]*(\d{2})(.\d+)?Z/", $ts, $matches)) {
+            if ($matches[1] >= 2038){
+                $matches[1] = 2038;
+                $matches[2] = 1;
+                $matches[3] = 18;
+                $matches[4] = $matches[5] = $matches[6] = 0;
+            }
             return gmmktime($matches[4], $matches[5], $matches[6], $matches[2], $matches[3], $matches[1]);
         }
         return 0;
