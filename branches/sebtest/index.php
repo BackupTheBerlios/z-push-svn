@@ -25,7 +25,7 @@ include_once("compat.php");
 ini_set('max_execution_time', SCRIPT_TIMEOUT);
 set_time_limit(SCRIPT_TIMEOUT);
 
-debugLog("Start");
+debugLog("Start this old thing");
 
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
