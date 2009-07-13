@@ -753,6 +753,36 @@ class BackendIMAP extends BackendDiff {
         }
     }
 
+    // new ping mechanism for the IMAP-Backend
+    function AlterPing() {
+        return true;
+    }
+    
+    // returns a changes array using imap_status
+    // if changes occurr default diff engine computes the actual changes  
+    function AlterPingChanges($folderid, &$syncstate) {
+        debugLog("AlterPingChanges on $folderid stat: ". $syncstate);
+        $this->imap_reopenFolder($folderid);
+        $status = imap_status($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $folderid), SA_ALL);
+        if (!$status) {
+            debugLog("AlterPingChanges: could not stat folder $folderid : ". imap_last_error());
+            return false;  
+        }
+        else {
+            $newstate = "M:". $status->messages ."-R:". $status->recent ."-U:". $status->unseen; 
+
+            // message number is different - change occured
+            if ($syncstate != $newstate) {
+                $syncstate = $newstate;
+                debugLog("AlterPingChanges: Change FOUND!");
+                // build a dummy change
+                return array(array("type" => "fakeChange"));
+            }
+        } 
+
+        return array();  
+    }
+
     // ----------------------------------------
     // imap-specific internals
 
