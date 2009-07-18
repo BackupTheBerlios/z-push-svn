@@ -596,17 +596,17 @@ class BackendIMAP extends BackendDiff {
             $message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));
 
             $output = new SyncMail();
-
-            // decode body to truncate it
-            $body = utf8_to_windows1252($this->getBody($message));
+            
+            $body = $this->getBody($message);
+            // truncate body, if requested
             if(strlen($body) > $truncsize) {
-                $body = substr($body, 0, $truncsize);
+                $body = utf8_truncate($body, $truncsize);
                 $output->bodytruncated = 1;
             } else {
                 $body = $body;
                 $output->bodytruncated = 0;
             }
-            $body = str_replace("\n","\r\n", windows1252_to_utf8(str_replace("\r","",$body)));
+            $body = str_replace("\n","\r\n", str_replace("\r","",$body));
 
             $output->bodysize = strlen($body);
             $output->body = $body;
