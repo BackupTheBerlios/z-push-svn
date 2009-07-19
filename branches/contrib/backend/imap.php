@@ -306,7 +306,14 @@ class BackendIMAP extends BackendDiff {
 
         $messages = array();
         $this->imap_reopenFolder($folderid, true);
-        $overviews = @imap_fetch_overview($this->_mbox, "1:*");
+        
+        $sequence = "1:*";
+        if ($cutoffdate > 0) {
+            $search = @imap_search($this->_mbox, "SINCE ". date("d-M-Y", $cutoffdate));
+            if ($search !== false)
+                $sequence = implode(",", $search);
+        }
+        $overviews = @imap_fetch_overview($this->_mbox, $sequence);
 
         if (!$overviews) {
             debugLog("IMAP-GetMessageList: Failed to retrieve overview");
