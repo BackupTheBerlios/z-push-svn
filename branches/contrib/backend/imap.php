@@ -770,6 +770,10 @@ class BackendIMAP extends BackendDiff {
     function AlterPingChanges($folderid, &$syncstate) {
         debugLog("AlterPingChanges on $folderid stat: ". $syncstate);
         $this->imap_reopenFolder($folderid);
+        
+        // courier-imap only cleares the status cache after checking
+        @imap_check($this->_mbox);
+        
         $status = imap_status($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $folderid), SA_ALL);
         if (!$status) {
             debugLog("AlterPingChanges: could not stat folder $folderid : ". imap_last_error());
