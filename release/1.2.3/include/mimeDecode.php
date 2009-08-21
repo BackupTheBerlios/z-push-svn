@@ -153,7 +153,6 @@ class Mail_mimeDecode {
         // Have we been called statically?
     // If so, create an object and pass details to that.
         if ($isStatic AND isset($params['input'])) {
-
             $obj = new Mail_mimeDecode($params['input'], $params['crlf']);
             $structure = $obj->decode($params);
 
@@ -172,7 +171,6 @@ class Mail_mimeDecode {
                                  $params['decode_headers'] : false;
             $this->_charset = isset($params['charset']) ?
                                  $params['charset'] : 'iso-8859-15';
-
             $structure = $this->_decode($this->_header, $this->_body);
             if ($structure === false) {
                 $structure = $this->raiseError($this->_error);
@@ -320,12 +318,15 @@ class Mail_mimeDecode {
             $this->_error = 'Could not split header and body';
             return false;
         }
+        // standard header
+        $header = substr($input, 0, $pos);
+        
         //android fix
         if (($pos+(2*strlen($this->_crlf))) == strlen($input)) {
             $pos = strpos ($input, "\n\r") - 1;
+            // overwrite header
+            $header = substr($input, 0, $pos+1);
         }
-
-        $header = substr($input, 0, $pos);
         $body   = substr($input, $pos+(2*strlen($this->_crlf)));
 
         return array($header, $body);
@@ -341,12 +342,10 @@ class Mail_mimeDecode {
      */
     function _parseHeaders($input)
     {
-
         if ($input !== '') {
             // Unfold the input
             //android fix
-
-            if (substr_count($input, "\r\n") == 0 && substr_count($input, "\n") > 0) {
+            if (substr_count(trim($input), "\r\n") == 0 && substr_count($input, "\n") > 0) {
                 $input  = preg_replace('/' . "\n(\t| )/", ' ', $input);
                 $headers = explode("\n", trim($input));
             }
@@ -354,6 +353,7 @@ class Mail_mimeDecode {
                 $input  = preg_replace('/' . $this->_crlf . "(\t| )/", ' ', $input);
                 $headers = explode($this->_crlf, trim($input));
             }
+
             foreach ($headers as $value) {
                 $hdr_name = substr($value, 0, $pos = strpos($value, ':'));
                 $hdr_value = substr($value, $pos+1);
@@ -365,7 +365,6 @@ class Mail_mimeDecode {
         } else {
             $return = array();
         }
-
         return $return;
     }
 
@@ -418,7 +417,6 @@ class Mail_mimeDecode {
         for ($i=1; $i<count($tmp)-1; $i++) {
             $parts[] = $tmp[$i];
         }
-
         return $parts;
     }
 

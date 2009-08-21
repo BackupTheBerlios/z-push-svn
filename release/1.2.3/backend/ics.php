@@ -622,21 +622,35 @@ class ImportContentsChangesICS extends MAPIMapping {
         // non-leapyear. Why this is, is totally unclear.
         $monthminutes = array(0,44640,84960,129600,172800,217440,260640,305280,348480,393120,437760,480960);
 
-        mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Appointment"));
-
-        $this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
-
         // Get timezone info
         if(isset($appointment->timezone))
             $tz = $this->_getTZFromSyncBlob(base64_decode($appointment->timezone));
         else
             $tz = false;
 
-        // Set commonstart/commonend to start/end and remindertime to start
+        //calculate duration because without it some webaccess views are broken. duration is in min
+        $localstart = $this->_getLocaltimeByTZ($appointment->starttime, $tz);
+        $localend = $this->_getLocaltimeByTZ($appointment->endtime, $tz);
+        $duration = ($localend - $localstart)/60;
+
+        //nokia sends an yearly event with 0 mins duration but as all day event,
+        //so make it end next day
+        if ($appointment->starttime == $appointment->endtime && isset($appointment->alldayevent) && $appointment->alldayevent) {
+            $duration = 1440;
+            $appointment->endtime = $appointment->starttime + 24 * 60 * 60;
+            $localend = $localstart + 24 * 60 * 60;
+        }
+
+        mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Appointment"));
+
+        $this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
+
+        // Set commonstart/commonend to start/end and remindertime to start and duration
         mapi_setprops($mapimessage, array(
-            $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516") => $appointment->starttime,
-            $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517") => $appointment->endtime,
-            $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8502") => $appointment->starttime,
+            $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516") =>  $appointment->starttime,
+            $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517") =>  $appointment->endtime,
+            $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8502") =>  $appointment->starttime,
+            $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8213") =>     $duration
             ));
 
         // Set named prop 8510, unknown property, but enables deleting a single occurrence of a recurring
@@ -705,12 +719,8 @@ class ImportContentsChangesICS extends MAPIMapping {
                     break;
             }
 
-            $localstart = $this->_getLocaltimeByTZ($appointment->starttime, $tz);
-            $localend = $this->_getLocaltimeByTZ($appointment->endtime, $tz);
-
             $starttime = $this->gmtime($localstart);
             $endtime = $this->gmtime($localend);
-            $duration = ($localend - $localstart)/60;
 
             $recur["startocc"] = $starttime["tm_hour"] * 60 + $starttime["tm_min"];
             $recur["endocc"] = $recur["startocc"] + $duration; // Note that this may be > 24*60 if multi-day
@@ -783,8 +793,9 @@ class ImportContentsChangesICS extends MAPIMapping {
 
             $recurrence->setRecurrence($tz, $recur);
 
-        } else {
-        $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
+        }
+        else {
+            $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
             mapi_setprops($mapimessage, array($isrecurringtag => false));
         }
 
@@ -861,58 +872,70 @@ class ImportContentsChangesICS extends MAPIMapping {
 
         //addresses' fix
         $homecity = $homecountry = $homepostalcode = $homestate = $homestreet = $homeaddress = "";
-           if (isset($contact->homecity))            $props[PR_HOME_ADDRESS_CITY] = $homecity = u2w($contact->homecity);
-           if (isset($contact->homecountry))        $props[PR_HOME_ADDRESS_COUNTRY] = $homecountry = u2w($contact->homecountry);
-           if (isset($contact->homepostalcode))    $props[PR_HOME_ADDRESS_POSTAL_CODE] = $homepostalcode = u2w($contact->homepostalcode);
-           if (isset($contact->homestate))            $props[PR_HOME_ADDRESS_STATE_OR_PROVINCE] = $homestate = u2w($contact->homestate);
-           if (isset($contact->homestreet))        $props[PR_HOME_ADDRESS_STREET] = $homestreet = u2w($contact->homestreet);
-           $homeaddress = buildAddressString($homestreet, $homepostalcode, $homecity, $homestate, $homecountry);
-           if ($homeaddress) $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x801A")] = $homeaddress;
+        if (isset($contact->homecity))
+            $props[PR_HOME_ADDRESS_CITY] = $homecity = u2w($contact->homecity);
+        if (isset($contact->homecountry))
+            $props[PR_HOME_ADDRESS_COUNTRY] = $homecountry = u2w($contact->homecountry);
+        if (isset($contact->homepostalcode))
+            $props[PR_HOME_ADDRESS_POSTAL_CODE] = $homepostalcode = u2w($contact->homepostalcode);
+        if (isset($contact->homestate))
+            $props[PR_HOME_ADDRESS_STATE_OR_PROVINCE] = $homestate = u2w($contact->homestate);
+        if (isset($contact->homestreet))
+            $props[PR_HOME_ADDRESS_STREET] = $homestreet = u2w($contact->homestreet);
+        $homeaddress = buildAddressString($homestreet, $homepostalcode, $homecity, $homestate, $homecountry);
+        if ($homeaddress)
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x801A")] = $homeaddress;
 
         $businesscity = $businesscountry = $businesspostalcode = $businessstate = $businessstreet = $businessaddress = "";
-           if (isset($contact->businesscity))
-               $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8046")] = $businesscity = u2w($contact->businesscity);
-           if (isset($contact->businesscountry))
-               $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8049")] = $businesscountry = u2w($contact->businesscountry);
-           if (isset($contact->businesspostalcode))
-               $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8048")] = $businesspostalcode = u2w($contact->businesspostalcode);
-           if (isset($contact->businessstate))
-               $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8047")] = $businessstate = u2w($contact->businessstate);
-           if (isset($contact->businessstreet))
-               $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8045")] = $businessstreet = u2w($contact->businessstreet);
-           $businessaddress = buildAddressString($businessstreet, $businesspostalcode, $businesscity, $businessstate, $businesscountry);
-           if ($businessaddress) $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x801B")] = $businessaddress;
+        if (isset($contact->businesscity))
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8046")] = $businesscity = u2w($contact->businesscity);
+        if (isset($contact->businesscountry))
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8049")] = $businesscountry = u2w($contact->businesscountry);
+        if (isset($contact->businesspostalcode))
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8048")] = $businesspostalcode = u2w($contact->businesspostalcode);
+        if (isset($contact->businessstate))
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8047")] = $businessstate = u2w($contact->businessstate);
+        if (isset($contact->businessstreet))
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8045")] = $businessstreet = u2w($contact->businessstreet);
+        $businessaddress = buildAddressString($businessstreet, $businesspostalcode, $businesscity, $businessstate, $businesscountry);
+        if ($businessaddress) $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x801B")] = $businessaddress;
 
         $othercity = $othercountry = $otherpostalcode = $otherstate = $otherstreet = $otheraddress = "";
-           if (isset($contact->othercity))            $props[PR_OTHER_ADDRESS_CITY] = $othercity = u2w($contact->othercity);
-           if (isset($contact->othercountry))        $props[PR_OTHER_ADDRESS_COUNTRY] = $othercountry = u2w($contact->othercountry);
-           if (isset($contact->otherpostalcode))    $props[PR_OTHER_ADDRESS_POSTAL_CODE] = $otherpostalcode = u2w($contact->otherpostalcode);
-           if (isset($contact->otherstate))        $props[PR_OTHER_ADDRESS_STATE_OR_PROVINCE] = $otherstate = u2w($contact->otherstate);
-           if (isset($contact->otherstreet))        $props[PR_OTHER_ADDRESS_STREET] = $otherstreet = u2w($contact->otherstreet);
-           $otheraddress = buildAddressString($otherstreet, $otherpostalcode, $othercity, $otherstate, $othercountry);
-           if ($otheraddress) $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x801C")] = $otheraddress;
+        if (isset($contact->othercity))
+            $props[PR_OTHER_ADDRESS_CITY] = $othercity = u2w($contact->othercity);
+        if (isset($contact->othercountry))
+            $props[PR_OTHER_ADDRESS_COUNTRY] = $othercountry = u2w($contact->othercountry);
+        if (isset($contact->otherpostalcode))
+            $props[PR_OTHER_ADDRESS_POSTAL_CODE] = $otherpostalcode = u2w($contact->otherpostalcode);
+        if (isset($contact->otherstate))
+            $props[PR_OTHER_ADDRESS_STATE_OR_PROVINCE] = $otherstate = u2w($contact->otherstate);
+        if (isset($contact->otherstreet))
+            $props[PR_OTHER_ADDRESS_STREET] = $otherstreet = u2w($contact->otherstreet);
+        $otheraddress = buildAddressString($otherstreet, $otherpostalcode, $othercity, $otherstate, $othercountry);
+        if ($otheraddress)
+            $props[$this->_getPropIDFromString("PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x801C")] = $otheraddress;
 
            $mailingadresstype = 0;
 
-           if ($businessaddress) $mailingadresstype = 2;
-           elseif ($homeaddress) $mailingadresstype = 1;
-           elseif ($othercity) $mailingadresstype = 3;
+        if ($businessaddress) $mailingadresstype = 2;
+        elseif ($homeaddress) $mailingadresstype = 1;
+        elseif ($othercity) $mailingadresstype = 3;
 
-           if ($mailingadresstype) {
-               $props[$this->_getPropIDFromString("PT_LONG:{00062004-0000-0000-C000-000000000046}:0x8022")] = $mailingadresstype;
+        if ($mailingadresstype) {
+            $props[$this->_getPropIDFromString("PT_LONG:{00062004-0000-0000-C000-000000000046}:0x8022")] = $mailingadresstype;
 
-               switch ($mailingadresstype) {
-                   case 1:
-                       $this->_setMailingAdress($homestreet, $homepostalcode, $homecity, $homestate, $homecountry, $homeaddress, $props);
-                       break;
-                   case 2:
-                       $this->_setMailingAdress($businessstreet, $businesspostalcode, $businesscity, $businessstate, $businesscountry, $businessaddress, $props);
-                       break;
-                   case 3:
-                       $this->_setMailingAdress($otherstreet, $otherpostalcode, $othercity, $otherstate, $othercountry, $otheraddress, $props);
-                       break;
-               }
-           }
+            switch ($mailingadresstype) {
+                case 1:
+                    $this->_setMailingAdress($homestreet, $homepostalcode, $homecity, $homestate, $homecountry, $homeaddress, $props);
+                    break;
+                case 2:
+                    $this->_setMailingAdress($businessstreet, $businesspostalcode, $businesscity, $businessstate, $businesscountry, $businessaddress, $props);
+                    break;
+                case 3:
+                    $this->_setMailingAdress($otherstreet, $otherpostalcode, $othercity, $otherstate, $othercountry, $otheraddress, $props);
+                    break;
+                }
+            }
 
            mapi_setprops($mapimessage, $props);
     }
@@ -973,7 +996,7 @@ class ImportHierarchyChangesICS  {
     }
 
     function Config($state, $flags = 0) {
-           // Put the state information in a stream that can be used by ICS
+        // Put the state information in a stream that can be used by ICS
 
         $stream = mapi_stream_create();
         if(strlen($state) == 0) {
@@ -1146,8 +1169,8 @@ class PHPContentsImportProxy extends MAPIMapping {
             $message->reminder = "";
         else {
             if ($messageprops[$remindertime] == 0x5AE980E1)
-                  $message->reminder = 15;
-              else
+                $message->reminder = 15;
+            else
                 $message->reminder = $messageprops[$remindertime];
         }
 
@@ -1226,7 +1249,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 
             // Correct 'alldayevent' because outlook fails to set it on recurring items of 24 hours or longer
             if($recurrence->recur["endocc"] - $recurrence->recur["startocc"] >= 1440)
-            $message->alldayevent = true;
+                $message->alldayevent = true;
 
             // Interval is different according to the type/subtype
             switch($recurrence->recur["type"]) {
@@ -1375,7 +1398,7 @@ class PHPContentsImportProxy extends MAPIMapping {
             $fromaddr = $this->_getSMTPAddressFromEntryID($messageprops[PR_SENT_REPRESENTING_ENTRYID]);
 
         if($fromname == $fromaddr)
-              $fromname = "";
+            $fromname = "";
 
         if($fromname)
             $from = "\"" . w2u($fromname) . "\" <" . $fromaddr . ">";
@@ -1427,16 +1450,15 @@ class PHPContentsImportProxy extends MAPIMapping {
             //the property saves reminder in minutes, but we need it in secs
             else {
                 ///set the default reminder time to seconds
-                  if ($messageprops[$remindertime] == 0x5AE980E1)
-                      $message->meetingrequest->reminder = 900;
-                  else
+                if ($messageprops[$remindertime] == 0x5AE980E1)
+                    $message->meetingrequest->reminder = 900;
+                else
                     $message->meetingrequest->reminder = $messageprops[$remindertime] * 60;
             }
 
             // Set sensitivity to 0 if missing
             if(!isset($message->meetingrequest->sensitivity))
                 $message->meetingrequest->sensitivity = 0;
-
         }
 
 
@@ -1584,7 +1606,7 @@ class PHPHierarchyImportProxy {
     function _getFolder($mapifolder) {
         $folder = new SyncFolder();
 
-        $folderprops = mapi_getprops($mapifolder, array(PR_DISPLAY_NAME, PR_PARENT_ENTRYID, PR_SOURCE_KEY, PR_PARENT_SOURCE_KEY, PR_ENTRYID));
+        $folderprops = mapi_getprops($mapifolder, array(PR_DISPLAY_NAME, PR_PARENT_ENTRYID, PR_SOURCE_KEY, PR_PARENT_SOURCE_KEY, PR_ENTRYID, PR_CONTAINER_CLASS));
         $storeprops = mapi_getprops($this->_store, array(PR_IPM_SUBTREE_ENTRYID));
 
         if(!isset($folderprops[PR_DISPLAY_NAME]) ||
@@ -1604,6 +1626,18 @@ class PHPHierarchyImportProxy {
             $folder->parentid = bin2hex($folderprops[PR_PARENT_SOURCE_KEY]);
         $folder->displayname = w2u($folderprops[PR_DISPLAY_NAME]);
         $folder->type = $this->_getFolderType($folderprops[PR_ENTRYID]);
+    
+        // try to find a correct type if not one of the default folders
+        if ($folder->type == SYNC_FOLDER_TYPE_OTHER) {
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
+                $folder->type = SYNC_FOLDER_TYPE_TASK;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
+                $folder->type = SYNC_FOLDER_TYPE_APPOINTMENT;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Contact")
+                $folder->type = SYNC_FOLDER_TYPE_CONTACT;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.StickyNote")
+                $folder->type = SYNC_FOLDER_TYPE_NOTE;                        
+        }
 
         return $folder;
     }
@@ -1918,10 +1952,7 @@ class ExportChangesICS  {
 
         return $restriction;
     }
-
-
-
-};
+}
 
 class BackendICS {
     var $_session;
@@ -1966,6 +1997,8 @@ class BackendICS {
         // update if the calendar folder received incoming changes
         $storeprops = mapi_getprops($this->_defaultstore, array(PR_USER_ENTRYID));
         $root = mapi_msgstore_openentry($this->_defaultstore);
+        if (!$root) return true;
+
         $rootprops = mapi_getprops($root, array(PR_IPM_APPOINTMENT_ENTRYID));
         foreach($this->_importedFolders as $folderid) {
             $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid));
@@ -1977,6 +2010,8 @@ class BackendICS {
                 $pub->publishFB(time() - (7 * 24 * 60 * 60), 6 * 30 * 24 * 60 * 60); // publish from one week ago, 6 months ahead
             }
         }
+
+
         return true;
     }
 
@@ -2019,6 +2054,9 @@ class BackendICS {
     }
 
     function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
+        if (WBXML_DEBUG === true)
+            debugLog("SendMail: forward: $forward   reply: $reply   parent: $parent\n" . $rfc822);
+        
         $mimeParams = array('decode_headers' => false,
                             'decode_bodies' => true,
                             'include_bodies' => true,
@@ -2114,7 +2152,7 @@ class BackendICS {
             foreach($message->parts as $part) {
                 //the last part of if (after !) is an android fix.
                 //it sends attachment as a plain text but content transport is base64 encoded.
-                if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && !(isset($part->headers['content-transfer-encoding']) && strpos($part->headers['content-transfer-encoding'], 'base64') !== false)) {// discard any other kind of text, like html
+                if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && (!isset($part->disposition) || $part->disposition != "attachment")) {
                         $body .= u2w($part->body); // assume only one text body
                 }
                 elseif($part->ctype_primary == "ms-tnef" || $part->ctype_secondary == "ms-tnef") {
@@ -2356,7 +2394,7 @@ class BackendICS {
         switch($response) {
             case 1:     // accept
             default:
-                   $entryid = $meetingrequest->doAccept(false, false, $meetingrequest->isInCalendar());
+                $entryid = $meetingrequest->doAccept(false, false, $meetingrequest->isInCalendar());
                 break;
             case 2:        // tentative
                 $meetingrequest->doAccept(true, false, $meetingrequest->isInCalendar());
@@ -2441,22 +2479,21 @@ class BackendICS {
             $filename = $part->ctype_parameters["name"];
         else if(isset($part->d_parameters["name"]))
             $filename = $part->d_parameters["filename"];
-        else if (isset($part->d_parameters["filename"])) //sending appointment with nokia only filename is set
+        else if (isset($part->d_parameters["filename"])) // sending appointment with nokia & android only filename is set
             $filename = $part->d_parameters["filename"];
-        //Android just puts enconding and filename into content-transfer-encoding
-        //filename is something like filename="filename.extension (yes " is only once)
-        //meeting requests are sent the same way, there is text/calendar somewhere inside content-transfer-encoding
-        else if (isset($part->headers['content-transfer-encoding']) && strpos($part->headers['content-transfer-encoding'], 'base64')) {
-            $pos = strpos($part->headers['content-transfer-encoding'], "filename=");
-            $filename = ($pos !== false) ? substr($part->headers['content-transfer-encoding'], ($pos + 10)) : "untitled";
+        else
+            $filename = "untitled";
+            
+        // Android just doesn't send content-type, so mimeDecode doesn't performs base64 decoding
+        // on meeting requests text/calendar somewhere inside content-transfer-encoding
+        if (isset($part->headers['content-transfer-encoding']) && strpos($part->headers['content-transfer-encoding'], 'base64')) {
             if (strpos($part->headers['content-transfer-encoding'], 'text/calendar') !== false) {
                 $part->ctype_primary = 'text';
                 $part->ctype_secondary = 'calendar';
             }
-            $part->body = base64_decode($part->body);
+            if (!isset($part->headers['content-type']))
+                $part->body = base64_decode($part->body);
         }
-        else
-            $filename = "untitled";
 
         // Set filename and attachment type
         mapi_setprops($attach, array(PR_ATTACH_LONG_FILENAME => u2w($filename), PR_ATTACH_METHOD => ATTACH_BY_VALUE));
