@@ -12,7 +12,7 @@
 ************************************************/
     // Defines the default time zone
     if (function_exists("date_default_timezone_set")){
-        date_default_timezone_set("Europe/Amsterdam");
+        date_default_timezone_set("Europe/Berlin");
     }
 
     // Defines the base path on the server, terminated by a slash
@@ -35,9 +35,9 @@
     //Max size of attachments to display inline. Default is 1MB
     define('MAX_EMBEDDED_SIZE', 1048576);
 
-    // Device Provisioning
-    define('PROVISIONING', true);
-    
+    // Device Provisioning 
+    define('PROVISIONING', true); 
+
     // The data providers that we are using (see configuration below)
     $BACKEND_PROVIDER = "BackendICS";
 
@@ -79,5 +79,7 @@
     //  BackendVCDir settings
     // **********************
     define('VCARDDIR_DIR', '/home/%u/.kde/share/apps/kabc/stdvcf');
+
+
 
 ?>

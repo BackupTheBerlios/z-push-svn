@@ -155,6 +155,9 @@ define("SYNC_POOMMAIL_MIMEDATA","POOMMAIL:MIMEData");
 define("SYNC_POOMMAIL_MIMETRUNCATED","POOMMAIL:MIMETruncated");
 define("SYNC_POOMMAIL_MIMESIZE","POOMMAIL:MIMESize");
 define("SYNC_POOMMAIL_INTERNETCPID","POOMMAIL:InternetCPID");
+// ADDED dw2412 V12.0 Support
+define("SYNC_POOMMAIL_CONTENTCLASS","POOMMAIL:ContentClass");
+define("SYNC_POOMMAIL_FLAG","POOMMAIL:Flag");
 
 // AIRNOTIFY
 define("SYNC_AIRNOTIFY_NOTIFY","AirNotify:Notify");
@@ -397,6 +400,107 @@ define("SYNC_GAL_LASTNAME", "GAL:LastName");
 define("SYNC_GAL_HOMEPHONE", "GAL:HomePhone");
 define("SYNC_GAL_MOBILEPHONE", "GAL:MobilePhone");
 define("SYNC_GAL_EMAILADDRESS", "GAL:EmailAddress");
+
+// START ADDED dw2412 Settings Support
+define("SYNC_SETTINGS_SETTINGS", "Settings:Settings");
+define("SYNC_SETTINGS_STATUS", "Settings:Status");
+define("SYNC_SETTINGS_GET", "Settings:Get");
+define("SYNC_SETTINGS_SET", "Settings:Set");
+define("SYNC_SETTINGS_OOF", "Settings:Oof");
+define("SYNC_SETTINGS_OOFSTATE", "Settings:OofState");
+define("SYNC_SETTINGS_STARTTIME", "Settings:StartTime");
+define("SYNC_SETTINGS_ENDTIME", "Settings:EndTime");
+define("SYNC_SETTINGS_OOFMESSAGE", "Settings:OofMessage");
+define("SYNC_SETTINGS_APPLIESTOINTERNAL", "Settings:AppliesToInternal");
+define("SYNC_SETTINGS_APPLIESTOEXTERNALKNOWN", "Settings:AppliesToExternalKnown");
+define("SYNC_SETTINGS_APPLIESTOEXTERNALUNKNOWN", "Settings:AppliesToExternalUnknown");
+define("SYNC_SETTINGS_ENABLED", "Settings:Enabled");
+define("SYNC_SETTINGS_REPLYMESSAGE", "Settings:ReplyMessage");
+define("SYNC_SETTINGS_BODYTYPE", "Settings:BodyType");
+define("SYNC_SETTINGS_DEVICEPASSWORD", "Settings:DevicePassword");
+define("SYNC_SETTINGS_PASSWORD", "Settings:Password");
+define("SYNC_SETTINGS_DEVICEINFORMATION", "Settings:DeviceInformation");
+define("SYNC_SETTINGS_MODEL", "Settings:Model");
+define("SYNC_SETTINGS_IMEI", "Settings:IMEI");
+define("SYNC_SETTINGS_FRIENDLYNAME", "Settings:FriendlyName");
+define("SYNC_SETTINGS_OS", "Settings:OS");
+define("SYNC_SETTINGS_OSLANGUAGE", "Settings:OSLanguage");
+define("SYNC_SETTINGS_PHONENUMBER", "Settings:PhoneNumber");
+define("SYNC_SETTINGS_USERINFORMATION", "Settings:UserInformation");
+define("SYNC_SETTINGS_EMAILADDRESSES", "Settings:EmailAddresses");
+define("SYNC_SETTINGS_SMTPADDRESS", "Settings:SmtpAddress");
+define("SYNC_SETTINGS_USERAGENT", "Settings:UserAgent");
+define("SYNC_SETTINGS_ENABLEOUTBOUNDSMS", "Settings:EnableOutboundSMS");
+define("SYNC_SETTINGS_MOBILEOPERATOR", "Settings:MobileOperator");
+// END ADDED dw2412 Settings Support
+
+// START ADDED dw2412 12.0 Support
+
+define("SYNC_AIRSYNCBASE_BODYPREFERENCE", "AirSyncBase:BodyPreference");
+define("SYNC_AIRSYNCBASE_TYPE", "AirSyncBase:Type");
+define("SYNC_AIRSYNCBASE_TRUNCATIONSIZE", "AirSyncBase:TruncationSize");
+define("SYNC_AIRSYNCBASE_ALLORNONE", "AirSyncBase:AllOrNone");
+define("SYNC_AIRSYNCBASE_BODY", "AirSyncBase:Body");
+define("SYNC_AIRSYNCBASE_DATA", "AirSyncBase:Data");
+define("SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE", "AirSyncBase:EstimatedDataSize");
+define("SYNC_AIRSYNCBASE_TRUNCATED", "AirSyncBase:Truncated");
+define("SYNC_AIRSYNCBASE_ATTACHMENTS", "AirSyncBase:Attachments");
+define("SYNC_AIRSYNCBASE_ATTACHMENT", "AirSyncBase:Attachment");
+define("SYNC_AIRSYNCBASE_DISPLAYNAME", "AirSyncBase:DisplayName");
+define("SYNC_AIRSYNCBASE_FILEREFERENCE", "AirSyncBase:FileReference");
+define("SYNC_AIRSYNCBASE_METHOD", "AirSyncBase:Method");
+define("SYNC_AIRSYNCBASE_CONTENTID", "AirSyncBase:ContentId");
+define("SYNC_AIRSYNCBASE_CONTENTLOCATION", "AirSyncBase:ContentLocation");
+define("SYNC_AIRSYNCBASE_ISINLINE", "AirSyncBase:IsInline");
+define("SYNC_AIRSYNCBASE_NATIVEBODYTYPE", "AirSyncBase:NativeBodyType");
+define("SYNC_AIRSYNCBASE_CONTENTTYPE", "AirSyncBase:ContentType");
+define("SYNC_AIRSYNCBASE_PREVIEW", "AirSyncBase:Preview");
+// END ADDED dw2412 12.0 Support
+
+// START ADDED dw2412 12.0 DocumentLibrary Support
+define("SYNC_DOCUMENTLIBRARY_LINKID", "DocumentLibrary:LinkId");
+define("SYNC_DOCUMENTLIBRARY_DISPLAYNAME", "DocumentLibrary:DisplayName");
+define("SYNC_DOCUMENTLIBRARY_ISFOLDER", "DocumentLibrary:IsFolder");
+define("SYNC_DOCUMENTLIBRARY_CREATIONDATE", "DocumentLibrary:CreationDate");
+define("SYNC_DOCUMENTLIBRARY_LASTMODIFIEDDATE", "DocumentLibrary:LastModifiedDate");
+define("SYNC_DOCUMENTLIBRARY_ISHIDDEN", "DocumentLibrary:IsHidden");
+define("SYNC_DOCUMENTLIBRARY_CONTENTLENGTH", "DocumentLibrary:ContentLength");
+define("SYNC_DOCUMENTLIBRARY_CONTENTTYPE", "DocumentLibrary:ContentType");
+// END ADDED dw2412 12.0 DocumentLibrary Support
+
+// START ADDED dw2412 12.0 ItemOperations Support
+define("SYNC_ITEMOPERATIONS_ITEMOPERATIONS", "ItemOperations:ItemOperations");
+define("SYNC_ITEMOPERATIONS_FETCH", "ItemOperations:Fetch");
+define("SYNC_ITEMOPERATIONS_STORE", "ItemOperations:Store");
+define("SYNC_ITEMOPERATIONS_OPTIONS", "ItemOperations:Options");
+define("SYNC_ITEMOPERATIONS_RANGE", "ItemOperations:Range");
+define("SYNC_ITEMOPERATIONS_TOTAL", "ItemOperations:Total");
+define("SYNC_ITEMOPERATIONS_PROPERTIES", "ItemOperations:Properties");
+define("SYNC_ITEMOPERATIONS_DATA", "ItemOperations:Data");
+define("SYNC_ITEMOPERATIONS_STATUS", "ItemOperations:Status");
+define("SYNC_ITEMOPERATIONS_RESPONSE", "ItemOperations:Response");
+define("SYNC_ITEMOPERATIONS_VERSION", "ItemOperations:Version");
+define("SYNC_ITEMOPERATIONS_SCHEMA", "ItemOperations:Schema");
+define("SYNC_ITEMOPERATIONS_PART", "ItemOperations:Part");
+define("SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENT", "ItemOperations:EmptyFolderContent");
+define("SYNC_ITEMOPERATIONS_DELETESUBFOLDERS", "ItemOperations:DeleteSubFolders");
+// END ADDED dw2412 12.0 ItemOperations Support
+
+// START ADDED dw2412 12.0 PoomMail2 Support
+define("SYNC_POOMMAIL2_UMCALLERID","POOMMAIL2:UmCallerId");
+define("SYNC_POOMMAIL2_UMUSERNOTES","POOMMAIL2:UmUserNotes");
+define("SYNC_POOMMAIL2_UMATTDURATION","POOMMAIL2:UmAttDuration");
+define("SYNC_POOMMAIL2_UMATTORDER","POOMMAIL2:UmAttOrder");
+define("SYNC_POOMMAIL2_CONVERSATIONID","POOMMAIL2:ConversationId");
+define("SYNC_POOMMAIL2_CONVERSATIONINDEX","POOMMAIL2:ConversationIndex");
+define("SYNC_POOMMAIL2_LASTVERBEXECUTED","POOMMAIL2:LastVerbExecuted");
+define("SYNC_POOMMAIL2_LASTVERBEXECUTIONTIME","POOMMAIL2:LastVerbExecutionTime");
+define("SYNC_POOMMAIL2_RECEIVEDASBCC","POOMMAIL2:ReceivedAsBcc");
+define("SYNC_POOMMAIL2_SENDER","POOMMAIL2:Sender");
+define("SYNC_POOMMAIL2_CALENDARTYPE","POOMMAIL2:CalendarType");
+define("SYNC_POOMMAIL2_ISLEAPMONTH","POOMMAIL2:IsLeapMonth");
+// END ADDED dw2412 12.0 PoomMail2 Support
+
 
 // Other constants
 define("SYNC_FOLDER_TYPE_INBOX", 2);

@@ -148,4 +148,122 @@ function buildAddressString($street, $zip, $city, $state, $country) {
     
     return ($out)?$out:null;
 }
+
+
+/**
+ * Read the correct message body 
+ *
+ * @param ressource $msg - the message
+**/
+function eml_ReadMessage($msg) {
+    global $protocolversion;
+    $rtf = mapi_message_openproperty($msg, PR_RTF_COMPRESSED);
+    if (!$rtf) {
+	$body = mapi_message_openproperty($msg, PR_BODY);
+	$content = "text/plain";
+    } else {
+        $rtf = preg_replace("/(\n.*)/m","",mapi_decompressrtf($rtf));
+        if (strpos($rtf,"\\fromtext") != false || !($protocolversion >= 2.5)) {
+	    $body = mapi_message_openproperty($msg, PR_BODY);
+	    $content = "text/plain";
+	} else {
+	    $body = mapi_message_openproperty($msg, PR_HTML);
+	    $content = "text/html";
+	}
+    }
+    if (mb_detect_encoding($body) != "UTF-8") 
+	$body = iconv("Windows-1252", "UTF-8//TRANSLIT", $body );
+    return array('body' => $body,'content' => $content);
+}
+
+// START ADDED dw2412 EML Attachment
+function buildEMLAttachment($attach) {
+    $msgembedded = mapi_attach_openobj($attach);
+    $msgprops = mapi_getprops($msgembedded,array(PR_MESSAGE_CLASS,PR_CLIENT_SUBMIT_TIME,PR_DISPLAY_TO,PR_SUBJECT,PR_SENT_REPRESENTING_NAME,PR_SENT_REPRESENTING_EMAIL_ADDRESS));
+    $msgembeddedrcpttable = mapi_message_getrecipienttable($msgembedded);
+    $msgto = $msgprops[PR_DISPLAY_TO];
+    if($msgembeddedrcpttable) {
+	$msgembeddedrecipients = mapi_table_queryrows($msgembeddedrcpttable, array(PR_ADDRTYPE, PR_ENTRYID, PR_DISPLAY_NAME, PR_EMAIL_ADDRESS, PR_SMTP_ADDRESS, PR_RECIPIENT_TYPE, PR_RECIPIENT_FLAGS, PR_PROPOSEDNEWTIME, PR_PROPOSENEWTIME_START, PR_PROPOSENEWTIME_END, PR_RECIPIENT_TRACKSTATUS), 0, 99999999);
+	foreach($msgembeddedrecipients as $rcpt) {
+	    if ($rcpt[PR_DISPLAY_NAME] == $msgprops[PR_DISPLAY_TO]) {
+	    $msgto = $rcpt[PR_DISPLAY_NAME];
+	    if (isset($rcpt[PR_EMAIL_ADDRESS]) &&
+	        $rcpt[PR_EMAIL_ADDRESS] != $msgprops[PR_DISPLAY_TO]) $msgto .= " <".$rcpt[PR_EMAIL_ADDRESS].">";
+	        break;
+	    }
+	}
+    }
+    $msgsubject = $msgprops[PR_SUBJECT];
+    $msgfrom = $msgprops[PR_SENT_REPRESENTING_NAME];
+    if (isset($msgprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS]) &&
+        $msgprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS] != $msgprops[PR_SENT_REPRESENTING_NAME]) $msgfrom .= " <".$msgprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS].">";
+    $msgtime = $msgprops[PR_CLIENT_SUBMIT_TIME];
+    $msgembeddedbody = eml_ReadMessage($msgembedded);
+    $msgembeddedattachtable = mapi_message_getattachmenttable($msgembedded);
+    $msgembeddedattachtablerows = mapi_table_queryallrows($msgembeddedattachtable, array(PR_ATTACH_NUM, PR_ATTACH_METHOD));
+    if ($msgembeddedattachtablerows) {
+	$boundary = '=_zpush_static';
+	$headercontenttype = "multipart/mixed";
+	$msgembeddedbody['body'] = 	"Unfortunately your mobile is not able to handle MIME Messages\n".
+					"--".$boundary."\n".
+					"Content-Type: ".$msgembeddedbody['content']."; charset=utf-8\n".
+					"Content-Transfer-Encoding: quoted-printable\n\n".
+					$msgembeddedbody['body']."\n";
+	foreach ($msgembeddedattachtablerows as $msgembeddedattachtablerow) {
+    	    $msgembeddedattach = mapi_message_openattach($msgembedded, $msgembeddedattachtablerow[PR_ATTACH_NUM]);
+	    if(!$msgembeddedattach) {
+	        debugLog("Unable to open attachment number $attachnum");
+	    } else {
+	    	$msgembeddedattachprops = mapi_getprops($msgembeddedattach, array(PR_ATTACH_MIME_TAG, PR_ATTACH_LONG_FILENAME,PR_ATTACH_FILENAME,PR_DISPLAY_NAME));
+            	if (isset($msgembeddedattachprops[PR_ATTACH_LONG_FILENAME])) 
+        	    $attachfilename = w2u($msgembeddedattachprops[PR_ATTACH_LONG_FILENAME]);
+        	else if (isset($msgembeddedattachprops[PR_ATTACH_FILENAME]))
+		    $attachfilename = w2u($msgembeddedattachprops[PR_ATTACH_FILENAME]);
+		else if (isset($msgembeddedattachprops[PR_DISPLAY_NAME]))
+		    $attachfilename = w2u($msgembeddedattachprops[PR_DISPLAY_NAME]);
+		else
+		    $attachfilename = w2u("untitled");
+        	if ($msgembeddedattachtablerow[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) 
+        	    $attachfilename .= w2u(".eml");
+		$msgembeddedbody['body'] .= "--".$boundary."\n".
+			    		    "Content-Type: ".$msgembeddedattachprops[PR_ATTACH_MIME_TAG].";\n".
+					    " name=\"".$attachfilename."\"\n".
+					    "Content-Transfer-Encoding: base64\n".
+					    "Content-Disposition: attachment;\n".
+					    " filename=\"".$attachfilename."\"\n\n";
+		$msgembeddedattachstream = mapi_openpropertytostream($msgembeddedattach, PR_ATTACH_DATA_BIN);
+    		$msgembeddedattachment = "";
+    		while(1) {
+        	    $msgembeddedattachdata = mapi_stream_read($msgembeddedattachstream, 4096);
+        	    if(strlen($msgembeddedattachdata) == 0)
+		        break;
+		    $msgembeddedattachment .= $msgembeddedattachdata;
+		}
+		$msgembeddedbody['body'] .= chunk_split(base64_encode($msgembeddedattachment))."\n";
+		unset($msgembeddedattachment);
+	    }
+	}
+	$msgembeddedbody['body'] .= "--".$boundary."--\n";
+    } else {
+	$headercontenttype = $msgembeddedbody['content']."; charset=utf-8";
+	$boundary = '';
+    }
+    $msgembeddedheader = "Subject: ".$msgsubject."\n".
+    		         "From: ".$msgfrom."\n".
+			 "To: ".$msgto."\n".
+			 "Date: ".gmstrftime("%a, %d %b %Y %T +0000",$msgprops[PR_CLIENT_SUBMIT_TIME])."\n".
+			 "MIME-Version: 1.0\n".
+			 "Content-Type: ".$headercontenttype.";\n".
+			 ($boundary ? " boundary=\"".$boundary."\"\n" : "").
+			 "\n";
+    $stream = mapi_stream_create();
+    mapi_stream_setsize($stream,strlen($msgembeddedheader.$msgembeddedbody['body']));
+    mapi_stream_write($stream,$msgembeddedheader.$msgembeddedbody['body']);
+    mapi_stream_seek($stream,0,STREAM_SEEK_SET);
+    return $stream;
+}
+// END ADDED dw2412 EML Attachment
+
+
+
 ?>

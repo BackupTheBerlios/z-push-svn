@@ -57,6 +57,65 @@ class SyncAttachment extends Streamer {
     }
 };
 
+// START ADDED dw2412 Support V12.0
+class SyncAirSyncBaseBody extends Streamer {
+    var $type;
+    var $estimateddatasize;
+    var $truncated;
+    var $data;
+
+    function SyncAirSyncBaseBody() {
+        $mapping = array(
+                                SYNC_AIRSYNCBASE_TYPE => array (STREAMER_VAR => "type"),
+                                SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE => array (STREAMER_VAR => "estimateddatasize"),
+                                SYNC_AIRSYNCBASE_TRUNCATED => array (STREAMER_VAR => "truncated"),
+                                SYNC_AIRSYNCBASE_DATA => array (STREAMER_VAR => "data"),
+                        );
+
+        parent::Streamer($mapping);
+    }
+};
+class SyncAirSyncBaseAttachment extends Streamer {
+    var $displayname;
+    var $filereference;
+    var $method;
+    var $estimateddatasize;
+    var $contentid;
+    var $contentlocation;
+    var $isinline;
+    var $_data;
+
+    function SyncAirSyncBaseAttachment() {
+        $mapping = array(
+                                SYNC_AIRSYNCBASE_DISPLAYNAME => array (STREAMER_VAR => "displayname"),
+                                SYNC_AIRSYNCBASE_FILEREFERENCE => array (STREAMER_VAR => "filereference"),
+                                SYNC_AIRSYNCBASE_METHOD => array (STREAMER_VAR => "method"),
+                                SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE => array (STREAMER_VAR => "estimateddatasize"),
+                                SYNC_AIRSYNCBASE_CONTENTID => array (STREAMER_VAR => "contentid"),
+                                SYNC_AIRSYNCBASE_CONTENTLOCATION => array (STREAMER_VAR => "contentlocation"),
+                                SYNC_AIRSYNCBASE_ISINLINE => array (STREAMER_VAR => "isinline"),
+                                SYNC_AIRSYNCBASE_DATA => array (STREAMER_VAR => "_data"),
+                        );
+
+        parent::Streamer($mapping);
+    }
+};
+
+class SyncAirSyncBaseFileAttachment extends Streamer {
+    var $contenttype;
+    var $_data;
+
+    function SyncAirSyncBaseFileAttachment() {
+        $mapping = array(
+                                SYNC_AIRSYNCBASE_CONTENTTYPE => array (STREAMER_VAR => "contenttype"),
+                                SYNC_ITEMOPERATIONS_DATA => array (STREAMER_VAR => "_data"),
+                        );
+
+        parent::Streamer($mapping);
+    }
+};
+// END ADDED dw2412 Support V12.0
+
 class SyncMeetingRequest extends Streamer {
     function SyncMeetingRequest() {
         $mapping = array (
@@ -97,7 +156,12 @@ class SyncMail extends Streamer {
     var $from;
     var $reply_to;
 
+    //START ADDED dw2412 V12.0 Support
+    var $threadtopic;
     var $attachments = array();
+    var $airsyncbaseattachments = array();
+    var $airsyncbasenativebodytype;
+    //END ADDED dw2412 V12.0 Support
 
     function SyncMail() {
         global $protocolversion;
@@ -123,12 +187,23 @@ class SyncMail extends Streamer {
                                 SYNC_POOMMAIL_MEETINGREQUEST => array (STREAMER_VAR => "meetingrequest", STREAMER_TYPE => "SyncMeetingRequest"),
                                 SYNC_POOMMAIL_REPLY_TO => array (STREAMER_VAR => "reply_to"),
                               );
+// START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion >= 12.0) {
+	    unset($mapping[SYNC_POOMMAIL_MESSAGECLASS]);
+	    $mapping += array(SYNC_AIRSYNCBASE_NATIVEBODYTYPE => array(STREAMER_VAR => "airsyncbasenativebodytype"),
+                              SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
+                              SYNC_AIRSYNCBASE_ATTACHMENTS => array (STREAMER_VAR => "airsyncbaseattachments", STREAMER_TYPE => "AirSyncBaseAttachment", STREAMER_ARRAY => SYNC_AIRSYNCBASE_ATTACHMENT ),
+                              SYNC_POOMMAIL_MESSAGECLASS => array (STREAMER_VAR => "messageclass"),
+                             );
+        }
+// END ADDED dw2412 Support V12.0
 
         if(isset($protocolversion) && $protocolversion >= 2.5) {
             $mapping += array(
                                 SYNC_POOMMAIL_INTERNETCPID => array (STREAMER_VAR => "internetcpid"),
                               );
         }
+
 
         parent::Streamer($mapping);
     }
@@ -190,6 +265,7 @@ class SyncContact extends Streamer {
     var $rtf;
     var $picture;
     var $nickname;
+    var $airsyncbasebody;
 
     function SyncContact() {
         global $protocolversion;
@@ -251,6 +327,12 @@ class SyncContact extends Streamer {
             SYNC_POOMCONTACTS_CATEGORIES => array (STREAMER_VAR => "categories", STREAMER_ARRAY => SYNC_POOMCONTACTS_CATEGORY ),
     );
 
+// START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion >= 12.0) {
+	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
+        }
+// END ADDED dw2412 Support V12.0
+
         if(isset($protocolversion) && $protocolversion >= 2.5) {
             $mapping += array(
                 SYNC_POOMCONTACTS2_CUSTOMERID => array (STREAMER_VAR => "customerid"),
@@ -283,6 +365,10 @@ class SyncAttendee extends Streamer {
 
 class SyncAppointment extends Streamer {
     function SyncAppointment() {
+// START ADDED dw2412 Support V12.0
+        global $protocolversion;
+// END ADDED dw2412 Support V12.0
+
         $mapping = array(
                       SYNC_POOMCAL_TIMEZONE => array (STREAMER_VAR => "timezone"),
                       SYNC_POOMCAL_DTSTAMP => array (STREAMER_VAR => "dtstamp", STREAMER_TYPE => STREAMER_TYPE_DATE),
@@ -309,6 +395,12 @@ class SyncAppointment extends Streamer {
                       SYNC_POOMCAL_CATEGORIES => array (STREAMER_VAR => "categories", STREAMER_ARRAY => SYNC_POOMCAL_CATEGORY),
 
         );
+// START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion >= 12.0) {
+	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
+        }
+// END ADDED dw2412 Support V12.0
+
 
         parent::Streamer($mapping);
     }
@@ -378,6 +470,9 @@ class SyncTask extends Streamer {
     var $rtf;
 
     function SyncTask() {
+// START ADDED dw2412 Support V12.0
+        global $protocolversion;
+// END ADDED dw2412 Support V12.0
         $mapping = array (
                       SYNC_POOMTASKS_BODY => array (STREAMER_VAR => "body"),
                       SYNC_POOMTASKS_COMPLETE => array (STREAMER_VAR => "complete"),
@@ -397,6 +492,12 @@ class SyncTask extends Streamer {
                       SYNC_POOMTASKS_RTF => array (STREAMER_VAR => "rtf"),
                       SYNC_POOMTASKS_CATEGORIES => array (STREAMER_VAR => "categories", STREAMER_ARRAY => SYNC_POOMTASKS_CATEGORY),
         );
+
+// START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion >= 12.0) {
+	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
+        }
+// END ADDED dw2412 Support V12.0
 
         parent::Streamer($mapping);
     }

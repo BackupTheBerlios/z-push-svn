@@ -27,7 +27,7 @@ include_once("version.php");
 ini_set('max_execution_time', SCRIPT_TIMEOUT);
 set_time_limit(SCRIPT_TIMEOUT);
 
-debugLog("Start");
+debugLog("Start ------ THIS IS AN UNOFFICIAL AS 12 DEVELOPER VERSION!");
 debugLog("Z-Push version: $zpush_version");
 debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
 
@@ -40,8 +40,8 @@ if(!isset($_SERVER['PHP_AUTH_PW'])) {
     header("HTTP/1.1 401 Unauthorized");
     print("Access denied. Please send authorisation information");
     debugLog("Access denied: no password sent.");
-	debugLog("end");
-	debugLog("--------");
+    debugLog("end");
+    debugLog("--------");
     return;
 }
 
@@ -78,6 +78,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Get the request headers so we can see the versions
 $requestheaders = apache_request_headers();
+debugLog(print_r($requestheaders,true));
 if (isset($requestheaders["Ms-Asprotocolversion"])) $requestheaders["MS-ASProtocolVersion"] = $requestheaders["Ms-Asprotocolversion"];
 if(isset($requestheaders["MS-ASProtocolVersion"])) {
     global $protocolversion;
@@ -89,6 +90,35 @@ if(isset($requestheaders["MS-ASProtocolVersion"])) {
 
     $protocolversion = "1.0";
 }
+
+// START ADDED dw2412 Support Multipart response
+if (isset($requestheaders["MS-ASAcceptMultiPart"]) &&
+    $requestheaders["MS-ASAcceptMultiPart"] == "T") {
+    $multipart = true;
+} else {
+    $multipart = false;
+}
+// END ADDED dw2412 Support Multipart response
+
+// START ADDED dw2412 Support gzip compression in result
+if (isset($requestheaders["Accept-Encoding"])) {
+    $encodings = explode(", ",$requestheaders["Accept-Encoding"]);
+    debugLog("Current zlib output compression setting: ".ini_get("zlib.output_compression"));
+
+    if (array_search("gzip",$encodings) !== false &&
+	function_exists('gzencode')) {
+	ini_set("zlib.output_compression",'1');
+	debugLog("Enabled zlib output compression");
+	define ("GZIP_OUTPUT",true);
+    } else {
+	ini_set("zlib.output_compression",'0');
+	debugLog("Disabled zlib output compression");
+	define ("GZIP_OUTPUT",false);
+    }
+} else {
+    define ("GZIP_OUTPUT",false);
+}
+// END ADDED dw2412 Support gzip compression in result
 
 if (isset($requestheaders["X-Ms-Policykey"])) $requestheaders["X-MS-PolicyKey"] = $requestheaders["X-Ms-Policykey"];
 if (isset($requestheaders["X-MS-PolicyKey"])) {
@@ -134,6 +164,22 @@ if($backend->Logon($auth_user, $auth_domain, $auth_pw) == false  && !$policykey)
     return;
 }
 
+// check policy header 
+if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] != 'OPTIONS' && $cmd != 'Ping' && $cmd != 'Provision' && 
+    substr($devid,0,6) != "HTCAnd" &&
+    $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS) {
+    header("HTTP/1.1 449 Retry after sending a PROVISION command");
+    header("MS-Server-ActiveSync: 6.5.7638.1");
+    header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0");
+    // CHANGED dw2412 Support for Settings and ItemOperations command
+    header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,Provision,ResolveRecipients,ValidateCert,Settings,Search,Ping,ItemOperations");
+    header("Cache-Control: private");
+    debugLog("POST cmd $cmd denied: Retry after sending a PROVISION command");
+    debugLog("end");
+    debugLog("--------");
+    return;
+}
+
 // $user is usually the same as the PHP_AUTH_USER. This allows you to sync the 'john' account if you
 // have sufficient privileges as user 'joe'.
 if($backend->Setup($user, $devid, $protocolversion) == false) {
@@ -146,33 +192,20 @@ if($backend->Setup($user, $devid, $protocolversion) == false) {
     return;
 }
 
-// check policy header 
-if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] != 'OPTIONS' && $cmd != 'Ping' && $cmd != 'Provision' && 
-    $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS) {
-    header("HTTP/1.1 449 Retry after sending a PROVISION command");
-    header("MS-Server-ActiveSync: 6.5.7638.1");
-    header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5");
-    header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,Provision,ResolveRecipients,ValidateCert,Search,Ping");
-    header("Cache-Control: private");
-    debugLog("POST cmd $cmd denied: Retry after sending a PROVISION command");
-    debugLog("end");
-    debugLog("--------");
-    return;
-}
-
 // Do the actual request
 switch($_SERVER["REQUEST_METHOD"]) {
     case 'OPTIONS':
         header("MS-Server-ActiveSync: 6.5.7638.1");
-        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5");
-        header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,ResolveRecipients,ValidateCert,Provision,Search,Ping");
+        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0");
+	// START CHANGED dw2412 Settings and ItemOperations Command Support
+        header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,ResolveRecipients,ValidateCert,Provision,Settings,Search,Ping,ItemOperations");
         debugLog("Options request");
         break;
     case 'POST':
         header("MS-Server-ActiveSync: 6.5.7638.1");
         debugLog("POST cmd: $cmd");
         // Do the actual request
-        if(!HandleRequest($backend, $cmd, $devid, $protocolversion)) {
+        if(!HandleRequest($backend, $cmd, $devid, $protocolversion, $multipart)) {
             // Request failed. Try to output some kind of error information. We can only do this if
             // output had not started yet. If it has started already, we can't show the user the error, and
             // the device will give its own (useless) error message.
@@ -200,9 +233,7 @@ switch($_SERVER["REQUEST_METHOD"]) {
 
 $len = ob_get_length();
 $data = ob_get_contents();
-
 ob_end_clean();
-
 // Unfortunately, even though zpush can stream the data to the client
 // with a chunked encoding, using chunked encoding also breaks the progress bar
 // on the PDA. So we de-chunk here and just output a content-length header and
@@ -210,9 +241,24 @@ ob_end_clean();
 // then it will be sent as a chunked packet anyway because PHP will have to flush
 // the buffer.
 
-header("Content-Length: $len");
-print $data;
-
+// START CHANGED dw2412 Support gzip compression in result
+if (GZIP_OUTPUT == true &&
+    ($gz_data = gzencode($data,9,FORCE_GZIP)) !== false) {
+    if (strlen($data) > strlen($gz_data)) {
+        header("Content-Encoding: gzip");
+	header("Content-Length: ".strlen($gz_data));
+        print $gz_data;
+	debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send compressed data");
+    } else {
+	header("Content-Length: $len");
+	print $data;
+	debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send uncompressed data");
+    }
+} else {
+    header("Content-Length: $len");
+    print $data;
+}
+// END CHANGED dw2412 Support gzip compression in result
 // destruct backend after all data is on the stream
 $backend->Logoff();
 

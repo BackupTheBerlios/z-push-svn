@@ -12,7 +12,7 @@
 ************************************************/
 include_once('debug.php');
 
-define('WBXML_DEBUG', false);
+define('WBXML_DEBUG', true);
 
 define('WBXML_SWITCH_PAGE',     0x00);
 define('WBXML_END',             0x01);
@@ -491,6 +491,9 @@ class WBXMLEncoder {
     var $_tagcp;
     var $_attrcp;
 
+    // ADDED dw2412 to support multipart output
+    var $_multipart; // in case we need to export as multipart i.e. ITEM_OPERATIONS
+
     var $logStack = array();
 
     // We use a delayed output mechanism in which we only output a tag when it actually has something
@@ -521,9 +524,16 @@ class WBXMLEncoder {
         $this->_stack = array();
     }
 
-    function startWBXML() {
-        header("Content-Type: application/vnd.ms-sync.wbxml");
-
+    function startWBXML($multipart=false) {
+        // START CHANGED dw2412 to support multipart output
+	$this->_multipart=$multipart;
+        if ($this->_multipart==true) {
+	    header("Content-Type: application/vnd.ms-sync.multipart");
+        } else {
+    	    header("Content-Type: application/vnd.ms-sync.wbxml");
+	}
+        // END CHANGED dw2412 to support multipart output
+	
         $this->outByte(0x03); // WBXML 1.3
         $this->outMBUInt(0x01); // Public ID 1
         $this->outMBUInt(106); // UTF-8
@@ -555,6 +565,28 @@ class WBXMLEncoder {
         // Only output end tags for items that have had a start tag sent
         if($stackelem['sent']) {
             $this->_endTag();
+	    // START ADDED dw2412 multipart output handling
+    	    if(sizeof($this->_stack)==0 && $this->_multipart==true) {
+		// NOT THE NICE WAY IMHO but this keeps existing logic of data output in index.php file...
+		// first we grab the existing wbxml output, manipulate it and write it buffered way back.
+		$len = ob_get_length();
+		$data = ob_get_contents();
+		ob_end_clean();
+		ob_start();
+		$blockstart = ((sizeof($this->_bodyparts)+1)*2)*4+4;
+		$sizeinfo = pack("iii",sizeof($this->_bodyparts)+1,$blockstart,$len);
+		foreach($this->_bodyparts as $bp) {
+		    $blockstart = $blockstart + $len;
+		    $len = strlen($bp);
+		    $sizeinfo .= pack("ii",$blockstart,$len);
+		}
+		fwrite($this->_out,$sizeinfo);
+		fwrite($this->_out,$data);
+		foreach($this->_bodyparts as $bp) {
+	    	    fwrite($this->_out,$bp);
+		}
+    	    }
+	    // END ADDED dw2412 multipart output handling
         }
     }
 

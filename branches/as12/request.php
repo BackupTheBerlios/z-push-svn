@@ -259,7 +259,7 @@ function HandleFolderSync($backend, $protocolversion) {
     // argument, which stores them in $importer. Returns the new sync state for this exporter.
     $exporter = $backend->GetExporter();
 
-    $exporter->Config($importer, false, false, $syncstate, 0, 0);
+    $exporter->Config($importer, false, false, $syncstate, 0, 0, false);
 
     while(is_array($exporter->Synchronize()));
 
@@ -418,6 +418,41 @@ function HandleSync($backend, $protocolversion, $devid) {
                     if(!$decoder->getElementEndTag())
                         return false;
                 }
+	
+		// START ADDED dw2412 V12.0 Sync Support
+		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_BODYPREFERENCE)) {
+		    $bodypreference=array();
+        	    while(1) {
+            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TYPE)) {
+	                    $bodypreference["Type"] = $decoder->getElementContent();
+    		            if(!$decoder->getElementEndTag())
+                        	return false;
+    	    		}
+
+            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TRUNCATIONSIZE)) {
+	                    $bodypreference["TruncationSize"] = $decoder->getElementContent();
+    		            if(!$decoder->getElementEndTag())
+                        	return false;
+    	    		}
+
+            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_ALLORNONE)) {
+	                    $bodypreference["AllOrNone"] = $decoder->getElementContent();
+    		            if(!$decoder->getElementEndTag())
+                        	return false;
+    	    		}
+
+            		$e = $decoder->peek();
+            		if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+            		    $decoder->getElementEndTag();
+			    if (isset($bodypreference["Type"]))
+				if (!isset($collection["BodyPreference"]["wanted"]))
+				    $collection["BodyPreference"]["wanted"] = $bodypreference["Type"];
+				$collection["BodyPreference"][$bodypreference["Type"]] = $bodypreference;
+    		    	    break;
+	        	}
+                    }
+		}
+		// END ADDED dw2412 V12.0 Sync Support
                 $e = $decoder->peek();
                 if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
                     $decoder->getElementEndTag();
@@ -565,7 +600,10 @@ function HandleSync($backend, $protocolversion, $devid) {
 
     $encoder = new WBXMLEncoder($output, $zpushdtd);
     $encoder->startWBXML();
-
+    // START ADDED dw2412 Protocol Version 12 Support
+    if (isset($collection["BodyPreference"])) $encoder->_bodypreference = $collection["BodyPreference"];
+    // END ADDED dw2412 Protocol Version 12 Support
+    
     $encoder->startTag(SYNC_SYNCHRONIZE);
     {
         $encoder->startTag(SYNC_FOLDERS);
@@ -618,7 +656,8 @@ function HandleSync($backend, $protocolversion, $devid) {
                         $encoder->endTag();
                     }
                     foreach($collection["fetchids"] as $id) {
-                        $data = $backend->Fetch($collection["collectionid"], $id, $mimesupport);
+			// CHANGED dw2412 to support bodypreference
+                        $data = $backend->Fetch($collection["collectionid"], $id, $collection["BodyPreference"], $mimesupport);
                         if($data !== false) {
                             $encoder->startTag(SYNC_FETCH);
                             $encoder->startTag(SYNC_SERVERENTRYID);
@@ -643,7 +682,7 @@ function HandleSync($backend, $protocolversion, $devid) {
                     $exporter = $backend->GetExporter($collection["collectionid"]);
 
                     $filtertype = isset($collection["filtertype"]) ? $collection["filtertype"] : false;
-                    $exporter->Config($importer, $collection["class"], $filtertype, $collection["syncstate"], 0, $collection["truncation"]);
+                    $exporter->Config($importer, $collection["class"], $filtertype, $collection["syncstate"], 0, $collection["truncation"], (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
                     $changecount = $exporter->GetChangeCount();
 
@@ -667,8 +706,8 @@ function HandleSync($backend, $protocolversion, $devid) {
                         $n++;
 
                         if($n >= $collection["maxitems"]) {
-                        	debugLog("Exported maxItems of messages: ". $collection["maxitems"] . " - more available");
-                            break;
+                    	    debugLog("Exported maxItems of messages: ". $collection["maxitems"] . " - more available");
+	                    break;
                         }
 
                     }
@@ -796,7 +835,7 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
                     $syncstate = $statemachine->getSyncState($collection["synckey"]);
 
                     $exporter = $backend->GetExporter($collection["collectionid"]);
-                    $exporter->Config($importer, $collection["class"], $collection["filtertype"], $syncstate, 0, 0);
+                    $exporter->Config($importer, $collection["class"], $collection["filtertype"], $syncstate, 0, 0, false);
 
                     $encoder->content($exporter->GetChangeCount());
 
@@ -891,7 +930,7 @@ function HandlePing($backend, $devid) {
                 // Create start state for this collection
                 $exporter = $backend->GetExporter($collection["serverid"]);
                 $importer = false;
-                $exporter->Config($importer, false, false, $collection["state"], BACKEND_DISCARD_DATA, 0);
+                $exporter->Config($importer, false, false, $collection["state"], BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
                 while(is_array($exporter->Synchronize()));
                 $collection["state"] = $exporter->GetState();
                 array_push($collections, $collection);
@@ -932,7 +971,7 @@ function HandlePing($backend, $devid) {
             $exporter = $backend->GetExporter($collection["serverid"]);
             $state = $collection["state"];
             $importer = false;
-            $ret = $exporter->Config($importer, false, false, $state, BACKEND_DISCARD_DATA, 0);
+            $ret = $exporter->Config($importer, false, false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
             // stop ping if exporter can not be configured (e.g. after Zarafa-server restart)
             if ($ret === false ) {
@@ -1251,7 +1290,6 @@ function HandleFolderUpdate($backend, $protocolversion) {
     return HandleFolderCreate($backend, $protocolversion);
 }
 
-
 function HandleProvision($backend, $devid, $protocolversion) {
     global $user, $auth_pw, $policykey;
 
@@ -1294,9 +1332,17 @@ function HandleProvision($backend, $devid, $protocolversion) {
             return false;
 
         $policytype = $decoder->getElementContent();
-        if ($policytype != 'MS-WAP-Provisioning-XML') {
-            $status = SYNC_PROVISION_STATUS_SERVERERROR;
+// START CHANGED dw2412 Support V12.0
+	if ($protocolversion >= 12.0) {
+    	    if ($policytype != 'MS-EAS-Provisioning-WBXML') {
+        	$status = SYNC_PROVISION_STATUS_SERVERERROR;
+    	    }
+    	} else {
+    	    if ($policytype != 'MS-WAP-Provisioning-XML') {
+        	$status = SYNC_PROVISION_STATUS_SERVERERROR;
+    	    }
         }
+// END CHANGED dw2412 Support V12.0
         if(!$decoder->getElementEndTag()) //policytype
             return false;
 
@@ -1374,7 +1420,56 @@ function HandleProvision($backend, $devid, $protocolversion) {
                 $encoder->startTag(SYNC_PROVISION_DATA);
                 if ($policytype == 'MS-WAP-Provisioning-XML') {
                     $encoder->content('<wap-provisioningdoc><characteristic type="SecurityPolicy"><parm name="4131" value="1"/><parm name="4133" value="1"/></characteristic></wap-provisioningdoc>');
-                }
+                } else if ($policytype == 'MS-EAS-Provisioning-WBXML') {
+		    $encoder->startTag('Provision:EASProvisionDoc');
+		    $encoder->startTag('Provision:DevicePasswordEnabled');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:AlphanumericDevicePasswordRequired');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:PasswordRecoveryEnabled');$encoder->content('1');$encoder->endTag();
+		    $encoder->startTag('Provision:DeviceEncryptionEnabled');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:AttachmentsEnabled');$encoder->content('1');$encoder->endTag();
+		    $encoder->startTag('Provision:MinDevicePasswordLength');$encoder->content('1');$encoder->endTag();
+		    $encoder->startTag('Provision:MaxInactivityTimeDeviceLock');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:MaxDevicePasswordFailedAttempts');$encoder->content('5');$encoder->endTag();
+//		    $encoder->startTag('Provision:MaxAttachmentSize');$encoder->content('5');$encoder->endTag();
+		    $encoder->startTag('Provision:AllowSimpleDevicePassword');$encoder->content('1');$encoder->endTag();
+		    $encoder->startTag('Provision:DevicePasswordExpiration');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:DevicePasswordHistory');$encoder->content('0');$encoder->endTag();
+		    if ($protocolversion >= 12.1) {
+			$encoder->startTag('Provision:AllowStorageCard');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowCamera');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:RequireDeviceEncryption');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:AllowUnsignedApplications');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowUnsignedInstallationPackages');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:MinDevicePasswordComplexCharacters');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:AllowWiFi');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowTextMessaging');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowPOPIMAPEmail');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowBluetooth');$encoder->content('2');$encoder->endTag();
+			$encoder->startTag('Provision:AllowIrDA');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:RequireManualSyncWhenRoaming');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowDesktopSync');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:MaxCalendarAgeFilter');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:AllowHTMLEmail');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:MaxEmailAgeFilter');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:MaxEmailBodyTruncationSize');$encoder->content('-1');$encoder->endTag();
+			$encoder->startTag('Provision:MaxHTMLBodyTruncationSize');$encoder->content('-1');$encoder->endTag();
+			$encoder->startTag('Provision:RequireSignedSMIMEMessages');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:RequireEncryptedSMIMEMessages');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:RequireSignedSMIMEAlgorithm');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:RequireEncryptedSMIMEAlgorithm');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:AllowSMIMEEncryptionAlgorithmNegotiation');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowSMIMESoftCerts');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowBrowser');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowConsumerEmail');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowRemoteDesktop');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:AllowInternetSharing');$encoder->content('1');$encoder->endTag();
+//			$encoder->startTag('Provision:UnapprovedInROMApplicationList');$encoder->content('');$encoder->endTag();
+//			$encoder->startTag('Provision:ApplicationName');$encoder->content('');$encoder->endTag();
+//			$encoder->startTag('Provision:ApprovedApplicationList');$encoder->content('');$encoder->endTag();
+//			$encoder->startTag('Provision:Hash');$encoder->content('');$encoder->endTag();
+		    };
+		    $encoder->endTag();
+		}
                 else {
                     debugLog("Wrong policy type");
                     return false;
@@ -1399,7 +1494,57 @@ function HandleProvision($backend, $devid, $protocolversion) {
 
     return true;
 }
-
+function ParseQuery($decoder, $subquery=NULL) {
+    $query = array();
+    while (($type = ($decoder->getElementStartTag(SYNC_SEARCH_AND)  		? SYNC_SEARCH_AND :
+		    ($decoder->getElementStartTag(SYNC_SEARCH_OR)  		? SYNC_SEARCH_OR :
+		    ($decoder->getElementStartTag(SYNC_SEARCH_EQUALTO)  	? SYNC_SEARCH_EQUALTO :
+		    ($decoder->getElementStartTag(SYNC_SEARCH_LESSTHAN)  	? SYNC_SEARCH_LESSTHAN :
+		    ($decoder->getElementStartTag(SYNC_SEARCH_GREATERTHAN)  	? SYNC_SEARCH_GREATERTHAN :
+		    ($decoder->getElementStartTag(SYNC_SEARCH_FREETEXT)  	? SYNC_SEARCH_FREETEXT :
+		    ($decoder->getElementStartTag(SYNC_FOLDERID)	  	? SYNC_FOLDERID :
+		    ($decoder->getElementStartTag(SYNC_FOLDERTYPE)	  	? SYNC_FOLDERTYPE :
+		    ($decoder->getElementStartTag(SYNC_POOMMAIL_DATERECEIVED)  	? SYNC_POOMMAIL_DATERECEIVED :
+		    -1)))))))))) != -1) {
+	switch ($type) {
+	    case SYNC_SEARCH_AND 		:
+	    case SYNC_SEARCH_OR  		:
+	    case SYNC_SEARCH_EQUALTO	 	:
+	    case SYNC_SEARCH_LESSTHAN 		:
+	    case SYNC_SEARCH_GREATERTHAN	:
+		    $q["op"] = $type;
+		    $q["value"] = ParseQuery($decoder,true);
+		    if ($subquery==true) {
+			$query["subquery"][] = $q;
+		    } else {
+			$query[] = $q;
+		    }
+		    $decoder->getElementEndTag();
+		    break;
+	    default 			:
+		    if (($query[$type] = $decoder->getElementContent())) {
+			$decoder->getElementEndTag();
+	    	    } else {
+			$decoder->getElementStartTag(SYNC_SEARCH_VALUE);
+		        $query[$type] = $decoder->getElementContent();
+			if ($type == SYNC_POOMMAIL_DATERECEIVED) {
+    			    if(preg_match("/(\d{4})[^0-9]*(\d{2})[^0-9]*(\d{2})T(\d{2})[^0-9]*(\d{2})[^0-9]*(\d{2})(.\d+)?Z/", $query[$type], $matches)) {
+        			if ($matches[1] >= 2038){
+            			    $matches[1] = 2038;
+            			    $matches[2] = 1;
+            			    $matches[3] = 18;
+            			    $matches[4] = $matches[5] = $matches[6] = 0;
+        			}
+        		    $query[$type] = gmmktime($matches[4], $matches[5], $matches[6], $matches[2], $matches[3], $matches[1]);
+    			    }
+			}
+			$decoder->getElementEndTag();
+		    };
+		    break;
+	};
+    };	
+    return $query;	    
+}
 
 function HandleSearch($backend, $devid, $protocolversion) {
     global $zpushdtd;
@@ -1422,7 +1567,15 @@ function HandleSearch($backend, $devid, $protocolversion) {
 
     if(!$decoder->getElementStartTag(SYNC_SEARCH_QUERY))
         return false;
-    $searchquery = $decoder->getElementContent();
+    //START CHANGED dw2412 V12.0 Support
+    switch (strtolower($searchname)) {
+	case 'mailbox'  : 
+		$searchquery['query'] = ParseQuery($decoder);
+		break;	
+	case 'gal'	: 
+		$searchquery = $decoder->getElementContent(); 
+		break;
+    }
     if(!$decoder->getElementEndTag())
         return false;
 
@@ -1433,6 +1586,63 @@ function HandleSearch($backend, $devid, $protocolversion) {
                 if(!$decoder->getElementEndTag())
                     return false;
                 }
+    //START ADDED dw2412 V12.0 Support
+            if($decoder->getElementStartTag(SYNC_SEARCH_DEEPTRAVERSAL)) {
+                if (!($searchdeeptraversal = $decoder->getElementContent()))  
+            	    $searchquerydeeptraversal = true;
+            	else
+            	    if(!$decoder->getElementEndTag())
+                	return false;
+            }
+            if($decoder->getElementStartTag(SYNC_SEARCH_REBUILDRESULTS)) {
+                if (!($searchrebuildresults = $decoder->getElementContent()))  
+            	    $searchqueryrebuildresults = true;
+            	else
+            	    if(!$decoder->getElementEndTag())
+                	return false;
+            }
+            if($decoder->getElementStartTag(SYNC_SEARCH_SCHEMA)) {
+                if (!($searchschema = $decoder->getElementContent()))  
+            	    $searchschema = true;
+            	else
+            	    if(!$decoder->getElementEndTag())
+                	return false;
+            }
+		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_BODYPREFERENCE)) {
+		    $bodypreference=array();
+        	    while(1) {
+            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TYPE)) {
+	                    $bodypreference["Type"] = $decoder->getElementContent();
+    		            if(!$decoder->getElementEndTag())
+                        	return false;
+    	    		}
+
+            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TRUNCATIONSIZE)) {
+	                    $bodypreference["TruncationSize"] = $decoder->getElementContent();
+    		            if(!$decoder->getElementEndTag())
+                        	return false;
+    	    		}
+
+            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_ALLORNONE)) {
+	                    $bodypreference["AllOrNone"] = $decoder->getElementContent();
+    		            if(!$decoder->getElementEndTag())
+                        	return false;
+    	    		}
+
+            		$e = $decoder->peek();
+            		if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+            		    $decoder->getElementEndTag();
+			    if (!isset($searchbodypreference["wanted"]))
+				$searchbodypreference["wanted"] = $bodypreference["Type"];
+			    if (isset($bodypreference["Type"]))
+				$searchbodypreference[$bodypreference["Type"]] = $bodypreference;
+    		    	    break;
+	        	}
+                    }
+		}
+    
+    //END ADDED dw2412 V12.0 Support
+            
                 $e = $decoder->peek();
                 if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
                     $decoder->getElementEndTag();
@@ -1449,14 +1659,23 @@ function HandleSearch($backend, $devid, $protocolversion) {
         return false;
 
 
-    if (strtoupper($searchname) != "GAL") {
-        debugLog("Searchtype $searchname is not supported");
-        return false;
+    //START CHANGED dw2412 V12.0 Support
+    switch (strtolower($searchname)) {
+	case 'mailbox'  : 
+            	$searchquery['rebuildresults'] = $searchqueryrebuildresults;
+            	$searchquery['deeptraversal'] =  $searchquerydeeptraversal;
+                $searchquery['range'] = $searchrange;
+		break;	
     }
     //get search results from backend
-    $rows = $backend->getSearchResults($searchquery);
+    $result = $backend->getSearchResults($searchquery,$searchname);
+    //END CHANGED dw2412 V12.0 Support
+    
 
     $encoder->startWBXML();
+    // START ADDED dw2412 Protocol Version 12 Support
+    if (isset($searchbodypreference)) $encoder->_bodypreference = $searchbodypreference;
+    // END ADDED dw2412 Protocol Version 12 Support
 
     $encoder->startTag(SYNC_SEARCH_SEARCH);
 
@@ -1471,29 +1690,60 @@ function HandleSearch($backend, $devid, $protocolversion) {
                 $encoder->content(1);
                 $encoder->endTag();
 
-                if (is_array($rows) && !empty($rows)) {
-                    $searchtotal = count($rows);
-                    $searchrange = '0';
-                    if ($searchtotal) $searchrange .= "-".($searchtotal - 1);
-                    foreach ($rows as $u) {
-                        $encoder->startTag(SYNC_SEARCH_RESULT);
-                            $encoder->startTag(SYNC_SEARCH_PROPERTIES);
+		// CHANGED dw2412 AS V12.0 Support (mentain single return way...)
+                if (is_array($result['rows']) && !empty($result['rows'])) {
+                    $searchtotal = count($result['rows']);
+		    // CHANGED dw2412 AS V12.0 Support (honor the range in request...)
+		    eregi("(.*)\-(.*)",$searchrange,$range);
+		    $returnitems = $range[2] - $range[1];
+                    $returneditems=0;
+		    $result['rows'] = array_slice($result['rows'],$range[1],$returnitems+1,true);
+		    // CHANGED dw2412 AS V12.0 Support (mentain single return way...)
+                    foreach ($result['rows'] as $u) {
 
-                                $encoder->startTag(SYNC_GAL_DISPLAYNAME);
-                                $encoder->content($u["fullname"]);
-                                $encoder->endTag();
+			    // CHANGED dw2412 AS V12.0 Support (honor the range in request...)
+                    	    if ($returneditems>$returnitems) break; 
+                    	    $returneditems++;
 
-                                $encoder->startTag(SYNC_GAL_ALIAS);
-                                $encoder->content($u["username"]);
-                                $encoder->endTag();
+			    switch (strtolower($searchname)) {
+				case 'mailbox'  : 
+                    		    $encoder->startTag(SYNC_SEARCH_RESULT);
+                        		$encoder->startTag(SYNC_FOLDERTYPE);
+                        		$encoder->content('Email');
+                        		$encoder->endTag();
+                        		$encoder->startTag(SYNC_SEARCH_LONGID);
+                        		$encoder->content($u['uniqueid']);
+                        		$encoder->endTag();
+                        		$encoder->startTag(SYNC_FOLDERID);
+                        		$encoder->content($u['searchfolderid']);
+                        		$encoder->endTag();
+                        		$encoder->startTag(SYNC_SEARCH_PROPERTIES);
+//				    $msg = $backend->FetchSearchResultsMailboxMessage($u['item'], $searchbodypreference);
+				    $msg = $backend->ItemOperationsFetchMailbox($u['uniqueid'], $searchbodypreference);
+				    $msg->encode($encoder);
+                        		$encoder->endTag();//result
+                    		    $encoder->endTag();//properties
+				    break;
+				case 'gal'  : 
+                    		    $encoder->startTag(SYNC_SEARCH_RESULT);
+                        		$encoder->startTag(SYNC_SEARCH_PROPERTIES);
+                            	    $encoder->startTag(SYNC_GAL_DISPLAYNAME);
+                            	    $encoder->content($u["fullname"]);
+                        	    $encoder->endTag();
 
-                                $encoder->startTag(SYNC_GAL_EMAILADDRESS);
-                                $encoder->content($u["emailaddress"]);
-                                $encoder->endTag();
+                            	    $encoder->startTag(SYNC_GAL_ALIAS);
+                            	    $encoder->content($u["username"]);
+                            	    $encoder->endTag();
 
-                            $encoder->endTag();//result
-                        $encoder->endTag();//properties
+                            	    $encoder->startTag(SYNC_GAL_EMAILADDRESS);
+                            	    $encoder->content($u["emailaddress"]);
+    	                    	    $encoder->endTag();
+                        		$encoder->endTag();//result
+                    		    $encoder->endTag();//properties
+				    break;
+			    };
                     }
+                    $searchrange = $range[1]."-".($range[1]+$returneditems-1);
                     $encoder->startTag(SYNC_SEARCH_RANGE);
                     $encoder->content($searchrange);
                     $encoder->endTag();
@@ -1511,7 +1761,372 @@ function HandleSearch($backend, $devid, $protocolversion) {
     return true;
 }
 
-function HandleRequest($backend, $cmd, $devid, $protocolversion) {
+// START ADDED dw2412 Settings Support
+function HandleSettings($backend, $devid, $protocolversion) {
+    global $zpushdtd;
+    global $input, $output;
+
+    $decoder = new WBXMLDecoder($input, $zpushdtd);
+    $encoder = new WBXMLEncoder($output, $zpushdtd);
+
+    if(!$decoder->getElementStartTag(SYNC_SETTINGS_SETTINGS))
+        return false;
+
+    $request = array();
+    while (($reqtype = ($decoder->getElementStartTag(SYNC_SETTINGS_OOF) 	      ?   SYNC_SETTINGS_OOF               :
+		       ($decoder->getElementStartTag(SYNC_SETTINGS_DEVICEINFORMATION) ?   SYNC_SETTINGS_DEVICEINFORMATION :
+		       ($decoder->getElementStartTag(SYNC_SETTINGS_USERINFORMATION)   ?   SYNC_SETTINGS_USERINFORMATION   :
+ 		       ($decoder->getElementStartTag(SYNC_SETTINGS_DEVICEPASSWORD)    ?   SYNC_SETTINGS_DEVICEPASSWORD    :
+		       -1))))) != -1) {
+	if($decoder->getElementStartTag(SYNC_SETTINGS_GET)) {
+	    if($reqtype == SYNC_SETTINGS_OOF) {
+		if(!$decoder->getElementStartTag(SYNC_SETTINGS_BODYTYPE))
+        	    return false;
+                $bodytype = $decoder->getElementContent();
+                if(!$decoder->getElementEndTag())
+                    return false; // end SYNC_SETTINGS BODYTYPE
+                if(!$decoder->getElementEndTag())
+                    return false; // end SYNC_SETTINGS GET
+                if(!$decoder->getElementEndTag())
+                    return false; // end SYNC_SETTINGS_OOF
+		$request["get"]["oof"]["bodytype"] = $bodytype;    
+
+
+	    } elseif ($reqtype == SYNC_SETTINGS_USERINFORMATION) {
+		$request["get"]["userinformation"] = array();    
+//                $decoder->getElementEndTag(); // end SYNC_SETTINGS_USERINFORMATION
+    	    } else { return false; };
+//    	    $decoder->getElementEndTag(); // end SYNC_SETTINGS_SETTINGS
+    	} elseif($decoder->getElementStartTag(SYNC_SETTINGS_SET)) {
+    	    if($reqtype == SYNC_SETTINGS_OOF) {
+        	$decoder->getElementStartTag(SYNC_SETTINGS_OOFSTATE);
+        	$oofstate = $decoder->getElementContent();
+        	$decoder->getElementEndTag(); // end SYNC_SETTINGS_OOFSTATE
+		$request["set"]["oof"]["oofstate"] = $oofstate;    
+    	        if ($oofstate != 0) {
+    		    $decoder->getElementStartTag(SYNC_SETTINGS_OOFMESSAGE);
+
+		    $oofmsgs = array();
+		    while (($type = ($decoder->getElementStartTag(SYNC_SETTINGS_APPLIESTOINTERNAL)        ? SYNC_SETTINGS_APPLIESTOINTERNAL :
+				    ($decoder->getElementStartTag(SYNC_SETTINGS_APPLIESTOEXTERNALKNOWN)   ? SYNC_SETTINGS_APPLIESTOEXTERNALKNOWN :
+				    ($decoder->getElementStartTag(SYNC_SETTINGS_APPLIESTOEXTERNALUNKNOWN) ? SYNC_SETTINGS_APPLIESTOEXTERNALUNKNOWN :
+				    -1)))) != -1) {
+			$oof = array();
+        		$oof["appliesto"] = $type;
+        		$decoder->getElementStartTag(SYNC_SETTINGS_ENABLED);
+        		$oof["enabled"] = $decoder->getElementContent();
+        		$decoder->getElementEndTag(); // end SYNC_SETTINGS_ENABLED
+        		$decoder->getElementStartTag(SYNC_SETTINGS_REPLYMESSAGE);
+        		$oof["replymessage"] = $decoder->getElementContent();
+        		$decoder->getElementEndTag(); // end SYNC_SETTINGS_REPLYMESSAGE
+        		$decoder->getElementStartTag(SYNC_SETTINGS_BODYTYPE);
+        		$oof["bodytype"] = $decoder->getElementContent();
+        		$decoder->getElementEndTag(); // end SYNC_SETTINGS_BODYTYPE
+			$oofmsgs[]=$oof;
+		    }; 
+        	    $request["set"]["oof"]["oofmsgs"] = $oofmsgs;    
+
+        	    $decoder->getElementEndTag(); // end SYNC_SETTINGS_OOFMESSAGE
+		};
+    		$decoder->getElementEndTag(); // end SYNC_SETTINGS_SET
+        	$decoder->getElementEndTag(); // end SYNC_SETTINGS_OOF
+
+
+	    } elseif ($reqtype == SYNC_SETTINGS_DEVICEINFORMATION) {
+		while (($field = ($decoder->getElementStartTag(SYNC_SETTINGS_MODEL) 				 ? SYNC_SETTINGS_MODEL					: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_IMEI) 				 ? SYNC_SETTINGS_IMEI 					: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_FRIENDLYNAME) 			 ? SYNC_SETTINGS_FRIENDLYNAME 				: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_OS) 				 ? SYNC_SETTINGS_OS 					: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_OSLANGUAGE) 			 ? SYNC_SETTINGS_OSLANGUAGE 				: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_PHONENUMBER) 			 ? SYNC_SETTINGS_PHONENUMBER 				: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_USERAGENT) 			 ? SYNC_SETTINGS_USERAGENT 				: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_ENABLEOUTBOUNDSMS)		 	 ? SYNC_SETTINGS_ENABLEOUTBOUNDSMS			: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_MOBILEOPERATOR) 			 ? SYNC_SETTINGS_MOBILEOPERATOR 			: 
+				 -1)))))))))) != -1) {
+// 				 ($decoder->getElementStartTag(SYNC_SETTINGS_ALTERNATEMAILBOXINFORMATIONVERSION) ? SYNC_SETTINGS_ALTERNATEMAILBOXINFORMATIONVERSION	: 
+
+        	    if (($deviceinfo[$field] = $decoder->getElementContent())) $decoder->getElementEndTag(); // end $field
+		};
+		$request["set"]["deviceinformation"] = $deviceinfo;    
+    		$decoder->getElementEndTag(); // end SYNC_SETTINGS_SET
+        	$decoder->getElementEndTag(); // end SYNC_SETTINGS_DEVICEINFORMATION
+
+	    } elseif ($reqtype == SYNC_SETTINGS_DEVICEPASSWORD) {
+		$decoder->getElementStartTag(SYNC_SETTINGS_PASSWORD);
+        	if (($password = $decoder->getElementContent())) $decoder->getElementEndTag(); // end $field
+		$request["set"]["devicepassword"] = $password;    
+	
+    	    } else { return false; };
+    
+	} else { return false; };
+    }
+    $decoder->getElementEndTag(); // end SYNC_SETTINGS_SETTINGS
+
+    if (isset($request["set"])) $result["set"] = $backend->setSettings($request["set"],$devid);
+    if (isset($request["get"])) $result["get"] = $backend->getSettings($request["get"],$devid);
+
+    $encoder->startWBXML();
+    $encoder->startTag(SYNC_SETTINGS_SETTINGS);
+    $encoder->startTag(SYNC_SETTINGS_STATUS);
+    $encoder->content(1);
+    $encoder->endTag(); // end SYNC_SETTINGS_STATUS
+    if (isset($request["set"]["oof"])) {
+        $encoder->startTag(SYNC_SETTINGS_OOF);
+        $encoder->startTag(SYNC_SETTINGS_STATUS);
+	if (!isset($result["set"]["oof"]["status"])) {
+    	    $encoder->content(0);
+    	} else {
+    	    $encoder->content($result["set"]["oof"]["status"]);
+    	}
+        $encoder->endTag(); // end SYNC_SETTINGS_STATUS
+        $encoder->endTag(); // end SYNC_SETTINGS_OOF
+    };
+    if (isset($request["set"]["deviceinformation"])) {
+        $encoder->startTag(SYNC_SETTINGS_DEVICEINFORMATION);
+        $encoder->startTag(SYNC_SETTINGS_SET);
+        $encoder->startTag(SYNC_SETTINGS_STATUS);
+	if (!isset($result["set"]["deviceinformation"]["status"])) {
+    	    $encoder->content(0);
+    	} else {
+    	    $encoder->content($result["set"]["deviceinformation"]["status"]);
+    	}
+        $encoder->endTag(); // end SYNC_SETTINGS_STATUS
+        $encoder->endTag(); // end SYNC_SETTINGS_SET
+        $encoder->endTag(); // end SYNC_SETTINGS_DEVICEINFORMATION
+    };
+    if (isset($request["set"]["devicepassword"])) {
+        $encoder->startTag(SYNC_SETTINGS_DEVICEPASSWORD);
+        $encoder->startTag(SYNC_SETTINGS_SET);
+        $encoder->startTag(SYNC_SETTINGS_STATUS);
+	if (!isset($result["set"]["devicepassword"]["status"])) {
+    	    $encoder->content(0);
+    	} else {
+    	    $encoder->content($result["set"]["devicepassword"]["status"]);
+    	}
+        $encoder->endTag(); // end SYNC_SETTINGS_STATUS
+        $encoder->endTag(); // end SYNC_SETTINGS_SET
+        $encoder->endTag(); // end SYNC_SETTINGS_DEVICEPASSWORD
+    };
+    if (isset($request["get"]["userinformation"])) {
+        $encoder->startTag(SYNC_SETTINGS_USERINFORMATION);
+        $encoder->startTag(SYNC_SETTINGS_STATUS);
+        $encoder->content($result["get"]["userinformation"]["status"]);
+        $encoder->endTag(); // end SYNC_SETTINGS_STATUS
+        $encoder->startTag(SYNC_SETTINGS_GET);
+        $encoder->startTag(SYNC_SETTINGS_EMAILADDRESSES);
+	foreach($result["get"]["userinformation"]["emailaddresses"] as $value) {
+	    $encoder->startTag(SYNC_SETTINGS_SMTPADDRESS);
+    	    $encoder->content($value);
+    	    $encoder->endTag(); // end SYNC_SETTINGS_SMTPADDRESS
+        };
+        $encoder->endTag(); // end SYNC_SETTINGS_EMAILADDRESSES
+        $encoder->endTag(); // end SYNC_SETTINGS_GET
+        $encoder->endTag(); // end SYNC_SETTINGS_USERINFORMATION
+    };
+    if (isset($request["get"]["oof"])) {
+        $encoder->startTag(SYNC_SETTINGS_OOF);
+            
+        $encoder->startTag(SYNC_SETTINGS_STATUS);
+        $encoder->content(1);
+        $encoder->endTag(); // end SYNC_SETTINGS_STATUS
+            
+        $encoder->startTag(SYNC_SETTINGS_GET);
+        $encoder->startTag(SYNC_SETTINGS_OOFSTATE);
+        $encoder->content($result["get"]["oof"]["oofstate"]);
+        $encoder->endTag(); // end SYNC_SETTINGS_OOFSTATE
+//	This we maybe need later on (OOFSTATE=2). It shows that OOF Messages could be send depending on Time being set in here. 
+//	Unfortunately cannot proof it working on my device.
+/*      $encoder->startTag(SYNC_SETTINGS_STARTTIME);
+        $encoder->content("2007-05-08T10:45:51.250Z");
+        $encoder->endTag(); // end SYNC_SETTINGS_STARTTIME
+        $encoder->startTag(SYNC_SETTINGS_ENDTIME);
+        $encoder->content("2007-05-11T10:45:51.250Z");
+        $encoder->endTag(); // end SYNC_SETTINGS_ENDTIME
+*/
+        foreach($result["get"]["oof"]["oofmsgs"] as $oofentry) {
+            $encoder->startTag(SYNC_SETTINGS_OOFMESSAGE);
+            $encoder->startTag($oofentry["appliesto"],false,true);
+            $encoder->startTag(SYNC_SETTINGS_ENABLED);
+            $encoder->content($oofentry["enabled"]);
+            $encoder->endTag(); // end SYNC_SETTINGS_ENABLED
+    	    $encoder->startTag(SYNC_SETTINGS_REPLYMESSAGE);
+            $encoder->content($oofentry["replymessage"]);
+            $encoder->endTag(); // end SYNC_SETTINGS_REPLYMESSAGE
+            $encoder->startTag(SYNC_SETTINGS_BODYTYPE);
+	    switch (strtolower($oofentry["bodytype"])) {
+		case "text" : $encoder->content("Text"); break;
+		case "HTML" : $encoder->content("HTML"); break;
+	    };
+            $encoder->endTag(); // end SYNC_SETTINGS_BODYTYPE
+            $encoder->endTag(); // end SYNC_SETTINGS_OOFMESSAGE
+        };
+    
+        $encoder->endTag(); // end SYNC_SETTINGS_GET
+        $encoder->endTag(); // end SYNC_SETTINGS_OOF
+    
+    };
+    $encoder->endTag(); // end SYNC_SETTINGS_SETTINGS
+    
+    return true;
+}
+
+// END ADDED dw2412 Settings Support
+
+// START ADDED dw2412 ItemOperations Support
+function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
+    global $zpushdtd;
+    global $input, $output;
+
+    $decoder = new WBXMLDecoder($input, $zpushdtd);
+    $encoder = new WBXMLEncoder($output, $zpushdtd);
+
+    if(!$decoder->getElementStartTag(SYNC_ITEMOPERATIONS_ITEMOPERATIONS))
+        return false;
+
+    $request = array();
+    while (($reqtype = ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_FETCH)       		?   SYNC_ITEMOPERATIONS_FETCH      	  	:
+		       ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENT) 	?   SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENTS	:
+		       -1))) != -1) {
+	if ($reqtype == SYNC_ITEMOPERATIONS_FETCH) {
+	    $thisio["type"] = "fetch";
+	    while (($reqtag = ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_STORE)       		?   SYNC_ITEMOPERATIONS_STORE  	  	:
+			      ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_OPTIONS)	 	?   SYNC_ITEMOPERATIONS_OPTIONS		:
+			      ($decoder->getElementStartTag(SYNC_SERVERENTRYID)			 	?   SYNC_SERVERENTRYID			:
+			      ($decoder->getElementStartTag(SYNC_FOLDERID)			 	?   SYNC_FOLDERID			:
+			      ($decoder->getElementStartTag(SYNC_DOCUMENTLIBRARY_LINKID)	 	?   SYNC_DOCUMENTLIBRARY_LINKID		:
+			      ($decoder->getElementStartTag(SYNC_AIRSYNCBASE_FILEREFERENCE)	 	?   SYNC_AIRSYNCBASE_FILEREFERENCE	:
+			      ($decoder->getElementStartTag(SYNC_SEARCH_LONGID)			 	?   SYNC_SEARCH_LONGID			:
+		    	      -1)))))))) != -1) {
+    		if ($reqtag == SYNC_ITEMOPERATIONS_OPTIONS) {
+		    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_BODYPREFERENCE)) {
+		        $bodypreference=array();
+        	        while(1) {
+            	    	    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TYPE)) {
+	                        $bodypreference["Type"] = $decoder->getElementContent();
+    		                if(!$decoder->getElementEndTag())
+                            	    return false;
+    	    	    	    }
+    
+                	    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TRUNCATIONSIZE)) {
+        	        	$bodypreference["TruncationSize"] = $decoder->getElementContent();
+        		        if(!$decoder->getElementEndTag())
+                            	    return false;
+        	    	    }
+    
+                	    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_ALLORNONE)) {
+        	                $bodypreference["AllOrNone"] = $decoder->getElementContent();
+        		        if(!$decoder->getElementEndTag())
+                    		    return false;
+    	    		    }
+
+            	    	    $e = $decoder->peek();
+            		    if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+            			$decoder->getElementEndTag();
+				if (!isset($thisio["bodypreference"]["wanted"]))
+				    $thisio["bodypreference"]["wanted"] = $bodypreference["Type"];
+				if (isset($bodypreference["Type"]))
+				    $thisio["bodypreference"][$bodypreference["Type"]] = $bodypreference;
+    		    		break;
+	        	    }
+                	}
+		    }
+		} elseif ($reqtag == SYNC_ITEMOPERATIONS_STORE) {
+    	    	    $thisio["store"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_SEARCH_LONGID) {
+    	    	    $thisio["searchlongid"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_AIRSYNCBASE_FILEREFERENCE) {
+		    $thisio["airsyncbasefilereference"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_SERVERENTRYID) {
+		    $thisio["serverentryid"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_FOLDERID) {
+		    $thisio["folderid"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_DOCUMENTLIBRARY_LINKID) {
+		    $thisio["documentlibrarylinkid"] = $decoder->getElementContent();
+		} 
+    		$e = $decoder->peek();
+    	        if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+    		    $decoder->getElementEndTag();
+		}
+	    }
+	    $itemoperations[] = $thisio;		    
+	    $decoder->getElementEndTag(); // end SYNC_ITEMOPERATIONS_FETCH
+	}
+    }
+    $decoder->getElementEndTag(); // end SYNC_ITEMOPERATIONS_ITEMOPERATIONS
+    if ($multipart == true) {
+        $encoder->startWBXML(true);
+    } else {
+        $encoder->startWBXML(false);
+    }
+    $encoder->startTag(SYNC_ITEMOPERATIONS_ITEMOPERATIONS);
+    $encoder->startTag(SYNC_ITEMOPERATIONS_STATUS);
+    $encoder->content(1);
+    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_STATUS
+    $encoder->startTag(SYNC_ITEMOPERATIONS_RESPONSE);
+    foreach($itemoperations as $value) {
+	switch($value["type"]) {
+	    case "fetch"	:
+		    $encoder->startTag(SYNC_ITEMOPERATIONS_FETCH);
+		    $encoder->startTag(SYNC_ITEMOPERATIONS_STATUS);
+		    $encoder->content(1);
+		    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_STATUS
+		    if (isset($value["airsyncbasefilereference"])) {
+			$encoder->startTag(SYNC_AIRSYNCBASE_FILEREFERENCE);
+			$encoder->content($value["airsyncbasefilereference"]);
+			$encoder->endTag(); // end SYNC_SERVERENTRYID
+		    } else {
+			if (isset($value["folderid"])) {
+    		    	    $encoder->startTag(SYNC_FOLDERID);
+			    $encoder->content($value["folderid"]);
+	    	    	    $encoder->endTag(); // end SYNC_FOLDERID
+			}
+		    	if (isset($value["serverentryid"])) {
+			    $encoder->startTag(SYNC_SERVERENTRYID);
+			    $encoder->content($value["serverentryid"]);
+			    $encoder->endTag(); // end SYNC_SERVERENTRYID
+			} 
+			if (isset($value["searchlongid"])) {
+			    $ids = $backend->ItemOperationsGetIDs($value['searchlongid']);
+    		    	    $encoder->startTag(SYNC_FOLDERID);
+			    $encoder->content($ids["folderid"]);
+	    	    	    $encoder->endTag(); // end SYNC_FOLDERID
+			    $encoder->startTag(SYNC_SERVERENTRYID);
+			    $encoder->content($ids["serverentryid"]);
+			    $encoder->endTag(); // end SYNC_SERVERENTRYID
+			} 
+            		$encoder->startTag(SYNC_FOLDERTYPE);
+                	$encoder->content("Email");
+            		$encoder->endTag();
+		    }
+            	    $encoder->startTag(SYNC_ITEMOPERATIONS_PROPERTIES);
+		    if (isset($value['bodypreference'])) $encoder->_bodypreference = $value['bodypreference'];
+		    if (isset($value["searchlongid"])) {
+			$msg = $backend->ItemOperationsFetchMailbox($value['searchlongid'], $value['bodypreference']);
+		    } else if(isset($value["airsyncbasefilereference"])) {
+			$msg = $backend->ItemOperationsGetAttachmentData($value["airsyncbasefilereference"]);
+		    } else {
+			$msg = $backend->Fetch($value['folderid'], $value['serverentryid'], $value['bodypreference']);
+		    };
+		    $msg->encode($encoder);
+		    
+                    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_PROPERTIES
+		    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_FETCH
+		    break;
+	    default		:
+		    debugLog ("Operations ".$value["type"]." not supported by HandleItemOperations");
+		    break;
+	}
+    }
+    $encoder->endTag(); //end SYNC_ITEMOPERATIONS_RESPONSE
+    $encoder->endTag(); //end SYNC_ITEMOPERATIONS_ITEMOPERATIONS
+
+    return true;
+}
+
+// END ADDED dw2412 ItemOperations Support
+
+function HandleRequest($backend, $cmd, $devid, $protocolversion, $multipart) {
+
     switch($cmd) {
         case 'Sync':
             $status = HandleSync($backend, $protocolversion, $devid);
@@ -1568,10 +2183,16 @@ function HandleRequest($backend, $cmd, $devid, $protocolversion) {
             $status = HandlePing($backend, $devid, $protocolversion);
             break;
         case 'Provision':
-            $status = (PROVISIONING === true) ? HandleProvision($backend, $devid, $protocolversion) : false;
+	    $status = (PROVISIONING === true) ? HandleProvision($backend, $devid, $protocolversion) : false;
             break;
         case 'Search':
             $status = HandleSearch($backend, $devid, $protocolversion);
+            break;
+        case 'Settings':
+            $status = HandleSettings($backend, $devid, $protocolversion);
+            break;
+        case 'ItemOperations':
+            $status = HandleItemOperations($backend, $devid, $protocolversion, $multipart);
             break;
 
         default:

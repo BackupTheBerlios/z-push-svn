@@ -11,5 +11,5 @@
 * Consult LICENSE file for details
 ************************************************/
 
-$zpush_version = "SVN checkout";
+$zpush_version = "SVN AS12 checkout";
 ?>
