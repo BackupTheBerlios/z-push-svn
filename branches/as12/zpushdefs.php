@@ -217,6 +217,8 @@ define("SYNC_POOMCAL_SENSITIVITY","POOMCAL:Sensitivity");
 define("SYNC_POOMCAL_SUBJECT","POOMCAL:Subject");
 define("SYNC_POOMCAL_STARTTIME","POOMCAL:StartTime");
 define("SYNC_POOMCAL_UID","POOMCAL:UID");
+define("SYNC_POOMCAL_ATTENDEE_STATUS","POOMCAL:Attendee_Status");
+define("SYNC_POOMCAL_ATTENDEE_TYPE","POOMCAL:Attendee_Type");
 
 // Move
 define("SYNC_MOVE_MOVES","Move:Moves");

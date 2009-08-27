@@ -356,7 +356,9 @@ class SyncAttendee extends Streamer {
     function SyncAttendee() {
         $mapping = array(
                       SYNC_POOMCAL_EMAIL => array (STREAMER_VAR => "email"),
-                      SYNC_POOMCAL_NAME => array (STREAMER_VAR => "name" )
+                      SYNC_POOMCAL_NAME => array (STREAMER_VAR => "name" ),
+                      SYNC_POOMCAL_ATTENDEE_STATUS => array (STREAMER_VAR => "status" ),
+                      SYNC_POOMCAL_ATTENDEE_TYPE => array (STREAMER_VAR => "type" )
                   );
 
         parent::Streamer($mapping);

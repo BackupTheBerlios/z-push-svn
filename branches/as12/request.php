@@ -1504,8 +1504,9 @@ function ParseQuery($decoder, $subquery=NULL) {
 		    ($decoder->getElementStartTag(SYNC_SEARCH_FREETEXT)  	? SYNC_SEARCH_FREETEXT :
 		    ($decoder->getElementStartTag(SYNC_FOLDERID)	  	? SYNC_FOLDERID :
 		    ($decoder->getElementStartTag(SYNC_FOLDERTYPE)	  	? SYNC_FOLDERTYPE :
+		    ($decoder->getElementStartTag(SYNC_DOCUMENTLIBRARY_LINKID) 	? SYNC_FOLDERTYPE :
 		    ($decoder->getElementStartTag(SYNC_POOMMAIL_DATERECEIVED)  	? SYNC_POOMMAIL_DATERECEIVED :
-		    -1)))))))))) != -1) {
+		    -1))))))))))) != -1) {
 	switch ($type) {
 	    case SYNC_SEARCH_AND 		:
 	    case SYNC_SEARCH_OR  		:
@@ -1527,16 +1528,18 @@ function ParseQuery($decoder, $subquery=NULL) {
 	    	    } else {
 			$decoder->getElementStartTag(SYNC_SEARCH_VALUE);
 		        $query[$type] = $decoder->getElementContent();
-			if ($type == SYNC_POOMMAIL_DATERECEIVED) {
-    			    if(preg_match("/(\d{4})[^0-9]*(\d{2})[^0-9]*(\d{2})T(\d{2})[^0-9]*(\d{2})[^0-9]*(\d{2})(.\d+)?Z/", $query[$type], $matches)) {
-        			if ($matches[1] >= 2038){
-            			    $matches[1] = 2038;
-            			    $matches[2] = 1;
-            			    $matches[3] = 18;
-            			    $matches[4] = $matches[5] = $matches[6] = 0;
-        			}
-        		    $query[$type] = gmmktime($matches[4], $matches[5], $matches[6], $matches[2], $matches[3], $matches[1]);
-    			    }
+			switch ($type) {
+			    case SYNC_POOMMAIL_DATERECEIVED :
+    				if(preg_match("/(\d{4})[^0-9]*(\d{2})[^0-9]*(\d{2})T(\d{2})[^0-9]*(\d{2})[^0-9]*(\d{2})(.\d+)?Z/", $query[$type], $matches)) {
+        			    if ($matches[1] >= 2038){
+            				$matches[1] = 2038;
+            				$matches[2] = 1;
+            				$matches[3] = 18;
+            				$matches[4] = $matches[5] = $matches[6] = 0;
+        			    }
+        			$query[$type] = gmmktime($matches[4], $matches[5], $matches[6], $matches[2], $matches[3], $matches[1]);
+    				}
+				break;
 			}
 			$decoder->getElementEndTag();
 		    };
@@ -1569,6 +1572,9 @@ function HandleSearch($backend, $devid, $protocolversion) {
         return false;
     //START CHANGED dw2412 V12.0 Support
     switch (strtolower($searchname)) {
+	case 'documentlibrary'  : 
+		$searchquery['query'] = ParseQuery($decoder);
+		break;	
 	case 'mailbox'  : 
 		$searchquery['query'] = ParseQuery($decoder);
 		break;	
