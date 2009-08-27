@@ -2252,20 +2252,20 @@ class BackendICS {
      *
      * @return status flag
      */ 
-	function CheckPolicy($policykey, $devid) {
-	    global $user, $auth_pw;
+    function CheckPolicy($policykey, $devid) {
+        global $user, $auth_pw;
 	
-	    $status = SYNC_PROVISION_STATUS_SUCCESS;
+        $status = SYNC_PROVISION_STATUS_SUCCESS;
 	
-	    $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
+        $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
 	
-	    if ($user_policykey != $policykey) {
-	        $status = SYNC_PROVISION_STATUS_POLKEYMISM;
-	    }
+        if ($user_policykey != $policykey) {
+            $status = SYNC_PROVISION_STATUS_POLKEYMISM;
+        }
 	
-	    if (!$policykey) $policykey = $user_policykey;
-	    return $status;
-	}
+        if (!$policykey) $policykey = $user_policykey;
+        return $status;
+    }
 	
 
     function generatePolicyKey() {

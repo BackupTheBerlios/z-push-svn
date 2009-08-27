@@ -78,7 +78,6 @@ if($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Get the request headers so we can see the versions
 $requestheaders = apache_request_headers();
-debugLog(print_r($requestheaders,true));
 if (isset($requestheaders["Ms-Asprotocolversion"])) $requestheaders["MS-ASProtocolVersion"] = $requestheaders["Ms-Asprotocolversion"];
 if(isset($requestheaders["MS-ASProtocolVersion"])) {
     global $protocolversion;

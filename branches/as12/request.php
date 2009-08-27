@@ -1608,13 +1608,13 @@ function HandleSearch($backend, $devid, $protocolversion) {
             	    if(!$decoder->getElementEndTag())
                 	return false;
             }
-		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_BODYPREFERENCE)) {
-		    $bodypreference=array();
-        	    while(1) {
-            		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TYPE)) {
-	                    $bodypreference["Type"] = $decoder->getElementContent();
-    		            if(!$decoder->getElementEndTag())
-                        	return false;
+	    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_BODYPREFERENCE)) {
+	        $bodypreference=array();
+    	        while(1) {
+            	    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TYPE)) {
+	        	$bodypreference["Type"] = $decoder->getElementContent();
+    		        if(!$decoder->getElementEndTag())
+                    	    return false;
     	    		}
 
             		if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_TRUNCATIONSIZE)) {
@@ -1649,9 +1649,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
                     break;
                 }
             }
-        //if(!$decoder->getElementEndTag())
-            //return false;
-    }
+	}
     if(!$decoder->getElementEndTag()) //store
         return false;
 
@@ -1718,7 +1716,6 @@ function HandleSearch($backend, $devid, $protocolversion) {
                         		$encoder->content($u['searchfolderid']);
                         		$encoder->endTag();
                         		$encoder->startTag(SYNC_SEARCH_PROPERTIES);
-//				    $msg = $backend->FetchSearchResultsMailboxMessage($u['item'], $searchbodypreference);
 				    $msg = $backend->ItemOperationsFetchMailbox($u['uniqueid'], $searchbodypreference);
 				    $msg->encode($encoder);
                         		$encoder->endTag();//result
@@ -1794,9 +1791,7 @@ function HandleSettings($backend, $devid, $protocolversion) {
 
 	    } elseif ($reqtype == SYNC_SETTINGS_USERINFORMATION) {
 		$request["get"]["userinformation"] = array();    
-//                $decoder->getElementEndTag(); // end SYNC_SETTINGS_USERINFORMATION
     	    } else { return false; };
-//    	    $decoder->getElementEndTag(); // end SYNC_SETTINGS_SETTINGS
     	} elseif($decoder->getElementStartTag(SYNC_SETTINGS_SET)) {
     	    if($reqtype == SYNC_SETTINGS_OOF) {
         	$decoder->getElementStartTag(SYNC_SETTINGS_OOFSTATE);
@@ -1843,7 +1838,6 @@ function HandleSettings($backend, $devid, $protocolversion) {
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_ENABLEOUTBOUNDSMS)		 	 ? SYNC_SETTINGS_ENABLEOUTBOUNDSMS			: 
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_MOBILEOPERATOR) 			 ? SYNC_SETTINGS_MOBILEOPERATOR 			: 
 				 -1)))))))))) != -1) {
-// 				 ($decoder->getElementStartTag(SYNC_SETTINGS_ALTERNATEMAILBOXINFORMATIONVERSION) ? SYNC_SETTINGS_ALTERNATEMAILBOXINFORMATIONVERSION	: 
 
         	    if (($deviceinfo[$field] = $decoder->getElementContent())) $decoder->getElementEndTag(); // end $field
 		};
