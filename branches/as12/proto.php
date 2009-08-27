@@ -354,12 +354,21 @@ class SyncContact extends Streamer {
 
 class SyncAttendee extends Streamer {
     function SyncAttendee() {
+// START ADDED dw2412 Support V12.0
+        global $protocolversion;
+// END ADDED dw2412 Support V12.0
         $mapping = array(
                       SYNC_POOMCAL_EMAIL => array (STREAMER_VAR => "email"),
                       SYNC_POOMCAL_NAME => array (STREAMER_VAR => "name" ),
-                      SYNC_POOMCAL_ATTENDEE_STATUS => array (STREAMER_VAR => "status" ),
-                      SYNC_POOMCAL_ATTENDEE_TYPE => array (STREAMER_VAR => "type" )
                   );
+// START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion >= 12.0) {
+    	    $mapping += array(
+        	      SYNC_POOMCAL_ATTENDEE_STATUS => array (STREAMER_VAR => "status" ),
+            	      SYNC_POOMCAL_ATTENDEE_TYPE => array (STREAMER_VAR => "type" ),
+    	    );
+        }
+// END ADDED dw2412 Support V12.0
 
         parent::Streamer($mapping);
     }
@@ -402,7 +411,6 @@ class SyncAppointment extends Streamer {
 	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
         }
 // END ADDED dw2412 Support V12.0
-
 
         parent::Streamer($mapping);
     }
