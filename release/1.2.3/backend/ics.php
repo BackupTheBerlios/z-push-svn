@@ -1628,7 +1628,7 @@ class PHPHierarchyImportProxy {
         $folder->type = $this->_getFolderType($folderprops[PR_ENTRYID]);
     
         // try to find a correct type if not one of the default folders
-        if ($folder->type == SYNC_FOLDER_TYPE_OTHER) {
+        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
                 $folder->type = SYNC_FOLDER_TYPE_TASK;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
@@ -2054,7 +2054,7 @@ class BackendICS {
     }
 
     function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
-        if (WBXML_DEBUG === true)
+        if (WBXML_DEBUG == true)
             debugLog("SendMail: forward: $forward   reply: $reply   parent: $parent\n" . $rfc822);
         
         $mimeParams = array('decode_headers' => false,
