@@ -114,6 +114,31 @@ class SyncAirSyncBaseFileAttachment extends Streamer {
         parent::Streamer($mapping);
     }
 };
+
+class SyncPoommailFlag extends Streamer {
+//    var $flagstatus;
+//    var $flagtype;
+//    var $completetime;
+
+    function SyncPoommailFlag() {
+        $mapping = array(     SYNC_POOMMAIL_FLAGSTATUS => array(STREAMER_VAR => "flagstatus"),
+                    	      SYNC_POOMMAIL_FLAGTYPE => array(STREAMER_VAR => "flagtype"),
+                    	      SYNC_POOMTASKS_STARTDATE => array (STREAMER_VAR => "startdate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+                    	      SYNC_POOMTASKS_UTCSTARTDATE => array (STREAMER_VAR => "utcstartdate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+                	      SYNC_POOMTASKS_DUEDATE => array (STREAMER_VAR => "duedate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+	                      SYNC_POOMTASKS_UTCDUEDATE => array (STREAMER_VAR => "utcduedate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+        	              SYNC_POOMTASKS_DATECOMPLETED => array (STREAMER_VAR => "datecompleted", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+                	      SYNC_POOMTASKS_REMINDERSET => array (STREAMER_VAR => "reminderset"),
+	                      SYNC_POOMTASKS_REMINDERTIME => array (STREAMER_VAR => "remindertime", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+    		              SYNC_POOMTASKS_SUBJECT => array (STREAMER_VAR => "subject"),
+                	      SYNC_POOMTASKS_ORDINALDATE => array (STREAMER_VAR => "ordinaldate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+                	      SYNC_POOMTASKS_SUBORDINALDATE => array (STREAMER_VAR => "subordinaldate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+                    	      SYNC_POOMMAIL_COMPLETETIME => array(STREAMER_VAR => "completetime"),
+                        );
+
+        parent::Streamer($mapping);
+    }
+};
 // END ADDED dw2412 Support V12.0
 
 class SyncMeetingRequest extends Streamer {
@@ -160,6 +185,7 @@ class SyncMail extends Streamer {
     var $threadtopic;
     var $attachments = array();
     var $airsyncbaseattachments = array();
+    // var $poommailflag = array();
     var $airsyncbasenativebodytype;
     //END ADDED dw2412 V12.0 Support
 
@@ -189,11 +215,11 @@ class SyncMail extends Streamer {
                               );
 // START ADDED dw2412 Support V12.0
         if(isset($protocolversion) && $protocolversion >= 12.0) {
-	    unset($mapping[SYNC_POOMMAIL_MESSAGECLASS]);
 	    $mapping += array(SYNC_AIRSYNCBASE_NATIVEBODYTYPE => array(STREAMER_VAR => "airsyncbasenativebodytype"),
                               SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
                               SYNC_AIRSYNCBASE_ATTACHMENTS => array (STREAMER_VAR => "airsyncbaseattachments", STREAMER_TYPE => "AirSyncBaseAttachment", STREAMER_ARRAY => SYNC_AIRSYNCBASE_ATTACHMENT ),
-                              SYNC_POOMMAIL_MESSAGECLASS => array (STREAMER_VAR => "messageclass"),
+                    	      SYNC_POOMMAIL_FLAG => array(STREAMER_VAR => "poommailflag", STREAMER_TYPE => "SyncPoommailFlag"),
+                    	      SYNC_POOMMAIL_CONTENTCLASS => array(STREAMER_VAR => "contentclass"),
                              );
         }
 // END ADDED dw2412 Support V12.0

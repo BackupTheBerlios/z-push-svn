@@ -38,6 +38,9 @@
     // Device Provisioning 
     define('PROVISIONING', true); 
 
+    // MS-TNEF Schedule Meeting Request Workaround for Zarafa Server 6.30.2.16415
+    define('MS_TNEF_SCHEDULE_MTGREQ_HACK', false);
+
     // The data providers that we are using (see configuration below)
     $BACKEND_PROVIDER = "BackendICS";
 

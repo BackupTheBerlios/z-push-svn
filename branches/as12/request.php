@@ -536,6 +536,9 @@ function HandleSync($backend, $protocolversion, $devid) {
                 switch($element[EN_TAG]) {
                     case SYNC_MODIFY:
                         if(isset($appdata)) {
+                            if(isset($appdata->poommailflag) && is_object($appdata->poommailflag)) { // ADDED DW2412 AS12 Protocol Support
+				$importer->ImportMessageFlag($serverid, $appdata->poommailflag);
+                            };
                             if(isset($appdata->read)) // Currently, 'read' is only sent by the PDA when it is ONLY setting the read flag.
                                 $importer->ImportMessageReadFlag($serverid, $appdata->read);
                             else

@@ -201,6 +201,7 @@ class Streamer {
 //	    debugLog("streamer encode element ".$tag." ".print_r($map,true));
             if(isset($this->$map[STREAMER_VAR])) {
                 // Variable is available
+//		debugLog(print_r($this->$map[STREAMER_VAR],true));
                 if(is_object($this->$map[STREAMER_VAR])) {
                     // Subobjects can do their own encoding
                     $encoder->startTag($tag);

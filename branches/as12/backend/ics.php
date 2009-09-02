@@ -175,6 +175,20 @@ class MAPIMapping {
                             "internetcpid" => PR_INTERNET_CPID,
                             );
 
+    var $_emailflagmapping = array (
+		    	    "flagstatus" => PR_FLAG_STATUS,
+		    	    "flagicon" => PR_FLAG_ICON,
+			    "completetime" => PR_FLAG_COMPLETE_TIME,
+			    "flagtype" => "PT_STRING8:{00062008-0000-0000-C000-000000000046}:0x85A4",
+			    "ordinaldate" => "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x85A0",
+			    "subordinaldate" => "PT_STRING8:{00062008-0000-0000-C000-000000000046}:0x85A1",
+			    "reminderset" => "PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503",
+			    "remindertime" => "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8502",
+			    "startdate" => "PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x8104",
+			    "duedate" => "PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x8105",
+			    "datecompleted" => "PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x810F",
+                            );
+
     var $_meetingrequestmapping = array (
                             "responserequested" => PR_RESPONSE_REQUESTED,
                             // timezone
@@ -532,6 +546,23 @@ class ImportContentsChangesICS extends MAPIMapping {
 
         if(mapi_importcontentschanges_importmessagechange($this->importer, $props, $flags, $mapimessage)) {
             $this->_setMessage($mapimessage, $message);
+	    // START ADDED dw2412 WORKAROUND for ugly behaviour of Zarafa Server 6.30.2.16415 regarding application/ms-tnef parsing
+	    // should be removed when Zarafa Server is doing things right...
+	    // can be switched on and off by define MS_TNEF_SCHEDULE_MTGREQ_HACK (true/false)
+	    if (MS_TNEF_SCHEDULE_MTGREQ_HACK == true && 
+		strtolower(get_class($message)) =="syncappointment" &&
+		(isset($message->attendees) && 
+		 is_array($message->attendees))
+		 ) {
+		$request = new Meetingrequest($this->_store, $mapimessage, $this->_session);
+		if ($flags == SYNC_NEW_MESSAGE) {
+		    $request->setMeetingRequest();
+		} else {
+		    $request->updateMeetingRequest();
+		};
+		$sendMeetingRequestResult = $request->sendMeetingRequest(0, ($flags == SYNC_NEW_MESSAGE ? false : _("Update").": "));
+	    };
+	    // END ADDED dw2412 WORKAROUND for ugly behaviour of Zarafa Server 6.30.2.16415 regarding application/ms-tnef parsing
             mapi_message_savechanges($mapimessage);
 
             $sourcekeyprops = mapi_getprops($mapimessage, array (PR_SOURCE_KEY));
@@ -556,6 +587,67 @@ class ImportContentsChangesICS extends MAPIMapping {
         if($ret == false)
             debugLog("Unable to set read state: " . sprintf("%x", mapi_last_hresult()));
     }
+
+    // START ADDED dw2412 AS 12.0 Support for flags
+    // Import a change in 'flag' ... 
+    // TODO: find some way that this does not result in message being synced from server to mobile device
+    //       php-mapi needs to be changed so that this is being replaced with a mapi_importcontentschanges
+    //       function
+    function ImportMessageFlag($id, $flag) {
+	$emailflag = $this->_emailflagmapping;
+        $entryid = mapi_msgstore_entryidfromsourcekey($this->_store, hex2bin($id));
+        $mapimessage = mapi_msgstore_openentry($this->_store, $entryid);
+        if($mapimessage == false)
+            debugLog("Unable to openentry in ImportMessageFlag: " . sprintf("%x", mapi_last_hresult()));
+	else {
+	    // we need this for importing changes in the end...
+	    $flags = 0;
+            $props = array();
+	    $props = mapi_getprops($mapimessage,array(PR_PARENT_SOURCE_KEY,PR_SOURCE_KEY));
+
+	    // so now do the job with the flags. Delete flags not being sent, set flags that are in sync packet
+	    // flagicon is just necessary for Zarafa WebAccess. Outlook does not need it.
+	    $setflags = array();
+	    $delflags = array();
+	    if (isset($flag->flagstatus) && $flag->flagstatus!="") {
+		$setflags += array($this->_getPropIDFromString($emailflag["flagstatus"]) => $flag->flagstatus);
+		switch ($flag->flagstatus) {
+		    case '2'	: $setflags += array($this->_getPropIDFromString($emailflag["flagicon"]) => 6); break;
+		    default 	: $setflags += array($this->_getPropIDFromString($emailflag["flagicon"]) => 0); break;
+		};
+	    } else {
+		$delflags[] = $this->_getPropIDFromString($emailflag["flagstatus"]);
+		$delflags[] = $this->_getPropIDFromString($emailflag["flagicon"]);
+	    }
+	    if (isset($flag->flagtype) && $flag->flagtype!="") $setflags += array($this->_getPropIDFromString($emailflag["flagtype"]) => $flag->flagtype);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["flagtype"]);
+	    if (isset($flag->startdate) && $flag->startdate!="") $setflags += array($this->_getPropIDFromString($emailflag["startdate"]) => $flag->startdate);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["startdate"]);
+	    if (isset($flag->duedate) && $flag->duedate!="") $setflags += array($this->_getPropIDFromString($emailflag["duedate"]) => $flag->duedate);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["duedate"]);
+	    if (isset($flag->datecompleted) && $flag->datecompleted!="") $setflags += array($this->_getPropIDFromString($emailflag["datecompleted"]) => $flag->datecompleted);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["datecompleted"]);
+	    if (isset($flag->reminderset) && $flag->reminderset!="") $setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => $flag->reminderset);
+		else 
+		if ($flag->flagstatus > 0) $setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => "0");
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["reminderset"]);
+	    if (isset($flag->remindertime) && $flag->remindertime!="") $setflags += array($this->_getPropIDFromString($emailflag["remindertime"]) => $flag->remindertime);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["remindertime"]);
+	    if (isset($flag->ordinaldate) && $flag->ordinaldate!="") $setflags += array($this->_getPropIDFromString($emailflag["ordinaldate"]) => $flag->ordinaldate);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["ordinaldate"]);
+	    if (isset($flag->subordinaldate) && $flag->subordinaldate!="") $setflags += array($this->_getPropIDFromString($emailflag["subordinaldate"]) => $flag->subordinaldate);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["subordinaldate"]);
+	    if (isset($flag->completetime) && $flag->completetime!="") $setflags += array($this->_getPropIDFromString($emailflag["completetime"]) => $flag->completetime);
+		else $delflags[] = $this->_getPropIDFromString($emailflag["completetime"]);
+	    // hopefully I'm doing this right. It should prevent the back sync of whole message
+	    mapi_importcontentschanges_importmessagechange($this->importer, $props, $flags, $mapimessage);
+	    mapi_setprops($mapimessage,$setflags);
+	    mapi_deleteprops($mapimessage,$delflags);
+	    mapi_savechanges($mapimessage);
+	    return true;
+	}
+    }
+    // END ADDED dw2412 AS 12.0 Support for flags
 
     // Import a move of a message. This occurs when a user moves an item to another folder. Normally,
     // we would implement this via the 'offical' importmessagemove() function on the ICS importer, but the
@@ -829,7 +921,13 @@ class ImportContentsChangesICS extends MAPIMapping {
                 $recip[PR_DISPLAY_NAME] = u2w($attendee->name);
                 $recip[PR_EMAIL_ADDRESS] = $attendee->email;
                 $recip[PR_ADDRTYPE] = "SMTP";
-                $recip[PR_RECIPIENT_TYPE] = MAPI_TO;
+		// START CHANGED dw2412 to support AS 12.0 attendee type
+                if (isset($attendee->type)) {
+		    $recip[PR_RECIPIENT_TYPE] = $attendee->type;
+                } else {
+            	    $recip[PR_RECIPIENT_TYPE] = MAPI_TO;
+		}
+		// END CHANGED dw2412 to support AS 12.0 attendee type
                 $recip[PR_ENTRYID] = mapi_createoneoff($recip[PR_DISPLAY_NAME], $recip[PR_ADDRTYPE], $recip[PR_EMAIL_ADDRESS]);
 
                 array_push($recips, $recip);
@@ -1492,6 +1590,19 @@ class PHPContentsImportProxy extends MAPIMapping {
         $message = new SyncMail();
 
         $this->_getPropsFromMAPI($message, $mapimessage, $this->_emailmapping);
+	
+	// start added dw2412 AS V12.0 Flag support
+	// should not break anything since in proto AS12 Fields get excluded in case a lower protocol is in use
+	$message->poommailflag = new SyncPoommailFlag();
+    
+	$this->_getPropsFromMAPI($message->poommailflag, $mapimessage, $this->_emailflagmapping);
+	if (!isset($message->poommailflag->flagstatus)) {
+	    $message->poommailflag->flagstatus = 0;
+	}
+	if (!isset($message->contentclass) || $message->contentclass=="") {
+	    $message->contentclass="urn:content-classes:message";
+	}
+	// end added dw2412 AS V12.0 Flag Support
 
         // Override 'From' to show "Full Name <user@domain.com>"
         $messageprops = mapi_getprops($mapimessage, array(PR_SENT_REPRESENTING_NAME, PR_SENT_REPRESENTING_ENTRYID, PR_SOURCE_KEY));
@@ -1720,6 +1831,7 @@ class PHPContentsImportProxy extends MAPIMapping {
             }
         }
 
+//	debugLog(print_r($message,true));
         return $message;
     }
 
@@ -1852,16 +1964,16 @@ class PHPHierarchyImportProxy {
         $folder->type = $this->_getFolderType($folderprops[PR_ENTRYID]);
     
         // try to find a correct type if not one of the default folders
-        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
-    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
-                $folder->type = SYNC_FOLDER_TYPE_TASK;
-            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
-	        $folder->type = SYNC_FOLDER_TYPE_APPOINTMENT;
-    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Contact")
-        	$folder->type = SYNC_FOLDER_TYPE_CONTACT;
-    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.StickyNote")
-            	$folder->type = SYNC_FOLDER_TYPE_NOTE;
-        }
+//        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
+//    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
+//                $folder->type = SYNC_FOLDER_TYPE_TASK;
+//            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
+//	        $folder->type = SYNC_FOLDER_TYPE_APPOINTMENT;
+//    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Contact")
+//        	$folder->type = SYNC_FOLDER_TYPE_CONTACT;
+//    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.StickyNote")
+//            	$folder->type = SYNC_FOLDER_TYPE_NOTE;
+//        }
 
         return $folder;
     }
@@ -2733,6 +2845,7 @@ class BackendICS {
                 $folders[] = $folder;
         }
 
+	debugLog(print_r($folders,true));
         return $folders;
     }
 
@@ -2749,6 +2862,15 @@ class BackendICS {
         $mimeObject = new Mail_mimeDecode($mimeParams['input'], $mimeParams['crlf']);
         $message = $mimeObject->decode($mimeParams);
 
+	// debugLog(print_r($message,true));
+        if (MS_TNEF_SCHEDULE_MTGREQ_HACK == true &&
+    	    (isset($message->parts[1]->headers) &&
+    	     trim($message->parts[1]->headers['content-type']) == 'application/ms-tnef') &&
+    	    (isset($message->parts[1]->body) &&
+    	     strpos($message->parts[1]->body,"IPM.Microsoft Schedule.MtgReq")>0)) {
+    	    debugLog("IPM.Microsoft Schedule.MtgReq Message intercepted and dropped!");
+    	    return true;
+        }
         // Open the outbox and create the message there
         $storeprops = mapi_getprops($this->_defaultstore, array(PR_IPM_OUTBOX_ENTRYID, PR_IPM_SENTMAIL_ENTRYID));
         if(!isset($storeprops[PR_IPM_OUTBOX_ENTRYID])) {
