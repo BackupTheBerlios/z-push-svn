@@ -371,11 +371,29 @@ function HandleSync($backend, $protocolversion, $devid) {
             }
         }
 
-        if($decoder->getElementStartTag(SYNC_DELETESASMOVES))
-            $collection["deletesasmoves"] = true;
-
-        if($decoder->getElementStartTag(SYNC_GETCHANGES))
-            $collection["getchanges"] = true;
+// START CHANGED dw2412 since according to MS Specs this Element may have a value
+        if($decoder->getElementStartTag(SYNC_DELETESASMOVES)) {
+            if (($collection["deletesasmoves"] = $decoder->getElementContent())) {
+        	if(!$decoder->getElementEndTag()) {
+            	    return false;
+            	};
+	    } else {
+                $collection["deletesasmoves"] = true;
+	    }
+	}
+// END CHANGED dw2412 since according to MS Specs this Element may have a value
+	
+// START CHANGED dw2412 since according to MS Specs this Element may have a value
+        if($decoder->getElementStartTag(SYNC_GETCHANGES)) {
+            if (($collection["getchanges"] = $decoder->getElementContent())) {
+        	if(!$decoder->getElementEndTag()) {
+            	    return false;
+            	};
+	    } else {
+                $collection["getchanges"] = true;
+	    }
+	}
+// END CHANGED dw2412 since according to MS Specs this Element may have a value
 
         if($decoder->getElementStartTag(SYNC_MAXITEMS)) {
             $collection["maxitems"] = $decoder->getElementContent();
