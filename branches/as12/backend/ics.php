@@ -2737,15 +2737,18 @@ class BackendICS {
         $entryid = hex2bin($entryid);
 
         $dummy = false;
-
-        // Fake a contents importer because it can do the conversion for us
-        $importer = new PHPContentsImportProxy($this->_session, $this->_defaultstore, $dummy, $dummy, SYNC_TRUNCATION_ALL, $bodypreference);
-
         $message = mapi_msgstore_openentry($this->_defaultstore, $entryid);
+
         if(!$message) {
-            debugLog("Unable to open message for FetchSearchResultsMailboxMessage command");
+            debugLog("Unable to open message for ItemOperationsFetchMailbox command");
             return false;
         }
+
+	// Need to have the PARENT_SOURCE_KEY for folder ID so that attachments can be downloaded
+	$props = mapi_getprops($message, array(PR_PARENT_SOURCE_KEY));
+
+        // Fake a contents importer because it can do the conversion for us
+        $importer = new PHPContentsImportProxy($this->_session, $this->_defaultstore, $props[PR_PARENT_SOURCE_KEY], $dummy, SYNC_TRUNCATION_ALL, $bodypreference);
 
         return $importer->_getMessage($message, 1024*1024, $bodypreference,$mimesupport); // Get 1MB of body size
     }
