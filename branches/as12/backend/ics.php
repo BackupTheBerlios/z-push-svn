@@ -488,6 +488,55 @@ class MAPIMapping {
 
         return "";
     }
+
+    function _readReplyRecipientEntry($flatEntryList) {
+	// Unpack number of entries, the byte count and the entries
+	$unpacked = unpack("V1cEntries/V1cbEntries/a*abEntries", $flatEntryList);
+			
+	$abEntries = Array();
+	$stream = $unpacked['abEntries'];
+	$pos = 8;
+			
+	for ($i=0; $i<$unpacked['cEntries']; $i++) {
+	    $findEntry = unpack("a".$pos."before/V1cb/a*after", $flatEntryList);
+	    // Go to after the unsigned int
+	    $pos += 4;
+	    $entry = unpack("a".$pos."before/a".$findEntry['cb']."abEntry/a*after", $flatEntryList);
+	    // Move to after the entry
+	    $pos += $findEntry['cb'];
+	    // Move to next 4-byte boundary
+	    $pos += $pos%4;
+	    // One one-off entry id
+	    $abEntries[] = $entry['abEntry'];
+	}
+			
+	$recipients = Array();
+	foreach ($abEntries as $abEntry){
+	    // Unpack the one-off entry identifier
+	    $findID = unpack("V1version/a16mapiuid/v1flags/v1abFlags/a*abEntry", $abEntry);
+	    $tempArray = Array();
+	    // Split the entry in its three fields
+				
+	    // Workaround (if Unicode then strip \0's)
+	    if (($findID['abFlags'] & 0x8000)) {
+		$idParts = explode("\0\0", $findID['abEntry']);
+		foreach ($idParts as $idPart) {
+		// Remove null characters from the field contents
+		    $tempArray[] = str_replace("\x00", "", $idPart);
+		}
+	    } else {
+		// Not Unicode. Just split by \0.
+		$tempArray = explode("\0", $findID['abEntry']);
+	    }
+				
+	    // Put data in recipient array
+	    $recipients[] = Array("display_name" => windows1252_to_utf8($tempArray[0]),
+				  "email_address" => windows1252_to_utf8($tempArray[2]));
+	}
+			
+	return $recipients;
+    }
+
 }
 
 // This is our local importer. IE it receives data from the PDA. It must therefore receive Sync
@@ -1605,7 +1654,8 @@ class PHPContentsImportProxy extends MAPIMapping {
 	// end added dw2412 AS V12.0 Flag Support
 
         // Override 'From' to show "Full Name <user@domain.com>"
-        $messageprops = mapi_getprops($mapimessage, array(PR_SENT_REPRESENTING_NAME, PR_SENT_REPRESENTING_ENTRYID, PR_SOURCE_KEY));
+	// CHANGED dw2412 to honor the Reply-To Information in messages
+        $messageprops = mapi_getprops($mapimessage, array(PR_SENT_REPRESENTING_NAME, PR_SENT_REPRESENTING_ENTRYID, PR_SOURCE_KEY, PR_REPLY_RECIPIENT_ENTRIES));
 
         // Override 'body' for truncation
 	// START CHANGED dw2412 Support Protocol Version 12 (added bodypreference compare)
@@ -1668,6 +1718,17 @@ class PHPContentsImportProxy extends MAPIMapping {
             $from = $fromaddr;
 
         $message->from = $from;
+
+	// START ADDED dw2412 to honor reply to address
+	if(isset($messageprops[PR_REPLY_RECIPIENT_ENTRIES])) {
+            $replyto = $this->_readReplyRecipientEntry($messageprops[PR_REPLY_RECIPIENT_ENTRIES]);
+	    foreach ($replyto as $value) {
+		$message->reply_to .= $value['email_address'].";";
+	    }
+	    $message->reply_to = substr($message->reply_to,0,strlen($message->reply_to)-1);
+	}
+	// END ADDED dw2412 to honor reply to address
+	
 
         if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting.Request") === 0) {
             $message->meetingrequest = new SyncMeetingRequest();
@@ -3379,19 +3440,17 @@ class BackendICS {
 		}
         	if ($ak !== false) {
             	    //update password
-            	    foreach($request["devicepassword"] as $key => $value) {
-			if (trim($value) != "") {
-        		    $pprops[$props[$key]][$ak] = $value;
-        		} else {
-        		    $pprops[$props[$key]][$ak] = "undefined";
-        		}
+		    if (trim($value) != "") {
+        	        $pprops[$props[$key]][$ak] = $request["devicepassword"];
+        	    } else {
+        	        $pprops[$props[$key]][$ak] = "undefined";
         	    }
         	} else {
         	    //new device password for the db
                     $devicesprops[0x6881101E][] = $devid;
             	    foreach($props as $key => $value) {
-			if (isset($request["devicepassword"][$key]) && trim($request["devicepassword"][$key]) != "") {
-        		    $pprops[$value][] = $request["devicepassword"][$key];
+			if (isset($request["devicepassword"]) && trim($request["devicepassword"]) != "") {
+        		    $pprops[$value][] = $request["devicepassword"];
         		} else {
         		    $pprops[$value][] = "undefined";
         		}
