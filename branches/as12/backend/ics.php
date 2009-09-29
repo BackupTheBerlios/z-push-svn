@@ -2025,16 +2025,20 @@ class PHPHierarchyImportProxy {
         $folder->type = $this->_getFolderType($folderprops[PR_ENTRYID]);
     
         // try to find a correct type if not one of the default folders
-//        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
-//    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
-//                $folder->type = SYNC_FOLDER_TYPE_TASK;
-//            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
-//	        $folder->type = SYNC_FOLDER_TYPE_APPOINTMENT;
-//    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Contact")
-//        	$folder->type = SYNC_FOLDER_TYPE_CONTACT;
-//    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.StickyNote")
-//            	$folder->type = SYNC_FOLDER_TYPE_NOTE;
-//        }
+        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Note")
+                $folder->type = SYNC_FOLDER_TYPE_USER_MAIL;   
+        	if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
+                $folder->type = SYNC_FOLDER_TYPE_USER_TASK;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
+                $folder->type = SYNC_FOLDER_TYPE_USER_APPOINTMENT;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Contact")
+                $folder->type = SYNC_FOLDER_TYPE_USER_CONTACT;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.StickyNote")
+                $folder->type = SYNC_FOLDER_TYPE_USER_NOTE;   
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Journal")
+                $folder->type = SYNC_FOLDER_TYPE_USER_JOURNAL;   
+        }
 
         return $folder;
     }
@@ -3056,6 +3060,13 @@ class BackendICS {
                     $zpical = new ZPush_ical($this->_defaultstore);
                     $mapiprops = array();
                     $zpical->extractProps($part->body, $mapiprops);
+
+                    // iPhone sends a second ICS which we ignore if we can
+                    if (!isset($mapiprops[PR_MESSAGE_CLASS]) && strlen(trim($body)) == 0) {
+                       debugLog("Secondary iPhone response is being ignored!! Mail dropped!");
+                       return true;
+                    }
+                        
                     if (is_array($mapiprops) && !empty($mapiprops)) {
                         mapi_setprops($mapimessage, $mapiprops);
                     }
