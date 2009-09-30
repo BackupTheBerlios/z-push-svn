@@ -395,6 +395,9 @@ define("SYNC_SEARCH_LESSTHAN", "Search:LessThan");
 define("SYNC_SEARCH_GREATERTHAN", "Search:GreaterThan");
 define("SYNC_SEARCH_SCHEMA", "Search:Schema");
 define("SYNC_SEARCH_SUPPORTED", "Search:Supported");
+define("SYNC_SEARCH_USERNAME", "Search:UserName");
+define("SYNC_SEARCH_PASSWORD", "Search:Password");
+define("SYNC_SEARCH_CONVERSATIONID", "Search:ConversationId");
 
 //GAL
 define("SYNC_GAL_DISPLAYNAME", "GAL:DisplayName");
@@ -492,6 +495,8 @@ define("SYNC_ITEMOPERATIONS_SCHEMA", "ItemOperations:Schema");
 define("SYNC_ITEMOPERATIONS_PART", "ItemOperations:Part");
 define("SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENT", "ItemOperations:EmptyFolderContent");
 define("SYNC_ITEMOPERATIONS_DELETESUBFOLDERS", "ItemOperations:DeleteSubFolders");
+define("SYNC_ITEMOPERATIONS_USERNAME", "ItemOperations:UserName");
+define("SYNC_ITEMOPERATIONS_PASSWORD", "ItemOperations:Password");
 // END ADDED dw2412 12.0 ItemOperations Support
 
 // START ADDED dw2412 12.0 PoomMail2 Support
@@ -530,6 +535,7 @@ define("SYNC_FOLDER_TYPE_USER_JOURNAL", 16);
 define("SYNC_FOLDER_TYPE_USER_NOTE", 17);
 define("SYNC_FOLDER_TYPE_UNKNOWN", 18);
 define("SYNC_FOLDER_TYPE_RECIPIENT_CACHE", 19);
+
 define("SYNC_FOLDER_TYPE_DUMMY", "__dummy.Folder.Id__");
 
 define("SYNC_CONFLICT_OVERWRITE_SERVER", 0);

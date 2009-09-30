@@ -595,23 +595,6 @@ class ImportContentsChangesICS extends MAPIMapping {
 
         if(mapi_importcontentschanges_importmessagechange($this->importer, $props, $flags, $mapimessage)) {
             $this->_setMessage($mapimessage, $message);
-	    // START ADDED dw2412 WORKAROUND for ugly behaviour of Zarafa Server 6.30.2.16415 regarding application/ms-tnef parsing
-	    // should be removed when Zarafa Server is doing things right...
-	    // can be switched on and off by define MS_TNEF_SCHEDULE_MTGREQ_HACK (true/false)
-	    if (MS_TNEF_SCHEDULE_MTGREQ_HACK == true && 
-		strtolower(get_class($message)) =="syncappointment" &&
-		(isset($message->attendees) && 
-		 is_array($message->attendees))
-		 ) {
-		$request = new Meetingrequest($this->_store, $mapimessage, $this->_session);
-		if ($flags == SYNC_NEW_MESSAGE) {
-		    $request->setMeetingRequest();
-		} else {
-		    $request->updateMeetingRequest();
-		};
-		$sendMeetingRequestResult = $request->sendMeetingRequest(0, ($flags == SYNC_NEW_MESSAGE ? false : _("Update").": "));
-	    };
-	    // END ADDED dw2412 WORKAROUND for ugly behaviour of Zarafa Server 6.30.2.16415 regarding application/ms-tnef parsing
             mapi_message_savechanges($mapimessage);
 
             $sourcekeyprops = mapi_getprops($mapimessage, array (PR_SOURCE_KEY));
@@ -2930,15 +2913,6 @@ class BackendICS {
         $mimeObject = new Mail_mimeDecode($mimeParams['input'], $mimeParams['crlf']);
         $message = $mimeObject->decode($mimeParams);
 
-	// debugLog(print_r($message,true));
-        if (MS_TNEF_SCHEDULE_MTGREQ_HACK == true &&
-    	    (isset($message->parts[1]->headers) &&
-    	     trim($message->parts[1]->headers['content-type']) == 'application/ms-tnef') &&
-    	    (isset($message->parts[1]->body) &&
-    	     strpos($message->parts[1]->body,"IPM.Microsoft Schedule.MtgReq")>0)) {
-    	    debugLog("IPM.Microsoft Schedule.MtgReq Message intercepted and dropped!");
-    	    return true;
-        }
         // Open the outbox and create the message there
         $storeprops = mapi_getprops($this->_defaultstore, array(PR_IPM_OUTBOX_ENTRYID, PR_IPM_SENTMAIL_ENTRYID));
         if(!isset($storeprops[PR_IPM_OUTBOX_ENTRYID])) {
