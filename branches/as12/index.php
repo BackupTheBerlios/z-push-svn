@@ -233,32 +233,37 @@ switch($_SERVER["REQUEST_METHOD"]) {
 $len = ob_get_length();
 $data = ob_get_contents();
 ob_end_clean();
+
 // Unfortunately, even though zpush can stream the data to the client
 // with a chunked encoding, using chunked encoding also breaks the progress bar
 // on the PDA. So we de-chunk here and just output a content-length header and
 // send it as a 'normal' packet. If the output packet exceeds 1MB (see ob_start)
 // then it will be sent as a chunked packet anyway because PHP will have to flush
 // the buffer.
-
-// START CHANGED dw2412 Support gzip compression in result
-if (GZIP_OUTPUT == true &&
-    ($gz_data = gzencode($data,9,FORCE_GZIP)) !== false) {
-    if (strlen($data) > strlen($gz_data)) {
-        header("Content-Encoding: gzip");
-	header("Content-Length: ".strlen($gz_data));
-        print $gz_data;
-	debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send compressed data");
+if (!headers_sent()) { // dw2412 need to do this since i.E. getAttachmentData Request starts output in Backend...
+    // START CHANGED dw2412 Support gzip compression in result
+    if (GZIP_OUTPUT == true &&
+	($gz_data = gzencode($data,9,FORCE_GZIP)) !== false) {
+	if (strlen($data) > strlen($gz_data)) {
+    	    header("Content-Encoding: gzip");
+	    header("Content-Length: ".strlen($gz_data));
+	    print $gz_data;
+    	    debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send compressed data");
+	} else {
+    	    header("Content-Length: $len");
+    	    print $data;
+    	    debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send uncompressed data");
+	}
     } else {
-	header("Content-Length: $len");
+        header("Content-Length: $len");
 	print $data;
-	debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send uncompressed data");
     }
-} else {
-    header("Content-Length: $len");
+    // END CHANGED dw2412 Support gzip compression in result
+    // destruct backend after all data is on the stream
+} else { // just output what we maybe got from the content buffer
+    debugLog("Output ".$len." Bytes of data found in content buffer since output already started earlier in backend");
     print $data;
 }
-// END CHANGED dw2412 Support gzip compression in result
-// destruct backend after all data is on the stream
 $backend->Logoff();
 
 debugLog("end");
