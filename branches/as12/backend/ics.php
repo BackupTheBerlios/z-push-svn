@@ -1256,7 +1256,7 @@ class ImportHierarchyChangesICS  {
     }
 
     function ImportFolderDeletion($id, $parent) {
-        return mapi_importhierarchychanges_importfolderdeletion ( array ($id) );
+        return mapi_importhierarchychanges_importfolderdeletion ($this->importer, 0, array (PR_SOURCE_KEY => hex2bin($id)) );
     }
 
     function GetState() {
@@ -1703,7 +1703,9 @@ class PHPContentsImportProxy extends MAPIMapping {
         if($fromname)
             $from = "\"" . w2u($fromname) . "\" <" . $fromaddr . ">";
         else
-            $from = $fromaddr;
+            //START CHANGED dw2412 HTC shows "error" if sender name is unknown
+            $from = "\"" . $fromaddr . "\" <" . $fromaddr . ">";
+            //END CHANGED dw2412 HTC shows "error" if sender name is unknown
 
         $message->from = $from;
 
@@ -2016,7 +2018,7 @@ class PHPHierarchyImportProxy {
         if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Note")
                 $folder->type = SYNC_FOLDER_TYPE_USER_MAIL;
-        	if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
                 $folder->type = SYNC_FOLDER_TYPE_USER_TASK;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
                 $folder->type = SYNC_FOLDER_TYPE_USER_APPOINTMENT;
@@ -2170,7 +2172,7 @@ class ExportChangesICS  {
                 debugLog("Exporter configured successfully. " . $changes . " changes ready to sync.");
         }
         else
-            debugLog("Exporter could not be configured: result: " . mapi_last_hresult());
+            debugLog("Exporter could not be configured: result: " . sprintf("%X", mapi_last_hresult()));
 
         return $ret;
     }
@@ -2383,7 +2385,7 @@ class BackendICS {
     }
 
     function Logoff() {
-    	global $cmd;
+        global $cmd;
         //do not update last sync time on ping and provision
         if (isset($cmd) && $cmd != '' && $cmd != 'Ping' && $cmd != 'Provision' )
             $this->setLastSyncTime();
@@ -2432,7 +2434,6 @@ class BackendICS {
         return $status;
     }
 	
-
     function generatePolicyKey() {
         return mt_rand(1000000000, 9999999999);
     }
@@ -2841,19 +2842,19 @@ class BackendICS {
 
         $table = mapi_folder_getcontentstable($ab_dir);
         $restriction = $this->_getSearchRestriction(u2w($searchquery));
-
         mapi_table_restrict($table, $restriction);
         mapi_table_sort($table, array(PR_DISPLAY_NAME => TABLE_SORT_ASCEND));
 	// CHANGED dw2412 AS V12.0 Support (to menetain single return way...
         $items['rows'] = array();
         for ($i = 0; $i < mapi_table_getrowcount($table); $i++) {
-            $user_data = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS), $i, 1);
+            $user_data = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS, PR_BUSINESS_TELEPHONE_NUMBER), $i, 1);
             $item = array();
             $item["username"] = w2u($user_data[0][PR_ACCOUNT]);
             $item["fullname"] = w2u($user_data[0][PR_DISPLAY_NAME]);
+            if (strlen(trim($item["fullname"])) == 0) $item["fullname"] = $item["username"];
             $item["emailaddress"] = w2u($user_data[0][PR_SMTP_ADDRESS]);
             $item["nameid"] = $searchquery;
-            if (strlen(trim($item["fullname"])) == 0) $item["fullname"] = $item["username"];
+            $item["businessphone"] = w2u($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]);
 
             //do not return users without email
             if (strlen(trim($item["emailaddress"])) == 0) continue;
@@ -2861,6 +2862,7 @@ class BackendICS {
 	    // CHANGED dw2412 AS V12.0 Support (to menetain single return way...
             array_push($items['rows'], $item);
         }
+	$items['status']=1;
         return $items;
     }
 
@@ -2999,24 +3001,24 @@ class BackendICS {
         $body = "";
         $body_html = "";
         if($message->ctype_primary == "multipart" && ($message->ctype_secondary == "mixed" || $message->ctype_secondary == "alternative")) {
-        	$mparts = $message->parts;
+            $mparts = $message->parts;
             for($i=0; $i<count($mparts); $i++) {
-            	$part = $mparts[$i];
+                $part = $mparts[$i];
 
-	        	// palm pre & iPhone send forwarded messages in another subpart which are also parsed
-	        	if($part->ctype_primary == "multipart" && ($part->ctype_secondary == "mixed" || $part->ctype_secondary == "alternative"  || $part->ctype_secondary == "related")) {
-	        		foreach($part->parts as $spart)
-	        			$mparts[] = $spart;
-	        		continue;
-	        	}
+                // palm pre & iPhone send forwarded messages in another subpart which are also parsed
+                if($part->ctype_primary == "multipart" && ($part->ctype_secondary == "mixed" || $part->ctype_secondary == "alternative"  || $part->ctype_secondary == "related")) {
+                    foreach($part->parts as $spart)
+                        $mparts[] = $spart;
+                    continue;
+                }
 
-            	// standard body
-            	if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && (!isset($part->disposition) || $part->disposition != "attachment")) {
+                // standard body
+                if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && (!isset($part->disposition) || $part->disposition != "attachment")) {
                         $body .= u2w($part->body); // assume only one text body
                 }
                 // html body
                 elseif($part->ctype_primary == "text" && $part->ctype_secondary == "html") {
-                	$body_html .= u2w($part->body);
+                    $body_html .= u2w($part->body);
                 }
                 // TNEF
                 elseif($part->ctype_primary == "ms-tnef" || $part->ctype_secondary == "ms-tnef") {
@@ -3042,8 +3044,8 @@ class BackendICS {
 
                     // iPhone sends a second ICS which we ignore if we can
                     if (!isset($mapiprops[PR_MESSAGE_CLASS]) && strlen(trim($body)) == 0) {
-                       debugLog("Secondary iPhone response is being ignored!! Mail dropped!");
-                       return true;
+                        debugLog("Secondary iPhone response is being ignored!! Mail dropped!");
+                        return true;
                     }
 
                     if (is_array($mapiprops) && !empty($mapiprops)) {
@@ -3051,7 +3053,7 @@ class BackendICS {
                     }
                     else debugLog("ICAL: Mapi props array was empty");
                 }
-				// any other type, store as attachment
+                // any other type, store as attachment
                 else
                     $this->_storeAttachment($mapimessage, $part);
             }
@@ -3496,7 +3498,6 @@ class BackendICS {
 
         if ($result == NOERROR){
             $rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_DEFAULT_STORE, PR_MDB_PROVIDER));
-            $result = mapi_last_hresult();
 
             foreach($rows as $row) {
                 if(isset($row[PR_DEFAULT_STORE]) && $row[PR_DEFAULT_STORE] == true) {
