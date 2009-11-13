@@ -198,6 +198,10 @@ function HandleFolderSync($backend, $protocolversion) {
     // longer required
     $syncstate = $statemachine->getSyncState($synckey);
 
+    // additional information about already seen folders
+    $seenfolders = unserialize($statemachine->getSyncState("s".$synckey));
+    if (!$seenfolders) $seenfolders = array();
+
     // We will be saving the sync state under 'newsynckey'
     $newsynckey = $statemachine->getNewSyncKey($synckey);
 
@@ -229,9 +233,16 @@ function HandleFolderSync($backend, $protocolversion) {
                 case SYNC_ADD:
                 case SYNC_MODIFY:
                     $serverid = $importer->ImportFolderChange($folder);
+                    // add folder to the serverflags
+                    $seenfolders[] = $serverid;
                     break;
                 case SYNC_REMOVE:
                     $serverid = $importer->ImportFolderDeletion($folder);
+                    // remove folder from the folderflags array
+                    if (($sid = array_search($serverid, $seenfolders)) !== false) {
+                        unset($seenfolders[$sid]);
+                        $seenfolders = array_values($seenfolders);
+                    }
                     break;
             }
 
@@ -284,7 +295,14 @@ function HandleFolderSync($backend, $protocolversion) {
 
             if(count($importer->changed) > 0) {
                 foreach($importer->changed as $folder) {
-                    $encoder->startTag(SYNC_FOLDERHIERARCHY_ADD);
+                	// send a modify flag if the folder is already known on the device
+                	if (isset($folder->serverid) && in_array($folder->serverid, $seenfolders)){
+                        $encoder->startTag(SYNC_FOLDERHIERARCHY_UPDATE);
+                	}
+                	else {
+                        $encoder->startTag(SYNC_FOLDERHIERARCHY_ADD);
+                        $seenfolders[] = $folder->serverid;
+                    }
                     $folder->encode($encoder);
                     $encoder->endTag();
                 }
@@ -297,6 +315,12 @@ function HandleFolderSync($backend, $protocolversion) {
                             $encoder->content($folder);
                         $encoder->endTag();
                     $encoder->endTag();
+
+                    // remove folder from the folderflags array
+                    if (($sid = array_search($folder, $seenfolders)) !== false) {
+                        unset($seenfolders[$sid]);
+                        $seenfolders = array_values($seenfolders);
+                    }
                 }
             }
         }
@@ -307,6 +331,7 @@ function HandleFolderSync($backend, $protocolversion) {
     // Save the sync state for the next time
     $syncstate = $exporter->GetState();
     $statemachine->setSyncState($newsynckey, $syncstate);
+    $statemachine->setSyncState("s".$newsynckey, serialize($seenfolders));
 
 
     return true;
@@ -666,8 +691,10 @@ function HandleSync($backend, $protocolversion, $devid) {
                             break;
                         $n++;
 
-                        if($n >= $collection["maxitems"])
+                        if($n >= $collection["maxitems"]) {
+                        	debugLog("Exported maxItems of messages: ". $collection["maxitems"] . " - more available");
                             break;
+                        }
 
                     }
                     $encoder->endTag();
@@ -910,11 +937,13 @@ function HandlePing($backend, $devid) {
     // Wait for something to happen
     for($n=0;$n<$lifetime / $timeout; $n++ ) {
         //check the remote wipe status
-        $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
-        if ($rwstatus == SYNC_PROVISION_RWSTATUS_PENDING || $rwstatus == SYNC_PROVISION_RWSTATUS_WIPED) {
-            //return 7 because it forces folder sync
-            $pingstatus = 7;
-            break;
+        if (PROVISIONING === true) {
+	        $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
+	        if ($rwstatus == SYNC_PROVISION_RWSTATUS_PENDING || $rwstatus == SYNC_PROVISION_RWSTATUS_WIPED) {
+	            //return 7 because it forces folder sync
+	            $pingstatus = 7;
+	            break;
+	        }
         }
 
         if(count($collections) == 0) {
@@ -1082,27 +1111,30 @@ function HandleFolderCreate($backend, $protocolversion) {
             return false;
     }
 
-    // Parent
-    $parentid = false;
-    if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_PARENTID)) {
-        $parentid = $decoder->getElementContent();
-        if(!$decoder->getElementEndTag())
-            return false;
-    }
+    // when creating or updating more information is necessary
+    if (!$delete) {
+	    // Parent
+	    $parentid = false;
+	    if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_PARENTID)) {
+	        $parentid = $decoder->getElementContent();
+	        if(!$decoder->getElementEndTag())
+	            return false;
+	    }
 
-    // Displayname
-    if(!$decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_DISPLAYNAME))
-        return false;
-    $displayname = $decoder->getElementContent();
-    if(!$decoder->getElementEndTag())
-        return false;
+	    // Displayname
+	    if(!$decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_DISPLAYNAME))
+	        return false;
+	    $displayname = $decoder->getElementContent();
+	    if(!$decoder->getElementEndTag())
+	        return false;
 
-    // Type
-    $type = false;
-    if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_TYPE)) {
-        $type = $decoder->getElementContent();
-        if(!$decoder->getElementEndTag())
-            return false;
+	    // Type
+	    $type = false;
+	    if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_TYPE)) {
+	        $type = $decoder->getElementContent();
+	        if(!$decoder->getElementEndTag())
+	            return false;
+	    }
     }
 
     if(!$decoder->getElementEndTag())
@@ -1113,15 +1145,28 @@ function HandleFolderCreate($backend, $protocolversion) {
     $syncstate = $statemachine->getSyncState($synckey);
     $newsynckey = $statemachine->getNewSyncKey($synckey);
 
+    // additional information about already seen folders
+    $seenfolders = unserialize($statemachine->getSyncState("s".$synckey));
+    if (!$seenfolders) $seenfolders = array();
+
     // Configure importer with last state
     $importer = $backend->GetHierarchyImporter();
     $importer->Config($syncstate);
 
-    // Send change
-    $serverid = $importer->ImportFolderChange($serverid, $parentid, $displayname, $type);
+    if (!$delete) {
+	    // Send change
+	    $serverid = $importer->ImportFolderChange($serverid, $parentid, $displayname, $type);
+    }
+    else {
+    	// delete folder
+    	$deletedstat = $importer->ImportFolderDeletion($serverid, 0);
+    }
 
     $encoder->startWBXML();
     if ($create) {
+    	// add folder id to the seen folders
+        $seenfolders[] = $serverid;
+
         $encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDERCREATE);
         {
             {
@@ -1158,9 +1203,34 @@ function HandleFolderCreate($backend, $protocolversion) {
             $encoder->endTag();
         }
     }
+    elseif ($delete) {
+
+        $encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDERDELETE);
+        {
+            {
+                $encoder->startTag(SYNC_FOLDERHIERARCHY_STATUS);
+                $encoder->content($deletedstat);
+                $encoder->endTag();
+
+                $encoder->startTag(SYNC_FOLDERHIERARCHY_SYNCKEY);
+                $encoder->content($newsynckey);
+                $encoder->endTag();
+            }
+            $encoder->endTag();
+        }
+
+        // remove folder from the folderflags array
+        if (($sid = array_search($serverid, $seenfolders)) !== false) {
+            unset($seenfolders[$sid]);
+            $seenfolders = array_values($seenfolders);
+            debugLog("deleted from seenfolders: ". $serverid);
+        }
+    }
+
     $encoder->endTag();
     // Save the sync state for the next time
     $statemachine->setSyncState($newsynckey, $importer->GetState());
+    $statemachine->setSyncState("s".$newsynckey, serialize($seenfolders));
 
     return true;
 }
@@ -1247,19 +1317,8 @@ function HandleFolderUpdate($backend, $protocolversion) {
     return HandleFolderCreate($backend, $protocolversion);
 }
 
-function HandlePolicy($backend, $devid, $protocolversion) {
-    global $user, $auth_pw, $policykey;
-
-    $status = SYNC_PROVISION_STATUS_SUCCESS;
-
-    $user_policykey = $backend->getPolicyKey($user, $auth_pw, $devid);
-
-    if ($user_policykey != $policykey) {
-        $status = SYNC_PROVISION_STATUS_POLKEYMISM;
-    }
-
-    if (!$policykey) $policykey = $user_policykey;
-    return $status;
+function HandleFolderDelete($backend, $protocolversion) {
+    return HandleFolderCreate($backend, $protocolversion);
 }
 
 function HandleProvision($backend, $devid, $protocolversion) {
@@ -1415,6 +1474,8 @@ function HandleSearch($backend, $devid, $protocolversion) {
     global $zpushdtd;
     global $input, $output;
 
+    $searchrange = '0';
+
     $decoder = new WBXMLDecoder($input, $zpushdtd);
     $encoder = new WBXMLEncoder($output, $zpushdtd);
 
@@ -1464,7 +1525,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
         return false;
     }
     //get search results from backend
-    $rows = $backend->getSearchResults($searchquery);
+    $rows = $backend->getSearchResults($searchquery, $searchrange);
 
     $encoder->startWBXML();
 
@@ -1482,9 +1543,8 @@ function HandleSearch($backend, $devid, $protocolversion) {
                 $encoder->endTag();
 
                 if (is_array($rows) && !empty($rows)) {
-                    $searchtotal = count($rows);
-                    $searchrange = '0';
-                    if ($searchtotal) $searchrange .= "-".($searchtotal - 1);
+                    $searchrange = $rows['range'];
+                    unset($rows['range']);
                     foreach ($rows as $u) {
                         $encoder->startTag(SYNC_SEARCH_RESULT);
                             $encoder->startTag(SYNC_SEARCH_PROPERTIES);
@@ -1493,8 +1553,24 @@ function HandleSearch($backend, $devid, $protocolversion) {
                                 $encoder->content($u["fullname"]);
                                 $encoder->endTag();
 
+                                $encoder->startTag(SYNC_GAL_PHONE);
+                                $encoder->content($u["businessphone"]);
+                                $encoder->endTag();
+
                                 $encoder->startTag(SYNC_GAL_ALIAS);
                                 $encoder->content($u["username"]);
+                                $encoder->endTag();
+
+                                //it's not possible not get first and last name of an user
+                                //from the gab and user functions, so we just set fullname
+                                //to lastname and leave firstname empty because nokia needs
+                                //first and lastname in order to display the search result
+                                $encoder->startTag(SYNC_GAL_FIRSTNAME);
+                                $encoder->content("");
+                                $encoder->endTag();
+
+                                $encoder->startTag(SYNC_GAL_LASTNAME);
+                                $encoder->content($u["fullname"]);
                                 $encoder->endTag();
 
                                 $encoder->startTag(SYNC_GAL_EMAILADDRESS);
@@ -1509,7 +1585,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
                     $encoder->endTag();
 
                     $encoder->startTag(SYNC_SEARCH_TOTAL);
-                    $encoder->content($searchtotal);
+                    $encoder->content(count($rows));
                     $encoder->endTag();
                 }
 
@@ -1522,19 +1598,6 @@ function HandleSearch($backend, $devid, $protocolversion) {
 }
 
 function HandleRequest($backend, $cmd, $devid, $protocolversion) {
-
-    $status = HandlePolicy($backend, $devid, $protocolversion);
-    if ($cmd != 'Ping' && $cmd != 'Provision' ) {
-        if ($status != SYNC_PROVISION_STATUS_SUCCESS) {
-            header("HTTP/1.1 449 Retry after sending a PROVISION command");
-            header("MS-Server-ActiveSync: 6.5.7638.1");
-            header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5");
-            header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,Provision,ResolveRecipients,ValidateCert,Search,Ping");
-            header("Cache-Control: private");
-            return 1;
-        }
-    }
-
     switch($cmd) {
         case 'Sync':
             $status = HandleSync($backend, $protocolversion, $devid);
@@ -1591,7 +1654,7 @@ function HandleRequest($backend, $cmd, $devid, $protocolversion) {
             $status = HandlePing($backend, $devid, $protocolversion);
             break;
         case 'Provision':
-            $status = HandleProvision($backend, $devid, $protocolversion);
+            $status = (PROVISIONING === true) ? HandleProvision($backend, $devid, $protocolversion) : false;
             break;
         case 'Search':
             $status = HandleSearch($backend, $devid, $protocolversion);
