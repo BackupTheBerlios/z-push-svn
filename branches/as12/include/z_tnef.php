@@ -289,8 +289,8 @@ class ZPush_tnef{
             return $hresult;
         }
         $size -= 4;
-//debugLog("mapi prop type:".dechex(mapi_prop_type($propTag)));
-//debugLog("mapi prop tag: 0x".sprintf("%04x", mapi_prop_id($propTag)));
+debugLog("mapi prop type:".dechex(mapi_prop_type($propTag)));
+debugLog("mapi prop tag: 0x".sprintf("%04x", mapi_prop_id($propTag)));
         if (mapi_prop_id($propTag) >= 0x8000) {
         // Named property, first read GUID, then name/id
             if($size < 24) {
@@ -308,7 +308,7 @@ class ZPush_tnef{
              //it is not used and is here only for eventual debugging 
             $readableGuid = unpack("VV/v2v/n4n", $guid);
             $readableGuid = sprintf("{%08x-%04x-%04x-%04x-%04x%04x%04x}",$readableGuid['V'], $readableGuid['v1'], $readableGuid['v2'],$readableGuid['n1'],$readableGuid['n2'],$readableGuid['n3'],$readableGuid['n4']);
-//debugLog("guid:$readableGuid");
+debugLog("guid:$readableGuid");
             $hresult = $this->_readFromTnefStream($buffer, ZP_DWORD, $isNamedId);
             if ($hresult !== NOERROR) {
                 debugLog("There was an error reading stream property checksum.");
@@ -347,7 +347,7 @@ class ZPush_tnef{
                     debugLog("There was an error reading mapi property's length");
                     return $hresult;
                 }
-//debugLog("named: 0x".sprintf("%04x", $namedProp));
+debugLog("named: 0x".sprintf("%04x", $namedProp));
                 $size -= 4;
             }
             
@@ -360,7 +360,7 @@ class ZPush_tnef{
                 debugLog("Store not available. It is impossible to get named properties");                
             }
         }
-//debugLog("mapi prop tag: 0x".sprintf("%04x", mapi_prop_id($propTag))." ".sprintf("%04x", mapi_prop_type($propTag)));
+debugLog("mapi prop tag: 0x".sprintf("%04x", mapi_prop_id($propTag))." ".sprintf("%04x", mapi_prop_type($propTag)));
         if($propTag & MV_FLAG) {
             if($size < 4) {
                 return MAPI_E_CORRUPT_DATA;
@@ -396,7 +396,7 @@ class ZPush_tnef{
                         $mapiprops[$propTag] = $value;
                     }
                     $size -= 4;
-//debugLog("int or long propvalue:".$value);
+debugLog("int or long propvalue:".$value);
                     break;
                 
                 case PT_R4:
@@ -416,7 +416,7 @@ class ZPush_tnef{
                         }
                     }
                     $size -= 4;
-//debugLog("propvalue:".$mapiprops[$propTag]);
+debugLog("propvalue:".$mapiprops[$propTag]);
                     break;    
                 
                 case PT_BOOLEAN:
@@ -426,7 +426,7 @@ class ZPush_tnef{
                             return $hresult;
                         }
                     $size -= 4;
-//debugLog("propvalue:".$mapiprops[$propTag]);
+debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
                     
 
@@ -467,7 +467,7 @@ class ZPush_tnef{
                         $mapiprops[$namedCommonEnd] = $filetime;
                     }
                     $size -= 8;
-//debugLog("propvalue:".$mapiprops[$propTag]);
+debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
 
                 case PT_DOUBLE:
@@ -492,7 +492,7 @@ class ZPush_tnef{
                         }
                     }
                     $size -= 8;
-//debugLog("propvalue:".$mapiprops[$propTag]);
+debugLog("propvalue:".$mapiprops[$propTag]);
                     break;                    
                 
                 case PT_STRING8:
@@ -540,7 +540,7 @@ class ZPush_tnef{
                     //Re-align
                     $buffer = substr($buffer, ($len & 3 ? 4 - ($len & 3) : 0));
                     $size -= $len & 3 ? 4 - ($len & 3) : 0;
-//debugLog("propvalue:".$mapiprops[$propTag]);
+debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
                     
                 case PT_UNICODE:
@@ -594,7 +594,7 @@ class ZPush_tnef{
                     //Re-align
                     $buffer = substr($buffer, ($len & 3 ? 4 - ($len & 3) : 0));
                     $size -= $len & 3 ? 4 - ($len & 3) : 0;
-//debugLog("propvalue:".$mapiprops[$propTag]);
+debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
                 
                 case PT_OBJECT:        // PST sends PT_OBJECT data. Treat as PT_BINARY
@@ -645,7 +645,7 @@ class ZPush_tnef{
                     //Re-align
                     $buffer = substr($buffer, ($len & 3 ? 4 - ($len & 3) : 0));
                     $size -= $len & 3 ? 4 - ($len & 3) : 0;
-//debugLog("propvalue:".bin2hex($mapiprops[$propTag]));
+debugLog("propvalue:".bin2hex($mapiprops[$propTag]));
                     break;
                 
                 default:

@@ -26,7 +26,7 @@ class BackendVCDir extends BackendDiff {
         return true;
     }
 
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
+    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {
         return false;
     }
 
@@ -111,7 +111,7 @@ class BackendVCDir extends BackendDiff {
         return $message;
     }
 
-    function GetMessage($folderid, $id, $truncsize) {
+    function GetMessage($folderid, $id, $truncsize, $mimesupport = 0) {
         debugLog('VCDir::GetMessage('.$folderid.', '.$id.', ..)');
         if($folderid != "root")
             return;

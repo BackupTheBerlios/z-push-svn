@@ -36,6 +36,17 @@ if (include_file_exists('mapi/class.linkedappointment.php') == true) {
 }
 // END ADDED dw2412
 
+// START ADDED dw2412 to support DocumentLibrary functionality
+if (include_file_exists('include/smb.php') == true) {
+    include_once 'include/smb.php';
+    define("DOCUMENTLIBRARY",true);
+} else {
+    define("DOCUMENTLIBRARY",false);
+    debugLog("SMB4PHP not found - DocumentLibrary Functions disabled");
+}
+// END ADDED dw2412
+
+
 // We need this in order to parse the rfc822 messages
 //that are passed in SendMail
 include_once('mimeDecode.php');
@@ -45,6 +56,7 @@ include_once('proto.php');
 include_once('backend.php');
 include_once('z_tnef.php');
 include_once('z_ical.php');
+include_once('z_RTF.php');
 
 
 function GetPropIDFromString($store, $mapiprop) {
@@ -454,7 +466,7 @@ class MAPIMapping {
         // Reverse 'overflow'. Eg week '10' will always be the last week of the month in which the
         // specified weekday exists
         while(1) {
-            $monthnow = gmdate("n", $date) - 1; // gmdate returns 1-12
+            $monthnow = gmdate("n", $date); // gmdate returns 1-12, dw2412: removed -1 since months in tz starts with 1
             if($monthnow > $month)
                 $date = $date - (24 * 7 * 60 * 60);
             else
@@ -770,7 +782,7 @@ class ImportContentsChangesICS extends MAPIMapping {
         // Get timezone info
         if(isset($appointment->timezone))
             $tz = $this->_getTZFromSyncBlob(base64_decode($appointment->timezone));
-        else
+	else
             $tz = false;
 
         //calculate duration because without it some webaccess views are broken. duration is in min
@@ -788,6 +800,30 @@ class ImportContentsChangesICS extends MAPIMapping {
 
         mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Appointment"));
 
+	// START ADDED dw2412 Take care about notes
+	if (isset($appointment->airsyncbasebody)) {
+	    switch($appointment->airsyncbasebody->type) {
+		case '3' 	: $appointment->rtf = $appointment->airsyncbasebody->data; break;
+		case '1' 	: $appointment->body = $appointment->airsyncbasebody->data; break;
+	    }
+	}
+	if(isset($appointment->rtf)) {
+	    // start dw2412
+	    // Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
+	    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
+	    // to see if it is realy empty and in case not, take the appointment body.
+	    $rtf_body = new rtf ();
+	    $rtf_body->loadrtf(base64_decode($appointment->rtf));
+	    $rtf_body->output("ascii");
+	    $rtf_body->parse();
+	    if (isset($appointment->body) &&
+		isset($rtf_body->out) &&
+		$rtf_body->out == "" && $appointment->body != "") {
+		unset($appointment->rtf);
+	    }
+	    // end dw2412
+	}
+	// END ADDED dw2412 Take care about notes
         $this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
 
         //sensitivity is not enough to mark an appointment as private, so we use another mapi tag
@@ -869,19 +905,25 @@ class ImportContentsChangesICS extends MAPIMapping {
                     break;
             }
 
-            $starttime = $this->gmtime($localstart);
-            $endtime = $this->gmtime($localend);
+	    // dw2412 Zarafa expects start & endtime in Localtime for the recurrence!
+            $starttime = localtime($appointment->starttime,1);
+            $endtime = localtime($appointment->endtime,1);
 
             $recur["startocc"] = $starttime["tm_hour"] * 60 + $starttime["tm_min"];
             $recur["endocc"] = $recur["startocc"] + $duration; // Note that this may be > 24*60 if multi-day
 
-            // "start" and "end" are in GMT when passing to class.recurrence
-            $recur["start"] = $this->_getDayStartOfTimestamp($this->_getGMTTimeByTz($localstart, $tz));
-            $recur["end"] = $this->_getDayStartOfTimestamp(0x7fffffff); // Maximum GMT value for end by default
+            // dw2412 "start" and "end" are in Local Time when passing to class.recurrence
+            $recur["start"] = $this->_getLocaltimeByTz($appointment->starttime, $tz);
+	    if (isset($appointment->alldayevent) && $appointment->alldayevent) 
+		$recur["start"] = $this->_getLocaltimeByTz($appointment->starttime,$tz);
+	    else
+		$recur["start"] = $this->_getDayStartOfTimestamp($appointment->starttime);
+            $recur["end"] = $this->_getDayStartOfTimestamp(0x7fffffff); // Maximum value for end by default
 
             if(isset($appointment->recurrence->until)) {
                 $recur["term"] = 0x21;
-                $recur["end"] = $appointment->recurrence->until;
+        	// dw2412 "end" is in Local Time when passing to class.recurrence
+                $recur["end"] = $this->_getLocaltimeByTz($appointment->recurrence->until,$tz);
             } else if(isset($appointment->recurrence->occurrences)) {
                 $recur["term"] = 0x22;
                 $recur["numoccur"] = $appointment->recurrence->occurrences;
@@ -910,7 +952,10 @@ class ImportContentsChangesICS extends MAPIMapping {
                         if(!isset($recur["deleted_occurences"]))
                             $recur["deleted_occurences"] = array();
 
-                        array_push($recur["deleted_occurences"], $this->_getDayStartOfTimestamp($exception->exceptionstarttime));
+			if (isset($appointment->alldayevent) && $appointment->alldayevent) 
+		    	    array_push($recur["deleted_occurences"], $this->_getLocaltimeByTZ($exception->exceptionstarttime,$tz)); // dw2412 we need localtime here...
+			else
+                    	    array_push($recur["deleted_occurences"], $this->_getLocaltimeByTZ($this->_getDayStartOfTimestamp($exception->exceptionstarttime)));
                     } else {
                         // Change exception
                         $mapiexception = array("basedate" => $this->_getDayStartOfTimestamp($exception->exceptionstarttime));
@@ -993,6 +1038,31 @@ class ImportContentsChangesICS extends MAPIMapping {
 
     function _setContact($mapimessage, $contact) {
         mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Contact"));
+
+	// START ADDED dw2412 Take care about notes
+	if (isset($contact->airsyncbasebody)) {
+	    switch($contact->airsyncbasebody->type) {
+		case '3' 	: $contact->rtf = $contact->airsyncbasebody->data; break;
+		case '1' 	: $contact->body = $contact->airsyncbasebody->data; break;
+	    }
+	}
+	if(isset($contact->rtf)) {
+	    // start dw2412
+	    // Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
+	    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
+	    // to see if it is realy empty and in case not, take the contact body.
+	    $rtf_body = new rtf ();
+	    $rtf_body->loadrtf(base64_decode($contact->rtf));
+	    $rtf_body->output("ascii");
+	    $rtf_body->parse();
+	    if (isset($contact->body) &&
+		isset($rtf_body->out) &&
+		$rtf_body->out == "" && $contact->body != "") {
+		unset($contact->rtf);
+	    }
+	    // end dw2412
+	}
+	// END ADDED dw2412 Take care about notes
 
         $this->_setPropsInMAPI($mapimessage, $contact, $this->_contactmapping);
 
@@ -1172,6 +1242,32 @@ class ImportContentsChangesICS extends MAPIMapping {
     function _setTask($mapimessage, $task) {
         mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Task"));
 
+	// START ADDED dw2412 Take care about notes
+	if (isset($task->airsyncbasebody)) {
+	    switch($task->airsyncbasebody->type) {
+		case '3' 	: $task->rtf = $task->airsyncbasebody->data; break;
+		case '1' 	: $task->body = $task->airsyncbasebody->data; break;
+	    }
+	}
+	if(isset($task->rtf)) {
+	    // start dw2412
+	    // Nokia MfE 2.9.158 sends task notes with RTF and Body element. 
+	    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
+	    // to see if it is realy empty and in case not, take the task body.
+	    $rtf_body = new rtf ();
+	    $rtf_body->loadrtf(base64_decode($task->rtf));
+	    $rtf_body->output("ascii");
+	    $rtf_body->parse();
+	    if (isset($task->body) &&
+		isset($rtf_body->out) &&
+		$rtf_body->out == "" && $task->body != "") {
+		unset($task->rtf);
+	    }
+	    // end dw2412
+	}
+	// END ADDED dw2412 Take care about notes
+
+	// END ADDED dw2412 Take care about notes
         $this->_setPropsInMAPI($mapimessage, $task, $this->_taskmapping);
 
         if(isset($task->complete)) {
@@ -1361,6 +1457,111 @@ class PHPContentsImportProxy extends MAPIMapping {
             return $this->_getEmail($mapimessage, $truncsize, $bodypreference, $mimesupport);
     }
 
+    // Get the right body for sync object
+    
+    function _getBody($mapimessage,$message,$truncsize,$bodypreference) {
+	// START ADDED dw2412 Support Protocol Version 12 (added bodypreference compare)
+	if ($bodypreference == false) {
+	    $rtf = mapi_message_openproperty($mapimessage, PR_RTF_COMPRESSED);
+	    if (isset($rtf) && $rtf) {
+	        $rtf = mapi_decompressrtf($rtf);
+		if ($rtf &&
+		    strlen($rtf) > 0 &&
+		    strlen($rtf) < $truncsize) {
+		    unset($message->body);
+		} else {
+		    unset($message->rtf);
+		}
+	    } else {
+		unset($message->rtf);
+	    }
+	    if (isset($message->body) &&
+		$message->body) {
+		$body = mapi_openproperty($mapimessage, PR_BODY);
+        	$bodysize = strlen($body);
+		if($bodysize > $truncsize) {
+        	    $body = substr($body, 0, $truncsize);
+        	    $message->bodysize = $bodysize;
+        	    $message->bodytruncated = 1;
+    		} else {
+        	    $message->bodytruncated = 0;
+    		}
+    	    $message->body = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
+	    } else if (!isset($message->rtf)) {
+        	$message->body = " ";
+	    }
+    	} else {
+	    // We throw away body & rtf to make our own findings depending on body preference
+	    unset($message->body);
+	    unset($message->rtf);
+	    // first read the compressed rtf - in case there is none where going on plain text...
+	    $rtf = mapi_message_openproperty($mapimessage, PR_RTF_COMPRESSED);
+	    if (!$rtf) {
+		$message->airsyncbasenativebodytype=1;
+	    } else {
+	        $rtf_len = strlen($rtf);
+	        $rtf = mapi_decompressrtf($rtf);
+	        $rtf_replaced = preg_replace("/(\n.*)/m","",$rtf);
+	        if (strpos($rtf_replaced,"\\fromtext") != false) {
+		    // Original was plaintext...
+		    $message->airsyncbasenativebodytype=1;
+		} else {
+		    // Original was html...
+		    $message->airsyncbasenativebodytype=2;
+		}
+	    }
+	    // Set the maximum truncation size in case it is not set by device...
+	    if (isset($bodypreference[1]) && !isset($bodypreference[1]["TruncationSize"])) 
+		$bodypreference[1]["TruncationSize"] = 1024*1024;
+	    if (isset($bodypreference[2]) && !isset($bodypreference[2]["TruncationSize"])) 
+		$bodypreference[2]["TruncationSize"] = 1024*1024;
+	    if (isset($bodypreference[3]) && !isset($bodypreference[3]["TruncationSize"]))
+		$bodypreference[3]["TruncationSize"] = 1024*1024;
+	    $message->airsyncbasebody = new SyncAirSyncBaseBody();
+    	    if (isset($bodypreference[3]) && 
+    		isset($rtf) && strlen($rtf) < $bodypreference[3]["TruncationSize"]) {
+		// Send RTF if possible and below the maximum truncation size
+		$message->airsyncbasebody->type = 3;
+		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
+		$message->airsyncbasebody->data = base64_encode($rtf);
+		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
+		$message->airsyncbasebody->truncated = 0;
+    	    } elseif (isset($bodypreference[2]) && 
+    		$message->airsyncbasenativebodytype==2) {
+		// Send HTML if requested and native type was html
+		$message->airsyncbasebody->type = 2;
+		$html = mapi_openproperty($mapimessage, PR_HTML);
+    		if(isset($bodypreference[2]["TruncationSize"]) &&
+    	    	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
+        	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
+		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+		    $message->airsyncbasebody->truncated = 0;
+    		}
+		$message->airsyncbasebody->data = $html;
+		$message->airsyncbasebody->estimateddatasize = strlen($html);
+    	    } else {
+		// Send Plaintext as Fallback or if original body is plaintext
+		$body = mapi_openproperty($mapimessage, PR_BODY);
+		$message->airsyncbasebody->type = 1;
+    		if(isset($bodypreference[1]["TruncationSize"]) &&
+    		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
+        	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
+		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+		    $message->airsyncbasebody->truncated = 0;
+    		}
+		$message->airsyncbasebody->estimateddatasize = strlen($body);
+    		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
+    	    }
+	    // In case we have nothing for the body, send at least a blank...
+    	    if (!isset($message->airsyncbasebody->data) || strlen($message->airsyncbasebody->data) == 0)
+        	$message->airsyncbasebody->data = " ";
+    	}
+	// END ADDED dw2412 Support Protocol Version 12 (added bodypreference compare)
+	return $message;
+    }
+
     // Get an SyncContact object
     // CHANGED dw2412 Support Protocol Version 12 (added bodypreference)
     function _getContact($mapimessage, $truncsize, $bodypreference, $mimesupport = 0) {
@@ -1368,9 +1569,8 @@ class PHPContentsImportProxy extends MAPIMapping {
 
         $this->_getPropsFromMAPI($message, $mapimessage, $this->_contactmapping);
 
-        if(!isset($message->lastname) || strlen($message->lastname) == 0) {
-            $message->lastname = $message->fileas;
-        }
+        // Override 'body' for truncation
+	$message = $this->_getBody($mapimessage,$message,$truncsize,$bodypreference);
 
         //check the picture
         $haspic = $this->_getPropIDFromString("PT_BOOLEAN:{00062004-0000-0000-C000-000000000046}:0x8015");
@@ -1390,7 +1590,6 @@ class PHPContentsImportProxy extends MAPIMapping {
                 }
             }
         }
-//	debugLog(print_r($message,true));
         return $message;
     }
 
@@ -1400,6 +1599,9 @@ class PHPContentsImportProxy extends MAPIMapping {
         $message = new SyncTask();
 
         $this->_getPropsFromMAPI($message, $mapimessage, $this->_taskmapping);
+
+        // Override 'body' for truncation
+	$message = $this->_getBody($mapimessage,$message,$truncsize,$bodypreference);
 
         // when set the task to complete using the WebAccess, the dateComplete property is not set correctly
         if ($message->complete == 1 && !isset($message->datecompleted))
@@ -1415,6 +1617,9 @@ class PHPContentsImportProxy extends MAPIMapping {
 
         // Standard one-to-one mappings first
         $this->_getPropsFromMAPI($message, $mapimessage, $this->_appointmentmapping);
+
+        // Override 'body' for truncation
+	$message = $this->_getBody($mapimessage,$message,$truncsize,$bodypreference);
 
         // Disable reminder if it is off
         $reminderset = $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503");
@@ -1451,7 +1656,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         if(isset($recurprops[$isrecurringtag]) && $recurprops[$isrecurringtag]) {
             // Process recurrence
             $recurrence = new Recurrence($this->_store, $recurprops);
-
+            
             $message->recurrence = new SyncRecurrence;
 
             switch($recurrence->recur["type"]) {
@@ -1571,7 +1776,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         }
 
         if($tz) {
-            $message->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
+    	    $message->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
         }
 
         // Get organizer information if it is a meetingrequest
@@ -1649,12 +1854,17 @@ class PHPContentsImportProxy extends MAPIMapping {
 	// START CHANGED dw2412 Support Protocol Version 12 (added bodypreference compare)
 	if ($bodypreference == false) {
 	    $body = mapi_openproperty($mapimessage, PR_BODY);
-    	    if(strlen($body) > $truncsize) {
+            $bodysize = strlen($body);
+	    if($bodysize > $truncsize) {
         	$body = substr($body, 0, $truncsize);
+        	$message->bodysize = $bodysize;
         	$message->bodytruncated = 1;
     	    } else {
         	$message->bodytruncated = 0;
     	    }
+    	    $message->body = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
+    	    if (!isset($message->body) || strlen($message->body) == 0)
+        	$message->body = " ";
     	} else {
 	    $rtf = mapi_message_openproperty($mapimessage, PR_RTF_COMPRESSED);
 	    if (!$rtf) {
@@ -1667,23 +1877,51 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    $message->airsyncbasenativebodytype=2;
 		}
 	    }
-	    $body = mapi_openproperty($mapimessage, PR_BODY);
 	    if (!isset($bodypreference[1]["TruncationSize"])) {
 		$bodypreference[1]["TruncationSize"] = 1024*1024;
 	    }
-    	    if (isset($bodypreference[1])) {
-        	$message->bodysize = strlen($body);
-    		if(strlen($body) > $bodypreference[1]["TruncationSize"]) {
-        	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
-        	    $message->bodytruncated = 1;
+	    $message->airsyncbasebody = new SyncAirSyncBaseBody();
+	    debugLog("airsyncbasebody!");
+    	    if (isset($bodypreference[3]) && 
+    		$message->airsyncbasenativebodytype==3) {
+		$message->airsyncbasebody->type = 3;
+		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
+		$message->airsyncbasebody->data = base64_encode($rtf);
+		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
+		$message->airsyncbasebody->truncated = 0;
+		debugLog("RTFL Body!");
+    	    } elseif (isset($bodypreference[2]) && 
+    		$message->airsyncbasenativebodytype==2) {
+		$message->airsyncbasebody->type = 2;
+		$html = mapi_openproperty($mapimessage, PR_HTML);
+    		if(isset($bodypreference[2]["TruncationSize"]) &&
+    	    	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
+        	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
+		    $message->airsyncbasebody->truncated = 1;
     		} else {
-        	    $message->bodytruncated = 0;
+		    $message->airsyncbasebody->truncated = 0;
     		}
+		$message->airsyncbasebody->data = $html;
+		$message->airsyncbasebody->estimateddatasize = strlen($html);
+		debugLog("HTML Body!");
+    	    } else {
+		$body = mapi_openproperty($mapimessage, PR_BODY);
+		$message->airsyncbasebody->type = 1;
+    		if(isset($bodypreference[1]["TruncationSize"]) &&
+    		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
+        	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
+		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+		    $message->airsyncbasebody->truncated = 0;
+    		}
+		$message->airsyncbasebody->estimateddatasize = strlen($body);
+    		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
+		debugLog("Plain Body!");
     	    }
+    	    if (!isset($message->airsyncbasebody->data) || strlen($message->airsyncbasebody->data) == 0)
+        	$message->airsyncbasebody->data = " ";
     	}
 	// END CHANGED dw2412 Support Protocol Version 12 (added bodypreference compare)
-
-        $message->body = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
 
         if(isset($messageprops[PR_SOURCE_KEY]))
             $sourcekey = $messageprops[PR_SOURCE_KEY];
@@ -1703,9 +1941,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         if($fromname)
             $from = "\"" . w2u($fromname) . "\" <" . $fromaddr . ">";
         else
-            //START CHANGED dw2412 HTC shows "error" if sender name is unknown
-            $from = "\"" . $fromaddr . "\" <" . $fromaddr . ">";
-            //END CHANGED dw2412 HTC shows "error" if sender name is unknown
+            $from = "\"" . $fromaddr . "\" <" . $fromaddr . ">"; //changed dw2412 to get rid at HTC Mail (Android) from error message... Not nice but effective...
 
         $message->from = $from;
 
@@ -1784,8 +2020,9 @@ class PHPContentsImportProxy extends MAPIMapping {
         foreach($rows as $row) {
             if(isset($row[PR_ATTACH_NUM])) {
         	$mapiattach = mapi_message_openattach($mapimessage, $row[PR_ATTACH_NUM]);
-
-                $attachprops = mapi_getprops($mapiattach, array(PR_ATTACH_LONG_FILENAME,PR_ATTACH_FILENAME,PR_DISPLAY_NAME));
+		
+		// CHANGED dw2412 for HTML eMail Inline Attachments...
+                $attachprops = mapi_getprops($mapiattach, array(PR_ATTACH_LONG_FILENAME,PR_ATTACH_FILENAME,PR_DISPLAY_NAME,PR_ATTACH_FLAGS,PR_ATTACH_CONTENT_ID,PR_ATTACH_MIME_TAG));
                 
             	$attach = new SyncAttachment();
 		// START CHANGED dw2412 EML Attachment
@@ -1812,6 +2049,22 @@ class PHPContentsImportProxy extends MAPIMapping {
         	    if ($row[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) $attach->displayname .= w2u(".eml");
 		    // END CHANGED dw2412 EML Attachment
 
+		    if ($attachprops[PR_ATTACH_FLAGS] == 0x04) {
+			$attach->isinline=true;
+			$attach->attmethod=6;
+			$attach->contentid= $attachprops[PR_ATTACH_CONTENT_ID];
+			$attach->contenttype = $attachprops[PR_ATTACH_MIME_TAG];
+//			if ($message->airsyncbasebody->type == 2) {
+//			    $attach->_data = "";
+//    			    while(1) {
+//        		        $data = mapi_stream_read($stream, 4096);
+//        			if(strlen($data) == 0)
+//		        	    break;
+//		        	$attach->_data .= $data;
+//    			    }
+//			}
+		    }
+		    
                     $attach->attname = bin2hex($this->_folderid) . ":" . bin2hex($sourcekey) . ":" . $row[PR_ATTACH_NUM];
 
                     if(!isset($message->attachments))
@@ -1864,9 +2117,6 @@ class PHPContentsImportProxy extends MAPIMapping {
         $message->to = implode(", ", $to);
         $message->cc = implode(", ", $cc);
 
-        if (!isset($message->body) || strlen($message->body) == 0)
-            $message->body = " ";
-
 	// CHANGED dw2412 to not have this problem at my system with mapi_inetmapi_imtoinet segfault
         if (1==0 && $mimesupport == 2 && function_exists("mapi_inetmapi_imtoinet")) {
             $addrBook = mapi_openaddressbook($this->_session);
@@ -1882,7 +2132,6 @@ class PHPContentsImportProxy extends MAPIMapping {
             }
         }
 
-//	debugLog(print_r($message,true));
         return $message;
     }
 
@@ -1905,6 +2154,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    $stream = mapi_openpropertytostream($attach, PR_ATTACH_DATA_BIN);
     		};
 		$attachment->contenttype = $row[PR_ATTACH_MIME_TAG];
+		break;
     	    };
         };
         
@@ -1919,7 +2169,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                 break;
             $attachment->_data .= $data;
         }
-//        $attachment->_data = base64_encode($attachment->_data);
+
 	return $attachment;
     }
 
@@ -2018,7 +2268,7 @@ class PHPHierarchyImportProxy {
         if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Note")
                 $folder->type = SYNC_FOLDER_TYPE_USER_MAIL;
-            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
+    	    if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
                 $folder->type = SYNC_FOLDER_TYPE_USER_TASK;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
                 $folder->type = SYNC_FOLDER_TYPE_USER_APPOINTMENT;
@@ -2385,7 +2635,7 @@ class BackendICS {
     }
 
     function Logoff() {
-        global $cmd;
+    	global $cmd;
         //do not update last sync time on ping and provision
         if (isset($cmd) && $cmd != '' && $cmd != 'Ping' && $cmd != 'Provision' )
             $this->setLastSyncTime();
@@ -2434,6 +2684,7 @@ class BackendICS {
         return $status;
     }
 	
+
     function generatePolicyKey() {
         return mt_rand(1000000000, 9999999999);
     }
@@ -2633,6 +2884,10 @@ class BackendICS {
     }
 
     // START CHANGED dw2412 AS V12.0 Support 
+    /* Function gets the search querry as it is provided by the request from device and the searchname
+     * that should be called within the backend itself (just the DocumentLibrary since it is independent
+     * from the backend is handled here
+     */
     function getSearchResults($searchquery,$searchname){
 	switch (strtoupper($searchname)) {
 	    case "GAL"		: 
@@ -2640,13 +2895,103 @@ class BackendICS {
 	    case "MAILBOX"		: 
 		return $this->getSearchResultsMailbox($searchquery);
     	    case "DOCUMENTLIBRARY"	: 
-//		$rows = $this->getSearchResults($searchquery);
-		debugLog("Searchtype $searchname is not supported");
-    		return false;
+		return $this->getSearchResultsDocumentLibrary($searchquery);
     	    break;
 	}
     }
-    
+
+    // START ADDED dw2412 V12.0 Document Library Support
+    // Search Query for DocumentLibrary searchname.
+    function getSearchResultsDocumentLibrary($searchquery) {
+	$result['rows'] = array();
+	// Return status code 14 in case username/password is not provided (should not happen since we use
+	// auth_user and auth_pw earlier to fill the credentials data because username and password transport
+	// exists only in AS 12.1/14.0 Devices
+	if (!isset($searchquery['username']) || !is_array($searchquery['username']) ||
+	    !isset($searchquery['password']) || $searchquery['password'] == "") {
+	    $result['status'] = "14";
+	    return $result;
+	}
+	// The _getSearchResultsMailboxTranslation is placed in the backend itself. Since it returns by default
+	// MAPI Style results it has to be adapted per backend.
+	foreach($searchquery['query'] as $value) {
+	    $query = $this->_getSearchResultsMailboxTranslation($value);
+	}
+	foreach ($query["query"] as $key => $value) {
+	    $linkid = explode("/",$value);
+	    foreach($linkid as $key1 => $value1) {
+		if ($value1 == "file:" ||
+		    $value1 == "") unset($linkid[$key1]);
+	    }
+	    $link = "smb://".$searchquery['username']['username'].":".$searchquery['password']."@";
+	    foreach($linkid as $key2 => $value2) {
+		$link .= $value2."/";
+	    }
+	    $link = substr($link,0,strlen($link)-1);
+	    $stat = stat($link);
+	    $res['linkid'] = $value;
+	    $res['displayname'] = $value1;
+	    $res['creationdate'] = $stat['ctime'];
+	    $res['lastmodifieddate'] = $stat['mtime'];
+	    $res['ishidden'] = "0";
+	    if (is_dir($link)) {
+	        $res['isfolder'] = "1";
+	    } else {
+	        $res['isfolder'] = "0";
+	        $res['contentlength'] = $stat['size'];
+		$res['contenttype'] = mime_content_type($link);
+	    }
+	    $result['rows'][]=$res;
+	}
+	$result['status'] = "1";
+	return $result;
+    }
+
+    // Get the file by an ItemOperation call. Linkid = the filename, Credentials is an array that consists 
+    // of username with a subarray that consist of username and domain. Password is provided as cleartext.
+    function ItemOperationsGetDocumentLibraryLink($linkid,$credentials) {
+	// Return status code 18 in case username/password is not provided (should not happen since we use
+	// auth_user and auth_pw earlier to fill the credentials data because username and password transport
+	// exists only in AS 12.1/14.0 Devices
+	if (!isset($credentials['username']) || !is_array($credentials['username']) ||
+	    !isset($credentials['password']) || $credentials['password'] == "") {
+	    $result['status'] = 18;
+	    return $result;
+	}
+	// Just keep the necessary parts from the link that we need. Value that fill be kept is as first element
+	// the servername on that the file resides and in the next fields the path elements.
+	$fileid = explode("/",$linkid);
+	foreach($fileid as $key1 => $value1) {
+	if ($value1 == "file:" ||
+	    $value1 == "") unset($fileid[$key1]);
+	}
+	// Put things in smb.php style...
+    	$link = "smb://".$credentials['username']['username'].":".$credentials['password']."@";
+	foreach($fileid as $key2 => $value2) {
+	    $link .= $value2."/";
+	}
+	$link = substr($link,0,strlen($link)-1); // remove the last slash...
+	// Get the file stats and file itself
+	$stat = stat($link);
+	$result['total'] = $stat['size'];
+	$result['version'] = $stat['mtime'];
+	$file = fopen($link,'r');
+	$result['data'] = "";
+	while (!feof($file)) {
+	    $result['data'] .= fread($file,2048);
+	};
+	fclose($file);
+	// Since the understanding of IIS compression by gzip is a bit different from the common way
+	// (YES they enhance the file during compressing and GZipped content cannot be opened by device)
+	// we override here the GZIP Compression. 
+	// Please find the files in Z-Push Developer forum. In case you have an idea what might be going
+	// on, please tell me. I'm out of ideas with this. Overriding GZIP is the only idea left ;-)
+	define ('OVERRIDE_GZIP',true);
+	$result['status'] = 1;
+	return $result;
+    }
+    // END ADDED dw2412 V12.0 Document Library Support
+
     function _getSearchResultsMailboxTranslation($query) {
 	switch (strtolower($query["op"])) {
 	    case "search:and"		: $mapiquery["query"] = array(RES_AND, array()); break;
@@ -2685,6 +3030,9 @@ class BackendICS {
 							  break;
 		    case "poommail:datereceived"	: $field = PR_MESSAGE_DELIVERY_TIME;
 							  return array(RES_PROPERTY, array(RELOP => $RELOP,ULPROPTAG => $field, VALUE => array($field => $value))); break;
+		    case "documentlibrary:linkid"	: $mapiquery["query"]["linkid"] = $value;
+							  break;
+
 		}
 	    }
 	}
@@ -2767,8 +3115,10 @@ class BackendICS {
 		$res["parent"] = bin2hex($value[PR_PARENT_SOURCE_KEY]);
 		$result['rows'][] = $res;
 	    };
+	    $result['status']=1;
 	} else {
 	    $result = array();
+	    $result['status']=0;
 	}
 	return $result;
     }
@@ -2842,6 +3192,7 @@ class BackendICS {
 
         $table = mapi_folder_getcontentstable($ab_dir);
         $restriction = $this->_getSearchRestriction(u2w($searchquery));
+
         mapi_table_restrict($table, $restriction);
         mapi_table_sort($table, array(PR_DISPLAY_NAME => TABLE_SORT_ASCEND));
 	// CHANGED dw2412 AS V12.0 Support (to menetain single return way...
@@ -2854,7 +3205,7 @@ class BackendICS {
             if (strlen(trim($item["fullname"])) == 0) $item["fullname"] = $item["username"];
             $item["emailaddress"] = w2u($user_data[0][PR_SMTP_ADDRESS]);
             $item["nameid"] = $searchquery;
-            $item["businessphone"] = w2u($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]);
+            $item["businessphone"] = isset($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]) ? w2u($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]) : "";
 
             //do not return users without email
             if (strlen(trim($item["emailaddress"])) == 0) continue;
@@ -2903,11 +3254,10 @@ class BackendICS {
                 $folders[] = $folder;
         }
 
-	debugLog(print_r($folders,true));
         return $folders;
     }
 
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
+    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {
         if (WBXML_DEBUG === true)
             debugLog("SendMail: forward: $forward   reply: $reply   parent: $parent\n" . $rfc822);
 
@@ -3001,24 +3351,24 @@ class BackendICS {
         $body = "";
         $body_html = "";
         if($message->ctype_primary == "multipart" && ($message->ctype_secondary == "mixed" || $message->ctype_secondary == "alternative")) {
-            $mparts = $message->parts;
+    	    $mparts = $message->parts;
             for($i=0; $i<count($mparts); $i++) {
-                $part = $mparts[$i];
+            	$part = $mparts[$i];
 
-                // palm pre & iPhone send forwarded messages in another subpart which are also parsed
-                if($part->ctype_primary == "multipart" && ($part->ctype_secondary == "mixed" || $part->ctype_secondary == "alternative"  || $part->ctype_secondary == "related")) {
-                    foreach($part->parts as $spart)
-                        $mparts[] = $spart;
-                    continue;
-                }
+	        // palm pre & iPhone send forwarded messages in another subpart which are also parsed
+	        if($part->ctype_primary == "multipart" && ($part->ctype_secondary == "mixed" || $part->ctype_secondary == "alternative"  || $part->ctype_secondary == "related")) {
+	    	    foreach($part->parts as $spart)
+	    		$mparts[] = $spart;
+	    	    continue;
+	    	}
 
-                // standard body
-                if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && (!isset($part->disposition) || $part->disposition != "attachment")) {
-                        $body .= u2w($part->body); // assume only one text body
+            	// standard body
+            	if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && (!isset($part->disposition) || $part->disposition != "attachment")) {
+                    $body .= u2w($part->body); // assume only one text body
                 }
                 // html body
                 elseif($part->ctype_primary == "text" && $part->ctype_secondary == "html") {
-                    $body_html .= u2w($part->body);
+            	    $body_html .= u2w($part->body);
                 }
                 // TNEF
                 elseif($part->ctype_primary == "ms-tnef" || $part->ctype_secondary == "ms-tnef") {
@@ -3044,8 +3394,8 @@ class BackendICS {
 
                     // iPhone sends a second ICS which we ignore if we can
                     if (!isset($mapiprops[PR_MESSAGE_CLASS]) && strlen(trim($body)) == 0) {
-                        debugLog("Secondary iPhone response is being ignored!! Mail dropped!");
-                        return true;
+                	debugLog("Secondary iPhone response is being ignored!! Mail dropped!");
+                	return true;
                     }
 
                     if (is_array($mapiprops) && !empty($mapiprops)) {
@@ -3053,12 +3403,22 @@ class BackendICS {
                     }
                     else debugLog("ICAL: Mapi props array was empty");
                 }
-                // any other type, store as attachment
+		// any other type, store as attachment
                 else
                     $this->_storeAttachment($mapimessage, $part);
             }
         } else {
-            $body = u2w($message->body);
+	    // start dw2412 handle windows mobile html replies...
+            // standard body
+            if($message->ctype_primary == "text" && $message->ctype_secondary == "plain" && isset($message->body) && (!isset($message->disposition) || $message->disposition != "attachment")) {
+                $body = u2w($message->body); // assume only one text body
+            }
+            // html body
+            elseif($message->ctype_primary == "text" && $message->ctype_secondary == "html") {
+                $body_html = u2w($message->body);
+            }
+	    // end dw2412 handle windows mobile html replies...
+            // $body = u2w($message->body);
         }
 
         // some devices only transmit a html body
@@ -3113,7 +3473,9 @@ class BackendICS {
                     $fwbody_html .= $data;
                 }
 
-                if($forward) {
+		// dw2412 Enable this only in case of AS2.5 Protocol... in AS12 this seem 
+		// being already done by winmobile client.
+                if($forward && $protocolversion==2.5) {
                     // During a forward, we have to add the forward header ourselves. This is because
                     // normally the forwarded message is added as an attachment. However, we don't want this
                     // because it would be rather complicated to copy over the entire original message due
@@ -3140,6 +3502,7 @@ class BackendICS {
                     $body .= $fwheader;
                     if (strlen($body_html) > 0)
                         $body_html .= str_ireplace("\r\n", "<br>", $fwheader);
+
                 }
 
                 if(strlen($body) > 0)
@@ -3498,6 +3861,7 @@ class BackendICS {
 
         if ($result == NOERROR){
             $rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_DEFAULT_STORE, PR_MDB_PROVIDER));
+            $result = mapi_last_hresult();
 
             foreach($rows as $row) {
                 if(isset($row[PR_DEFAULT_STORE]) && $row[PR_DEFAULT_STORE] == true) {

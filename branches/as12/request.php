@@ -241,7 +241,7 @@ function HandleFolderSync($backend, $protocolversion) {
                     // remove folder from the folderflags array
                     if (($sid = array_search($serverid, $seenfolders)) !== false) {
                         unset($seenfolders[$sid]);
-                        $seenfolders = array_values($seenfolders);
+                        $seenfolders = array_values($seenfolders);    
                     }
                     break;
             }
@@ -302,7 +302,7 @@ function HandleFolderSync($backend, $protocolversion) {
                 	else {
                         $encoder->startTag(SYNC_FOLDERHIERARCHY_ADD);
                         $seenfolders[] = $folder->serverid;
-                    }
+                    }                  
                     $folder->encode($encoder);
                     $encoder->endTag();
                 }
@@ -319,8 +319,8 @@ function HandleFolderSync($backend, $protocolversion) {
                     // remove folder from the folderflags array
                     if (($sid = array_search($folder, $seenfolders)) !== false) {
                         unset($seenfolders[$sid]);
-                        $seenfolders = array_values($seenfolders);
-                    }
+                        $seenfolders = array_values($seenfolders);    
+                    }                 
                 }
             }
         }
@@ -998,12 +998,12 @@ function HandlePing($backend, $devid) {
     for($n=0;$n<$lifetime / $timeout; $n++ ) {
         //check the remote wipe status
         if (PROVISIONING === true) {
-	        $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
-	        if ($rwstatus == SYNC_PROVISION_RWSTATUS_PENDING || $rwstatus == SYNC_PROVISION_RWSTATUS_WIPED) {
-	            //return 7 because it forces folder sync
-	            $pingstatus = 7;
-	            break;
-	        }
+	    $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
+	    if ($rwstatus == SYNC_PROVISION_RWSTATUS_PENDING || $rwstatus == SYNC_PROVISION_RWSTATUS_WIPED) {
+	        //return 7 because it forces folder sync
+	        $pingstatus = 7;
+	        break;
+	    }
         }
 
         if(count($collections) == 0) {
@@ -1110,7 +1110,7 @@ function HandleSmartForward($backend, $protocolversion) {
     else
         $parent = false;
 
-    return $backend->SendMail($rfc822, $orig, false, $parent);
+    return $backend->SendMail($rfc822, $orig, false, $parent, $protocolversion);
 }
 
 function HandleSmartReply($backend, $protocolversion) {
@@ -1129,7 +1129,7 @@ function HandleSmartReply($backend, $protocolversion) {
     else
         $parent = false;
 
-    return $backend->SendMail($rfc822, false, $orig, $parent);
+    return $backend->SendMail($rfc822, false, $orig, $parent, $protocolversion);
 }
 
 function HandleFolderCreate($backend, $protocolversion) {
@@ -1180,14 +1180,14 @@ function HandleFolderCreate($backend, $protocolversion) {
 	        if(!$decoder->getElementEndTag())
 	            return false;
 	    }
-
+	
 	    // Displayname
 	    if(!$decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_DISPLAYNAME))
 	        return false;
 	    $displayname = $decoder->getElementContent();
 	    if(!$decoder->getElementEndTag())
 	        return false;
-
+	
 	    // Type
 	    $type = false;
 	    if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_TYPE)) {
@@ -1208,7 +1208,7 @@ function HandleFolderCreate($backend, $protocolversion) {
     // additional information about already seen folders
     $seenfolders = unserialize($statemachine->getSyncState("s".$synckey));
     if (!$seenfolders) $seenfolders = array();
-
+    
     // Configure importer with last state
     $importer = $backend->GetHierarchyImporter();
     $importer->Config($syncstate);
@@ -1221,12 +1221,12 @@ function HandleFolderCreate($backend, $protocolversion) {
     	// delete folder
     	$deletedstat = $importer->ImportFolderDeletion($serverid, 0);
     }
-
+                   
     $encoder->startWBXML();
     if ($create) {
     	// add folder id to the seen folders
         $seenfolders[] = $serverid;
-
+        
         $encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDERCREATE);
         {
             {
@@ -1278,20 +1278,20 @@ function HandleFolderCreate($backend, $protocolversion) {
             }
             $encoder->endTag();
         }
-
+        
         // remove folder from the folderflags array
         if (($sid = array_search($serverid, $seenfolders)) !== false) {
             unset($seenfolders[$sid]);
             $seenfolders = array_values($seenfolders);
-            debugLog("deleted from seenfolders: ". $serverid);
+            debugLog("deleted from seenfolders: ". $serverid);    
         }
-    }
+    }   
 
     $encoder->endTag();
     // Save the sync state for the next time
     $statemachine->setSyncState($newsynckey, $importer->GetState());
     $statemachine->setSyncState("s".$newsynckey, serialize($seenfolders));
-
+    
     return true;
 }
 
@@ -1338,6 +1338,9 @@ function HandleMeetingResponse($backend, $protocolversion) {
     if(!$decoder->getElementEndTag())
         return false;
 
+function HandleFolderDelete($backend, $protocolversion) {
+    return HandleFolderCreate($backend, $protocolversion);
+}
 
     // Start output, simply the error code, plus the ID of the calendar item that was generated by the
     // accept of the meeting response
@@ -1374,10 +1377,6 @@ function HandleMeetingResponse($backend, $protocolversion) {
 
 
 function HandleFolderUpdate($backend, $protocolversion) {
-    return HandleFolderCreate($backend, $protocolversion);
-}
-
-function HandleFolderDelete($backend, $protocolversion) {
     return HandleFolderCreate($backend, $protocolversion);
 }
 
@@ -1511,6 +1510,31 @@ function HandleProvision($backend, $devid, $protocolversion) {
                 $encoder->startTag(SYNC_PROVISION_DATA);
                 if ($policytype == 'MS-WAP-Provisioning-XML') {
                     $encoder->content('<wap-provisioningdoc><characteristic type="SecurityPolicy"><parm name="4131" value="1"/><parm name="4133" value="1"/></characteristic></wap-provisioningdoc>');
+/* dw2412 maybe we can make use of this later on in as2.5 proivsioning.
+        	    <characteristic type="Registry">
+// 0 = no frequency 1 = set and take minutes from FrequencyValue
+                        <characteristic type="HKLM\Comm\Security\Policy\LASSD\AE\{50C13377-C66D-400C-889E-C316FC4AB374}">
+                            <parm name="AEFrequencyType" value="1"/>
+                            <parm name="AEFrequencyValue" value="3"/>
+                        </characteristic>
+// Wipe after n unsuccessful password entries.
+                	<characteristic type="HKLM\Comm\Security\Policy\LASSD">
+                    	    <parm name="DeviceWipeThreshold" value="6"/>
+            		</characteristic>
+// Show password reminder after n attemps
+                	<characteristic type="HKLM\Comm\Security\Policy\LASSD">
+                    	    <parm name="CodewordFrequency" value="3"/>
+                	</characteristic>
+// if not send there is no PIN required
+                        <characteristic type="HKLM\Comm\Security\Policy\LASSD\LAP\lap_pw">
+                            <parm name="MinimumPasswordLength" value="5"/>
+                        </characteristic>
+// 0 = require alphanum, 1 = require numeric, 2 = anything
+                        <characteristic type="HKLM\Comm\Security\Policy\LASSD\LAP\lap_pw">
+                            <parm name="PasswordComplexity" value="2"/>
+                        </characteristic>
+                    </characteristic>
+*/
                 } else if ($policytype == 'MS-EAS-Provisioning-WBXML') {
 		    $encoder->startTag('Provision:EASProvisionDoc');
 		    $encoder->startTag('Provision:DevicePasswordEnabled');$encoder->content('0');$encoder->endTag();
@@ -1521,7 +1545,7 @@ function HandleProvision($backend, $devid, $protocolversion) {
 		    $encoder->startTag('Provision:MinDevicePasswordLength');$encoder->content('1');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxInactivityTimeDeviceLock');$encoder->content('0');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxDevicePasswordFailedAttempts');$encoder->content('5');$encoder->endTag();
-//		    $encoder->startTag('Provision:MaxAttachmentSize');$encoder->content('5');$encoder->endTag();
+		    $encoder->startTag('Provision:MaxAttachmentSize');$encoder->content('5000000');$encoder->endTag();
 		    $encoder->startTag('Provision:AllowSimpleDevicePassword');$encoder->content('1');$encoder->endTag();
 		    $encoder->startTag('Provision:DevicePasswordExpiration');$encoder->content('0');$encoder->endTag();
 		    $encoder->startTag('Provision:DevicePasswordHistory');$encoder->content('0');$encoder->endTag();
@@ -1595,7 +1619,7 @@ function ParseQuery($decoder, $subquery=NULL) {
 		    ($decoder->getElementStartTag(SYNC_SEARCH_FREETEXT)  	? SYNC_SEARCH_FREETEXT :
 		    ($decoder->getElementStartTag(SYNC_FOLDERID)	  	? SYNC_FOLDERID :
 		    ($decoder->getElementStartTag(SYNC_FOLDERTYPE)	  	? SYNC_FOLDERTYPE :
-		    ($decoder->getElementStartTag(SYNC_DOCUMENTLIBRARY_LINKID) 	? SYNC_FOLDERTYPE :
+		    ($decoder->getElementStartTag(SYNC_DOCUMENTLIBRARY_LINKID) 	? SYNC_DOCUMENTLIBRARY_LINKID :
 		    ($decoder->getElementStartTag(SYNC_POOMMAIL_DATERECEIVED)  	? SYNC_POOMMAIL_DATERECEIVED :
 		    -1))))))))))) != -1) {
 	switch ($type) {
@@ -1643,8 +1667,7 @@ function ParseQuery($decoder, $subquery=NULL) {
 function HandleSearch($backend, $devid, $protocolversion) {
     global $zpushdtd;
     global $input, $output;
-
-    $searchrange = '0';
+    global $auth_user,$auth_domain,$auth_pw;
 
     $decoder = new WBXMLDecoder($input, $zpushdtd);
     $encoder = new WBXMLEncoder($output, $zpushdtd);
@@ -1696,6 +1719,20 @@ function HandleSearch($backend, $devid, $protocolversion) {
             if($decoder->getElementStartTag(SYNC_SEARCH_REBUILDRESULTS)) {
                 if (!($searchrebuildresults = $decoder->getElementContent()))  
             	    $searchqueryrebuildresults = true;
+            	else
+            	    if(!$decoder->getElementEndTag())
+                	return false;
+            }
+            if($decoder->getElementStartTag(SYNC_SEARCH_USERNAME)) {
+                if (!($searchqueryusername = $decoder->getElementContent()))  
+            	    return false;
+            	else
+            	    if(!$decoder->getElementEndTag())
+                	return false;
+            }
+            if($decoder->getElementStartTag(SYNC_SEARCH_PASSWORD)) {
+                if (!($searchquerypassword = $decoder->getElementContent()))  
+            	    return false;
             	else
             	    if(!$decoder->getElementEndTag())
                 	return false;
@@ -1758,6 +1795,20 @@ function HandleSearch($backend, $devid, $protocolversion) {
 
     //START CHANGED dw2412 V12.0 Support
     switch (strtolower($searchname)) {
+	case 'documentlibrary'  : 
+		if (isset($searchqueryusername)) {
+		    if (strpos($searchqueryusername,"\\")) {
+			list($searchquery['username']['domain'],$searchquery['username']['username']) = explode("\\",$searchqueryusername);
+		    } else {
+			$searchquery['username'] = array('domain' => "",'username' => $searchqueryusername);
+		    }
+		} else {
+		    $searchquery['username']['domain'] = $auth_domain;
+		    $searchquery['username']['username'] = $auth_user;
+		};
+            	$searchquery['password'] = (isset($searchquerypassword) ? $searchquerypassword : $auth_pw);
+                $searchquery['range'] = $searchrange;
+            	break;
 	case 'mailbox'  : 
             	$searchquery['rebuildresults'] = $searchqueryrebuildresults;
             	$searchquery['deeptraversal'] =  $searchquerydeeptraversal;
@@ -1784,7 +1835,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
             $encoder->startTag(SYNC_SEARCH_STORE);
 
                 $encoder->startTag(SYNC_SEARCH_STATUS);
-                $encoder->content(1);
+                $encoder->content($result['status']);
                 $encoder->endTag();
 
 		// CHANGED dw2412 AS V12.0 Support (mentain single return way...)
@@ -1803,6 +1854,38 @@ function HandleSearch($backend, $devid, $protocolversion) {
                     	    $returneditems++;
 
 			    switch (strtolower($searchname)) {
+				case 'documentlibrary'  : 
+                    		    $encoder->startTag(SYNC_SEARCH_RESULT);
+                        		$encoder->startTag(SYNC_SEARCH_PROPERTIES);
+					$encoder->startTag(SYNC_DOCUMENTLIBRARY_LINKID);
+                    		    	$encoder->content($u['linkid']);
+					$encoder->endTag();
+					$encoder->startTag(SYNC_DOCUMENTLIBRARY_DISPLAYNAME);
+                    		    	$encoder->content($u['displayname']);
+					$encoder->endTag();
+					$encoder->startTag(SYNC_DOCUMENTLIBRARY_CREATIONDATE);
+                    		    	$encoder->content($u['creationdate']);
+					$encoder->endTag();
+					$encoder->startTag(SYNC_DOCUMENTLIBRARY_LASTMODIFIEDDATE);
+                    		    	$encoder->content($u['lastmodifieddate']);
+					$encoder->endTag();
+					$encoder->startTag(SYNC_DOCUMENTLIBRARY_ISHIDDEN);
+                    		    	$encoder->content($u['ishidden']);
+					$encoder->endTag();
+	    				$encoder->startTag(SYNC_DOCUMENTLIBRARY_ISFOLDER);
+					$encoder->content($u['isfolder']);
+					$encoder->endTag();
+	    				if ($u['isfolder'] == "0") {
+					    $encoder->startTag(SYNC_DOCUMENTLIBRARY_CONTENTLENGTH);
+                    		    	    $encoder->content($u['contentlength']);
+					    $encoder->endTag();
+					    $encoder->startTag(SYNC_DOCUMENTLIBRARY_CONTENTTYPE);
+					    $encoder->content($u['contenttype']);
+					    $encoder->endTag();
+				        }
+                            		$encoder->endTag();//result
+                    		    $encoder->endTag();//properties
+				    break;
 				case 'mailbox'  : 
                     		    $encoder->startTag(SYNC_SEARCH_RESULT);
                         		$encoder->startTag(SYNC_FOLDERTYPE);
@@ -1817,8 +1900,8 @@ function HandleSearch($backend, $devid, $protocolversion) {
                         		$encoder->startTag(SYNC_SEARCH_PROPERTIES);
 				    $msg = $backend->ItemOperationsFetchMailbox($u['uniqueid'], $searchbodypreference);
 				    $msg->encode($encoder);
-                        		$encoder->endTag();//result
-                    		    $encoder->endTag();//properties
+                    		        $encoder->endTag();//properties
+                        	    $encoder->endTag();//result
 				    break;
 				case 'gal'  : 
                     		    $encoder->startTag(SYNC_SEARCH_RESULT);
@@ -1826,17 +1909,17 @@ function HandleSearch($backend, $devid, $protocolversion) {
                             	    $encoder->startTag(SYNC_GAL_DISPLAYNAME);
                             	    $encoder->content($u["fullname"]);
                         	    $encoder->endTag();
-                        	    
-                        	    $encoder->startTag(SYNC_GAL_PHONE);
-                        	    $encoder->content($u["businessphone"]);
-                        	    $encoder->endTag();
+
+                            	    $encoder->startTag(SYNC_GAL_PHONE);
+            			    $encoder->content($u["businessphone"]);
+                            	    $encoder->endTag();
 
                             	    $encoder->startTag(SYNC_GAL_ALIAS);
                             	    $encoder->content($u["username"]);
                             	    $encoder->endTag();
 
-                                    //it's not possible not get first and last name of an user
-    	                    	    //from the gab and user functions, so we just set fullname
+                            	    //it's not possible not get first and last name of an user
+                            	    //from the gab and user functions, so we just set fullname
                             	    //to lastname and leave firstname empty because nokia needs
                             	    //first and lastname in order to display the search result
                             	    $encoder->startTag(SYNC_GAL_FIRSTNAME);
@@ -1844,14 +1927,15 @@ function HandleSearch($backend, $devid, $protocolversion) {
                             	    $encoder->endTag();
 
                             	    $encoder->startTag(SYNC_GAL_LASTNAME);
-                            	    $encoder->content($u["fullname"]);
+                        	    $encoder->content($u["fullname"]);
                             	    $encoder->endTag();
 
-                            	    $encoder->startTag(SYNC_GAL_EMAILADDRESS);
-                            	    $encoder->content($u["emailaddress"]);
-                            	    $encoder->endTag();
-                        		$encoder->endTag();//result
-                    		    $encoder->endTag();//properties
+                        	    $encoder->startTag(SYNC_GAL_EMAILADDRESS);
+                        	    $encoder->content($u["emailaddress"]);
+	                    	    $encoder->endTag();
+                    		
+                    		    $encoder->endTag();//result
+                		    $encoder->endTag();//properties
 				    break;
 			    };
                     }
@@ -1861,7 +1945,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
                     $encoder->endTag();
 
                     $encoder->startTag(SYNC_SEARCH_TOTAL);
-                    $encoder->content(count($rows));
+                    $encoder->content($searchtotal);
                     $encoder->endTag();
                 }
 
@@ -2085,6 +2169,7 @@ function HandleSettings($backend, $devid, $protocolversion) {
 function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
     global $zpushdtd;
     global $input, $output;
+    global $auth_user,$auth_domain,$auth_pw;
 
     $decoder = new WBXMLDecoder($input, $zpushdtd);
     $encoder = new WBXMLEncoder($output, $zpushdtd);
@@ -2104,8 +2189,10 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
 			      ($decoder->getElementStartTag(SYNC_FOLDERID)			 	?   SYNC_FOLDERID			:
 			      ($decoder->getElementStartTag(SYNC_DOCUMENTLIBRARY_LINKID)	 	?   SYNC_DOCUMENTLIBRARY_LINKID		:
 			      ($decoder->getElementStartTag(SYNC_AIRSYNCBASE_FILEREFERENCE)	 	?   SYNC_AIRSYNCBASE_FILEREFERENCE	:
+			      ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_USERNAME)	 	?   SYNC_ITEMOPERATIONS_USERNAME	:
+			      ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_PASSWORD)	 	?   SYNC_ITEMOPERATIONS_PASSWORD	:
 			      ($decoder->getElementStartTag(SYNC_SEARCH_LONGID)			 	?   SYNC_SEARCH_LONGID			:
-		    	      -1)))))))) != -1) {
+		    	      -1)))))))))) != -1) {
     		if ($reqtag == SYNC_ITEMOPERATIONS_OPTIONS) {
 		    if($decoder->getElementStartTag(SYNC_AIRSYNCBASE_BODYPREFERENCE)) {
 		        $bodypreference=array();
@@ -2141,6 +2228,10 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
 		    }
 		} elseif ($reqtag == SYNC_ITEMOPERATIONS_STORE) {
     	    	    $thisio["store"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_ITEMOPERATIONS_USERNAME) {
+    	    	    $thisio["username"] = $decoder->getElementContent();
+		} elseif ($reqtag == SYNC_ITEMOPERATIONS_PASSWORD) {
+    	    	    $thisio["password"] = $decoder->getElementContent();
 		} elseif ($reqtag == SYNC_SEARCH_LONGID) {
     	    	    $thisio["searchlongid"] = $decoder->getElementContent();
 		} elseif ($reqtag == SYNC_AIRSYNCBASE_FILEREFERENCE) {
@@ -2174,56 +2265,105 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
     $encoder->startTag(SYNC_ITEMOPERATIONS_RESPONSE);
     foreach($itemoperations as $value) {
 	switch($value["type"]) {
-	    case "fetch"	:
-		    $encoder->startTag(SYNC_ITEMOPERATIONS_FETCH);
-		    $encoder->startTag(SYNC_ITEMOPERATIONS_STATUS);
-		    $encoder->content(1);
-		    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_STATUS
-		    if (isset($value["airsyncbasefilereference"])) {
-			$encoder->startTag(SYNC_AIRSYNCBASE_FILEREFERENCE);
-			$encoder->content($value["airsyncbasefilereference"]);
-			$encoder->endTag(); // end SYNC_SERVERENTRYID
-		    } else {
-			if (isset($value["folderid"])) {
-    		    	    $encoder->startTag(SYNC_FOLDERID);
-			    $encoder->content($value["folderid"]);
-	    	    	    $encoder->endTag(); // end SYNC_FOLDERID
-			}
-		    	if (isset($value["serverentryid"])) {
-			    $encoder->startTag(SYNC_SERVERENTRYID);
-			    $encoder->content($value["serverentryid"]);
+	    case "fetch" :
+		switch(strtolower($value["store"])) {
+		    case "mailbox" :
+	    		$encoder->startTag(SYNC_ITEMOPERATIONS_FETCH);
+			$encoder->startTag(SYNC_ITEMOPERATIONS_STATUS);
+			$encoder->content(1);
+			$encoder->endTag(); // end SYNC_ITEMOPERATIONS_STATUS
+			if (isset($value["airsyncbasefilereference"])) {
+			    $encoder->startTag(SYNC_AIRSYNCBASE_FILEREFERENCE);
+			    $encoder->content($value["airsyncbasefilereference"]);
 			    $encoder->endTag(); // end SYNC_SERVERENTRYID
-			} 
+			} else {
+			    if (isset($value["folderid"])) {
+    		    		$encoder->startTag(SYNC_FOLDERID);
+				$encoder->content($value["folderid"]);
+	    			$encoder->endTag(); // end SYNC_FOLDERID
+			    }
+		    	    if (isset($value["serverentryid"])) {
+				$encoder->startTag(SYNC_SERVERENTRYID);
+				$encoder->content($value["serverentryid"]);
+				$encoder->endTag(); // end SYNC_SERVERENTRYID
+			    } 
+			    if (isset($value["searchlongid"])) {
+				$ids = $backend->ItemOperationsGetIDs($value['searchlongid']);
+    		    		$encoder->startTag(SYNC_FOLDERID);
+				$encoder->content($ids["folderid"]);
+	    	    		$encoder->endTag(); // end SYNC_FOLDERID
+				$encoder->startTag(SYNC_SERVERENTRYID);
+				$encoder->content($ids["serverentryid"]);
+				$encoder->endTag(); // end SYNC_SERVERENTRYID
+			    } 
+            		    $encoder->startTag(SYNC_FOLDERTYPE);
+                	    $encoder->content("Email");
+            		    $encoder->endTag();
+		        }
+            		$encoder->startTag(SYNC_ITEMOPERATIONS_PROPERTIES);
+			if (isset($value['bodypreference'])) $encoder->_bodypreference = $value['bodypreference'];
 			if (isset($value["searchlongid"])) {
-			    $ids = $backend->ItemOperationsGetIDs($value['searchlongid']);
-    		    	    $encoder->startTag(SYNC_FOLDERID);
-			    $encoder->content($ids["folderid"]);
-	    	    	    $encoder->endTag(); // end SYNC_FOLDERID
-			    $encoder->startTag(SYNC_SERVERENTRYID);
-			    $encoder->content($ids["serverentryid"]);
-			    $encoder->endTag(); // end SYNC_SERVERENTRYID
-			} 
-            		$encoder->startTag(SYNC_FOLDERTYPE);
-                	$encoder->content("Email");
-            		$encoder->endTag();
-		    }
-            	    $encoder->startTag(SYNC_ITEMOPERATIONS_PROPERTIES);
-		    if (isset($value['bodypreference'])) $encoder->_bodypreference = $value['bodypreference'];
-		    if (isset($value["searchlongid"])) {
-			$msg = $backend->ItemOperationsFetchMailbox($value['searchlongid'], $value['bodypreference']);
-		    } else if(isset($value["airsyncbasefilereference"])) {
-			$msg = $backend->ItemOperationsGetAttachmentData($value["airsyncbasefilereference"]);
-		    } else {
-			$msg = $backend->Fetch($value['folderid'], $value['serverentryid'], $value['bodypreference']);
-		    };
-		    $msg->encode($encoder);
+			    $msg = $backend->ItemOperationsFetchMailbox($value['searchlongid'], $value['bodypreference']);
+			} else if(isset($value["airsyncbasefilereference"])) {
+			    $msg = $backend->ItemOperationsGetAttachmentData($value["airsyncbasefilereference"]);
+			} else {
+			    $msg = $backend->Fetch($value['folderid'], $value['serverentryid'], $value['bodypreference']);
+			};
+			$msg->encode($encoder);
 		    
-                    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_PROPERTIES
-		    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_FETCH
-		    break;
-	    default		:
-		    debugLog ("Operations ".$value["type"]." not supported by HandleItemOperations");
-		    break;
+            		$encoder->endTag(); // end SYNC_ITEMOPERATIONS_PROPERTIES
+			$encoder->endTag(); // end SYNC_ITEMOPERATIONS_FETCH
+			break;
+		    case "documentlibrary" :
+			if (isset($value['username'])) {
+			    if (strpos($value['username'],"\\")) {
+				list($cred['username']['domain'],$cred['username']['username']) = explode("\\",$value['username']);
+			    } else {
+				$cred['username'] = array('domain' => "",'username' => $value['username']);
+			    }
+			} else {
+			    $cred['username']['domain'] = $auth_domain;
+			    $cred['username']['username'] = $auth_user;
+			}
+        		$cred['password'] = (isset($value['password']) ? $value['password'] : $auth_pw);
+			$result = $backend->ItemOperationsGetDocumentLibraryLink($value["documentlibrarylinkid"],$cred);
+	    		$encoder->startTag(SYNC_ITEMOPERATIONS_FETCH);
+			$encoder->startTag(SYNC_ITEMOPERATIONS_STATUS);
+			$encoder->content($result['status']);
+			// $encoder->content(1);
+			$encoder->endTag(); // end SYNC_ITEMOPERATIONS_STATUS
+			$encoder->startTag(SYNC_DOCUMENTLIBRARY_LINKID);
+			$encoder->content($value["documentlibrarylinkid"]);
+			$encoder->endTag(); // end SYNC_DOCUMENTLIBRARY_LINKID
+			if ($result['status'] == 1) {
+            		    $encoder->startTag(SYNC_ITEMOPERATIONS_PROPERTIES);
+                	    if ($multipart == true) {
+                		$encoder->_bodyparts[] = $result['data'];
+                		$encoder->startTag(SYNC_ITEMOPERATIONS_PART);
+                		$encoder->content("".(sizeof($encoder->_bodyparts))."");
+                		$encoder->endTag();
+			    } else {
+        			$encoder->startTag(SYNC_ITEMOPERATIONS_DATA);
+				$encoder->content($result['data']);
+				$encoder->endTag(); // end SYNC_ITEMOPERATIONS_DATA
+            		    };
+            		    $encoder->startTag(SYNC_ITEMOPERATIONS_VERSION);
+            		    $encoder->content(gmstrftime("%Y-%m-%dT%H:%M:%S.000Z", $result['version']));
+			    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_VERSION
+			    $encoder->endTag(); // end SYNC_ITEMOPERATIONS_PROPERTIES
+			} else {
+			    $encoder->_bodyparts = array();
+			}
+			$encoder->endTag(); // end SYNC_ITEMOPERATIONS_FETCH
+			break;
+		    default :	    
+			debugLog ("Store ".$value["type"]." not supported by HandleItemOperations");
+		        break;
+		}
+		break;
+	    default :
+		debugLog ("Operations ".$value["type"]." not supported by HandleItemOperations");
+		break;
 	}
     }
     $encoder->endTag(); //end SYNC_ITEMOPERATIONS_RESPONSE

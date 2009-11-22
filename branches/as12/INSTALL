@@ -104,3 +104,7 @@ chmod 777 /var/www/z-push/debug.txt
 
 The debug.txt file will then collect debug information from your
 synchronisation.
+
+DocumentLibrary Support
+
+pecl install fileinfo

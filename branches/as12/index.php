@@ -30,6 +30,10 @@ set_time_limit(SCRIPT_TIMEOUT);
 debugLog("Start ------ THIS IS AN UNOFFICIAL AS 12 DEVELOPER VERSION!");
 debugLog("Z-Push version: $zpush_version");
 debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
+//debugLog(print_r($_SERVER,true));
+//debugLog(print_r($_GET,true));
+//debugLog(print_r($_POST,true));
+//debugLog(print_r(apache_request_headers(),true));
 
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
@@ -106,7 +110,7 @@ if (isset($requestheaders["Accept-Encoding"])) {
 
     if (array_search("gzip",$encodings) !== false &&
 	function_exists('gzencode')) {
-	ini_set("zlib.output_compression",'1');
+	ini_set("zlib.output_compression",'0');
 	debugLog("Enabled zlib output compression");
 	define ("GZIP_OUTPUT",true);
     } else {
@@ -165,8 +169,9 @@ if($backend->Logon($auth_user, $auth_domain, $auth_pw) == false  && !$policykey)
 
 // check policy header 
 if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] != 'OPTIONS' && $cmd != 'Ping' && $cmd != 'Provision' && 
-    substr($devid,0,6) != "HTCAnd" &&
-    $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS) {
+    $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS &&
+    (LOOSE_PROVISIONING === false ||
+    (LOOSE_PROVISIONING === true && isset($requestheaders["X-MS-PolicyKey"])))) {    	
     header("HTTP/1.1 449 Retry after sending a PROVISION command");
     header("MS-Server-ActiveSync: 6.5.7638.1");
     header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0");
@@ -242,20 +247,25 @@ ob_end_clean();
 // the buffer.
 if (!headers_sent()) { // dw2412 need to do this since i.E. getAttachmentData Request starts output in Backend...
     // START CHANGED dw2412 Support gzip compression in result
+    // TODO: Find out what the hell is going on with compress DocumentLibrary body. If some needs the source
+    //	 pakets from windump, please mail me.
     if (GZIP_OUTPUT == true &&
-	($gz_data = gzencode($data,9,FORCE_GZIP)) !== false) {
-	if (strlen($data) > strlen($gz_data)) {
-    	    header("Content-Encoding: gzip");
-	    header("Content-Length: ".strlen($gz_data));
-	    print $gz_data;
-    	    debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send compressed data");
+	!defined("OVERRIDE_GZIP") &&
+        ($gz_data = gzencode($data,9,FORCE_GZIP)) !== false) {
+	$gzlen=strlen(bin2hex($gz_data))/2;
+        if ($len > $gzlen) {
+    	    debugLog("GZip Results: Original Size ".$len." / Compress Size ".$gzlen." byte(s) --> Send compressed data");
+	    header("Content-Encoding: gzip");
+	    header("Content-Length: ".$gzlen);
+    	    print $gz_data;
 	} else {
-    	    header("Content-Length: $len");
-    	    print $data;
-    	    debugLog("GZip Results: Original Size ".strlen($data)." / Compress Size ".strlen($gz_data)." --> Send uncompressed data");
+	    debugLog("GZip Results: Original Size ".$len." / Compress Size ".$gzlen." byte(s) --> Send uncompressed data");
+	    header("Content-Length: ".$len);
+	    print $data;
 	}
     } else {
-        header("Content-Length: $len");
+	debugLog("Output Results: GZip not used send Original Size ".$len." byte(s) --> Send uncompressed data");
+	header("Content-Length: ".$len);
 	print $data;
     }
     // END CHANGED dw2412 Support gzip compression in result

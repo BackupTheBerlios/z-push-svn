@@ -577,7 +577,7 @@ class WBXMLEncoder {
 		$sizeinfo = pack("iii",sizeof($this->_bodyparts)+1,$blockstart,$len);
 		foreach($this->_bodyparts as $bp) {
 		    $blockstart = $blockstart + $len;
-		    $len = strlen($bp);
+		    $len = strlen(bin2hex($bp))/ 2;
 		    $sizeinfo .= pack("ii",$blockstart,$len);
 		}
 		fwrite($this->_out,$sizeinfo);

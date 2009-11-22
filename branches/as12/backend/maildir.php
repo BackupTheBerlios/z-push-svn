@@ -64,7 +64,7 @@ class BackendMaildir extends BackendDiff {
      * want it in 'sent items', then the next sync on the 'sent items' folder should return
      * the new message as any other new message in a folder.
      */
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
+    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {
         // Unimplemented
         return true;
     }
@@ -272,7 +272,7 @@ class BackendMaildir extends BackendDiff {
      *
      * Bodysize should always be the original body size.
      */
-    function GetMessage($folderid, $id, $truncsize) {
+    function GetMessage($folderid, $id, $truncsize, $mimesupport = 0) {
         if($folderid != 'root')
             return false;
 

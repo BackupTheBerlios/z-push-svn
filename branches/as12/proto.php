@@ -42,6 +42,10 @@ class SyncAttachment extends Streamer {
     var $attname;
     var $attoid;
     var $attremoved;
+    var $isinline;
+    var $contentlocation;
+    var $contentid;
+    var $method;
 
     function SyncAttachment() {
         $mapping = array(
@@ -168,6 +172,7 @@ class SyncMeetingRequest extends Streamer {
 
 class SyncMail extends Streamer {
     var $body;
+    var $html;
     var $bodysize;
     var $bodytruncated;
     var $datereceived;
@@ -206,14 +211,18 @@ class SyncMail extends Streamer {
                                 SYNC_POOMMAIL_MIMETRUNCATED => array ( STREAMER_VAR => "mimetruncated" ),//
                                 SYNC_POOMMAIL_MIMEDATA => array ( STREAMER_VAR => "mimedata", STREAMER_TYPE => STREAMER_TYPE_MAPI_STREAM),//
                                 SYNC_POOMMAIL_MIMESIZE => array ( STREAMER_VAR => "mimesize" ),//
-                                SYNC_POOMMAIL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
-                                SYNC_POOMMAIL_BODYSIZE => array (STREAMER_VAR => "bodysize"),
-                                SYNC_POOMMAIL_BODY => array (STREAMER_VAR => "body"),
                                 SYNC_POOMMAIL_MESSAGECLASS => array (STREAMER_VAR => "messageclass"),
                                 SYNC_POOMMAIL_MEETINGREQUEST => array (STREAMER_VAR => "meetingrequest", STREAMER_TYPE => "SyncMeetingRequest"),
                                 SYNC_POOMMAIL_REPLY_TO => array (STREAMER_VAR => "reply_to"),
                               );
 // START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion < 12.0) {
+	    $mapping += array(
+                SYNC_POOMMAIL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
+                SYNC_POOMMAIL_BODYSIZE => array (STREAMER_VAR => "bodysize"),
+                SYNC_POOMMAIL_BODY => array (STREAMER_VAR => "body"),
+    	    );
+        }
         if(isset($protocolversion) && $protocolversion >= 12.0) {
 	    $mapping += array(SYNC_AIRSYNCBASE_NATIVEBODYTYPE => array(STREAMER_VAR => "airsyncbasenativebodytype"),
                               SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
@@ -294,16 +303,13 @@ class SyncContact extends Streamer {
     var $airsyncbasebody;
 
     function SyncContact() {
-        global $protocolversion;
+        global $protocolversion, $devid;
 
         $mapping = array (
             SYNC_POOMCONTACTS_ANNIVERSARY => array (STREAMER_VAR => "anniversary", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES  ),
             SYNC_POOMCONTACTS_ASSISTANTNAME => array (STREAMER_VAR => "assistantname"),
             SYNC_POOMCONTACTS_ASSISTNAMEPHONENUMBER => array (STREAMER_VAR => "assistnamephonenumber"),
             SYNC_POOMCONTACTS_BIRTHDAY => array (STREAMER_VAR => "birthday", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES  ),
-            SYNC_POOMCONTACTS_BODY => array (STREAMER_VAR => "body"),
-            SYNC_POOMCONTACTS_BODYSIZE => array (STREAMER_VAR => "bodysize"),
-            SYNC_POOMCONTACTS_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
             SYNC_POOMCONTACTS_BUSINESS2PHONENUMBER => array (STREAMER_VAR => "business2phonenumber"),
             SYNC_POOMCONTACTS_BUSINESSCITY => array (STREAMER_VAR => "businesscity"),
             SYNC_POOMCONTACTS_BUSINESSCOUNTRY => array (STREAMER_VAR => "businesscountry"),
@@ -348,16 +354,32 @@ class SyncContact extends Streamer {
             SYNC_POOMCONTACTS_YOMICOMPANYNAME => array (STREAMER_VAR => "yomicompanyname"),
             SYNC_POOMCONTACTS_YOMIFIRSTNAME => array (STREAMER_VAR => "yomifirstname"),
             SYNC_POOMCONTACTS_YOMILASTNAME => array (STREAMER_VAR => "yomilastname"),
-            SYNC_POOMCONTACTS_RTF => array (STREAMER_VAR => "rtf"),
             SYNC_POOMCONTACTS_PICTURE => array (STREAMER_VAR => "picture"),
             SYNC_POOMCONTACTS_CATEGORIES => array (STREAMER_VAR => "categories", STREAMER_ARRAY => SYNC_POOMCONTACTS_CATEGORY ),
     );
 
 // START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion < 12.0) {
+	    $mapping += array(
+		SYNC_POOMCONTACTS_RTF => array (STREAMER_VAR => "rtf"),
+        	SYNC_POOMCONTACTS_BODY => array (STREAMER_VAR => "body"),
+        	SYNC_POOMCONTACTS_BODYSIZE => array (STREAMER_VAR => "bodysize"),
+        	SYNC_POOMCONTACTS_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
+    	    );
+        }
         if(isset($protocolversion) && $protocolversion >= 12.0) {
 	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
         }
 // END ADDED dw2412 Support V12.0
+// START ADDED dw2412 Workaround for Palm Pre, to stop breakdown in AS 2.5 Mode....
+	if (isset($protocolversion) && $protocolversion == 2.5 && 
+	    substr($devid,0,4) == "PALM" &&
+	    ENABLE_PALM_PRE_AS25_CONTACT_FIX === true) {
+            $mapping += array(
+        	SYNC_POOMTASKS_RTF => array (STREAMER_VAR => "rtf"),				
+	    );
+	} 
+// END ADDED dw2412 Workaround for Palm, to stop breakdown.
 
         if(isset($protocolversion) && $protocolversion >= 2.5) {
             $mapping += array(
@@ -421,11 +443,8 @@ class SyncAppointment extends Streamer {
                       SYNC_POOMCAL_BUSYSTATUS => array (STREAMER_VAR => "busystatus"),
                       SYNC_POOMCAL_ALLDAYEVENT => array (STREAMER_VAR => "alldayevent"),
                       SYNC_POOMCAL_REMINDER => array (STREAMER_VAR => "reminder"),
-                      SYNC_POOMCAL_RTF => array (STREAMER_VAR => "rtf"),
                       SYNC_POOMCAL_MEETINGSTATUS => array (STREAMER_VAR => "meetingstatus"),
                       SYNC_POOMCAL_ATTENDEES => array (STREAMER_VAR => "attendees", STREAMER_TYPE => "SyncAttendee", STREAMER_ARRAY => SYNC_POOMCAL_ATTENDEE),
-                      SYNC_POOMCAL_BODY => array (STREAMER_VAR => "body"),
-                      SYNC_POOMCAL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
                       SYNC_POOMCAL_EXCEPTIONS => array (STREAMER_VAR => "exceptions", STREAMER_TYPE => "SyncAppointment", STREAMER_ARRAY => SYNC_POOMCAL_EXCEPTION),
                       SYNC_POOMCAL_DELETED => array (STREAMER_VAR => "deleted"),
                       SYNC_POOMCAL_EXCEPTIONSTARTTIME => array (STREAMER_VAR => "exceptionstarttime", STREAMER_TYPE => STREAMER_TYPE_DATE),
@@ -433,6 +452,13 @@ class SyncAppointment extends Streamer {
 
         );
 // START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion < 12.0) {
+	    $mapping += array(
+                      SYNC_POOMCAL_BODY => array (STREAMER_VAR => "body"),
+                      SYNC_POOMCAL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
+                      SYNC_POOMCAL_RTF => array (STREAMER_VAR => "rtf"),
+    	    );
+        }
         if(isset($protocolversion) && $protocolversion >= 12.0) {
 	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
         }
@@ -510,7 +536,6 @@ class SyncTask extends Streamer {
         global $protocolversion;
 // END ADDED dw2412 Support V12.0
         $mapping = array (
-                      SYNC_POOMTASKS_BODY => array (STREAMER_VAR => "body"),
                       SYNC_POOMTASKS_COMPLETE => array (STREAMER_VAR => "complete"),
                       SYNC_POOMTASKS_DATECOMPLETED => array (STREAMER_VAR => "datecompleted", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
                       SYNC_POOMTASKS_DUEDATE => array (STREAMER_VAR => "duedate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
@@ -525,11 +550,16 @@ class SyncTask extends Streamer {
                       SYNC_POOMTASKS_STARTDATE => array (STREAMER_VAR => "startdate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
                       SYNC_POOMTASKS_UTCSTARTDATE => array (STREAMER_VAR => "utcstartdate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
                       SYNC_POOMTASKS_SUBJECT => array (STREAMER_VAR => "subject"),
-                      SYNC_POOMTASKS_RTF => array (STREAMER_VAR => "rtf"),
                       SYNC_POOMTASKS_CATEGORIES => array (STREAMER_VAR => "categories", STREAMER_ARRAY => SYNC_POOMTASKS_CATEGORY),
         );
 
 // START ADDED dw2412 Support V12.0
+        if(isset($protocolversion) && $protocolversion < 12.0) {
+	    $mapping += array(
+                      SYNC_POOMTASKS_BODY => array (STREAMER_VAR => "body"),
+                      SYNC_POOMTASKS_RTF => array (STREAMER_VAR => "rtf"),
+    	    );
+        }
         if(isset($protocolversion) && $protocolversion >= 12.0) {
 	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"));
         }

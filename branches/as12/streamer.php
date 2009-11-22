@@ -155,37 +155,43 @@ class Streamer {
 	    	    $this->airsyncbaseattachments[$i]->estimateddatasize = $this->attachments[$i]->attsize;
 		    $this->airsyncbaseattachments[$i]->displayname = $this->attachments[$i]->displayname;
 		    $this->airsyncbaseattachments[$i]->filereference = $this->attachments[$i]->attname;
+		    $this->airsyncbaseattachments[$i]->isinline = $this->attachments[$i]->isinline;
+		    $this->airsyncbaseattachments[$i]->contentlocation = $this->attachments[$i]->contentlocation;
+		    $this->airsyncbaseattachments[$i]->contentid = $this->attachments[$i]->contentid;
+		    if (isset($this->attachments[$i]->_data)) $this->airsyncbaseattachments[$i]->_data = $this->attachments[$i]->_data;
 		}
 		unset($this->attachments);
 	    }
 	}
 	if(isset($this->_mapping["AirSyncBase:Body"])) {
-	    $this->airsyncbasebody = new SyncAirSyncBaseBody();
-	    if (isset($this->rtf) && 
-		isset($encoder->_bodypreference[3]) && 
-		strlen($this->rtf) > 0 &&
-		strlen($this->rtf) < $encoder->_bodypreference[3]["TruncationSize"]) { // rtf in case supported and not truncated
-		$this->airsyncbasebody->type = 3;
-		$this->airsyncbasebody->data = $this->rtf;
-		$this->airsyncbasebody->estimateddatasize = strlen($this->rtf);
-		$this->body="";
-		$this->bodytruncated="";
-		$this->bodysize="";
-		$this->rtf="";
-	    } elseif (isset($this->body) && isset($encoder->_bodypreference[1])) { // plain text
-		$this->airsyncbasebody->type = 1;
-		$this->airsyncbasebody->estimateddatasize = strlen($this->body);
-		if (isset($this->bodytruncated)) {
-		    if ($this->bodytruncated > 0) {
-			$this->airsyncbasebody->truncated = $this->bodytruncated;
-			$this->airsyncbasebody->estimateddatasize = $this->bodysize;
+	    if (!isset($this->airsyncbasebody)) {
+		$this->airsyncbasebody = new SyncAirSyncBaseBody();
+		if (isset($this->rtf) && 
+		    isset($encoder->_bodypreference[3]) && 
+		    strlen($this->rtf) > 0 &&
+		    strlen($this->rtf) < $encoder->_bodypreference[3]["TruncationSize"]) { // rtf in case supported and not truncated
+		    $this->airsyncbasebody->type = 3;
+		    $this->airsyncbasebody->data = $this->rtf;
+		    $this->airsyncbasebody->estimateddatasize = strlen($this->rtf);
+		    $this->body="";
+		    $this->bodytruncated="";
+		    $this->bodysize="";
+		    $this->rtf="";
+		} elseif (isset($this->body) && isset($encoder->_bodypreference[1])) { // plain text
+		    $this->airsyncbasebody->type = 1;
+		    $this->airsyncbasebody->estimateddatasize = strlen($this->body);
+		    if (isset($this->bodytruncated)) {
+			if ($this->bodytruncated > 0) {
+			    $this->airsyncbasebody->truncated = $this->bodytruncated;
+		    	    $this->airsyncbasebody->estimateddatasize = $this->bodysize;
+			} else $this->airsyncbasebody->truncated = 0;
 		    } else $this->airsyncbasebody->truncated = 0;
-		} else $this->airsyncbasebody->truncated = 0;
-		$this->airsyncbasebody->data = $this->body;
-		$this->body="";
-		$this->bodytruncated="";
-		$this->bodysize="";
-		$this->rtf="";
+		    $this->airsyncbasebody->data = $this->body;
+		    $this->body="";
+		    $this->bodytruncated="";
+		    $this->bodysize="";
+		    $this->rtf="";
+		}
 	    }
 //	    if (isset($this->_mapping["html"]) && isset($encoder->_bodypreference[3])) { // html
 //	    }
@@ -234,6 +240,7 @@ class Streamer {
                         continue;
                     } else if ($encoder->_multipart == true &&
                 		($tag == SYNC_AIRSYNCBASE_DATA ||
+                		 $tag == SYNC_AIRSYNCBASE_ATTACHMENT ||
                 		 $tag == SYNC_ITEMOPERATIONS_DATA)) {  // START ADDED dw2412 to support mulitpart output
                 	$encoder->_bodyparts[] = $this->$map[STREAMER_VAR];
                 	$encoder->startTag(SYNC_ITEMOPERATIONS_PART);
