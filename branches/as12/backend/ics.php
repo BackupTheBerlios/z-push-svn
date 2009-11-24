@@ -1577,7 +1577,7 @@ class PHPContentsImportProxy extends MAPIMapping {
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
     	    }
 	    // In case we have nothing for the body, send at least a blank...
-    	    if (!isset($message->airsyncbasebody->data) || strlen($message->airsyncbasebody->data) == 0)
+    	    if ($message->airsyncbasebody->type != 3 && (!isset($message->airsyncbasebody->data) || strlen($message->airsyncbasebody->data) == 0))
         	$message->airsyncbasebody->data = " ";
     	}
 	// END ADDED dw2412 Support Protocol Version 12 (added bodypreference compare)
