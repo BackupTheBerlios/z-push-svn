@@ -663,26 +663,47 @@ class ImportContentsChangesICS extends MAPIMapping {
 		$delflags[] = $this->_getPropIDFromString($emailflag["flagstatus"]);
 		$delflags[] = $this->_getPropIDFromString($emailflag["flagicon"]);
 	    }
-	    if (isset($flag->flagtype) && $flag->flagtype!="") $setflags += array($this->_getPropIDFromString($emailflag["flagtype"]) => $flag->flagtype);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["flagtype"]);
-	    if (isset($flag->startdate) && $flag->startdate!="") $setflags += array($this->_getPropIDFromString($emailflag["startdate"]) => $flag->startdate);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["startdate"]);
-	    if (isset($flag->duedate) && $flag->duedate!="") $setflags += array($this->_getPropIDFromString($emailflag["duedate"]) => $flag->duedate);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["duedate"]);
-	    if (isset($flag->datecompleted) && $flag->datecompleted!="") $setflags += array($this->_getPropIDFromString($emailflag["datecompleted"]) => $flag->datecompleted);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["datecompleted"]);
-	    if (isset($flag->reminderset) && $flag->reminderset!="") $setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => $flag->reminderset);
-		else 
-		if ($flag->flagstatus > 0) $setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => "0");
-		    else $delflags[] = $this->_getPropIDFromString($emailflag["reminderset"]);
-	    if (isset($flag->remindertime) && $flag->remindertime!="") $setflags += array($this->_getPropIDFromString($emailflag["remindertime"]) => $flag->remindertime);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["remindertime"]);
-	    if (isset($flag->ordinaldate) && $flag->ordinaldate!="") $setflags += array($this->_getPropIDFromString($emailflag["ordinaldate"]) => $flag->ordinaldate);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["ordinaldate"]);
-	    if (isset($flag->subordinaldate) && $flag->subordinaldate!="") $setflags += array($this->_getPropIDFromString($emailflag["subordinaldate"]) => $flag->subordinaldate);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["subordinaldate"]);
-	    if (isset($flag->completetime) && $flag->completetime!="") $setflags += array($this->_getPropIDFromString($emailflag["completetime"]) => $flag->completetime);
-		else $delflags[] = $this->_getPropIDFromString($emailflag["completetime"]);
+
+	    // dw2412 in case the flag should be removed... just do it compatible with o2k7	    	    
+	    if ((isset($flag->flagstatus) && $flag->flagstatus == 0) || !isset($flag->flagstatus)) {
+		$delflags[] = $this->_getPropIDFromString($emailflag["flagstatus"]);
+		$delflags[] = $this->_getPropIDFromString($emailflag["flagicon"]);
+		$delflags[] = $this->_getPropIDFromString("PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x8104");
+		$delflags[] = $this->_getPropIDFromString("PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x8105");
+		$delflags[] = $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516");
+		$delflags[] = $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517");
+		$delflags[] = $this->_getPropIDFromString("PT_SYSTIME:{00062006-0000-0000-C000-000000000046}:0x85A0");
+		$delflags[] = $this->_getPropIDFromString("PT_STRING8:{00062006-0000-0000-C000-000000000046}:0x85A1");
+		$delflags[] = $this->_getPropIDFromString("PT_STRING8:{00062006-0000-0000-C000-000000000046}:0x85A4");
+		$setflags += array($this->_getPropIDFromString("PT_STRING8:{00062008-0000-0000-C000-000000000046}:0x8530") => "");
+		$setflags += array($this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => "0");
+		$setflags += array($this->_getPropIDFromString("PT_LONG:{00062003-0000-0000-C000-000000000046}:0x8101") => "0");
+		$setflags += array($this->_getPropIDFromString("PT_DOUBLE:{00062003-0000-0000-C000-000000000046}:0x8102") => "0");
+		$setflags += array($this->_getPropIDFromString("PT_BOOLEAN:{00062003-0000-0000-C000-000000000046}:0x811C") => "0");
+		$setflags += array(mapi_prop_tag(PT_LONG,0x0E2B) => "0"); //dw2412 responsible for displaying flag in O2K7, added as 'PR_TODO_ITEM_FLAGS' to the mapitags.php
+		$setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => "0");
+	    } else {
+		if (isset($flag->flagtype) && $flag->flagtype!="") $setflags += array($this->_getPropIDFromString($emailflag["flagtype"]) => $flag->flagtype);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["flagtype"]);
+		if (isset($flag->startdate) && $flag->startdate!="") $setflags += array($this->_getPropIDFromString($emailflag["startdate"]) => $flag->startdate);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["startdate"]);
+	        if (isset($flag->duedate) && $flag->duedate!="") $setflags += array($this->_getPropIDFromString($emailflag["duedate"]) => $flag->duedate);
+	    	    else $delflags[] = $this->_getPropIDFromString($emailflag["duedate"]); 
+		if (isset($flag->datecompleted) && $flag->datecompleted!="") $setflags += array($this->_getPropIDFromString($emailflag["datecompleted"]) => $flag->datecompleted);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["datecompleted"]);
+		if (isset($flag->reminderset) && $flag->reminderset!="")  
+		    $setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => $flag->reminderset);
+		    else if ($flag->flagstatus > 0) $setflags += array($this->_getPropIDFromString($emailflag["reminderset"]) => "0");
+		        else $delflags[] = $this->_getPropIDFromString($emailflag["reminderset"]);
+		if (isset($flag->remindertime) && $flag->remindertime!="") $setflags += array($this->_getPropIDFromString($emailflag["remindertime"]) => $flag->remindertime);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["remindertime"]);
+		if (isset($flag->ordinaldate) && $flag->ordinaldate!="") $setflags += array($this->_getPropIDFromString($emailflag["ordinaldate"]) => $flag->ordinaldate);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["ordinaldate"]);
+		if (isset($flag->subordinaldate) && $flag->subordinaldate!="") $setflags += array($this->_getPropIDFromString($emailflag["subordinaldate"]) => $flag->subordinaldate);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["subordinaldate"]);
+		if (isset($flag->completetime) && $flag->completetime!="") $setflags += array($this->_getPropIDFromString($emailflag["completetime"]) => $flag->completetime);
+		    else $delflags[] = $this->_getPropIDFromString($emailflag["completetime"]);
+	    }
 	    // hopefully I'm doing this right. It should prevent the back sync of whole message
 	    mapi_importcontentschanges_importmessagechange($this->importer, $props, $flags, $mapimessage);
 	    mapi_setprops($mapimessage,$setflags);
