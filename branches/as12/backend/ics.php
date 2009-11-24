@@ -423,7 +423,8 @@ class MAPIMapping {
 
     // Returns TRUE if it is the summer and therefore DST is in effect
     function _isDST($localtime, $tz) {
-        if(!isset($tz) || !is_array($tz))
+	// dw2412 in case the dststartmonth or dstendmonth is 0 we need to abort. irregualar tz definition (which could mean none)
+        if(!isset($tz) || !is_array($tz) || $tz["dststartmonth"] == 0 || $tz["endstartmonth"] == 0)
             return false;
 
         $year = gmdate("Y", $localtime);
