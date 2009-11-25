@@ -1787,7 +1787,9 @@ class PHPContentsImportProxy extends MAPIMapping {
             foreach($recurrence->recur["deleted_occurences"] as $deleted) {
                 $exception = new SyncAppointment();
 
-                $exception->exceptionstarttime = $this->_getGMTTimeByTZ($this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60, $tz);
+		//dw2412 This needs to be Just a localtime starting from midnight. Not in GMT! Has to match the time of the main series!
+                //$exception->exceptionstarttime = $this->_getGMTTimeByTZ($this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60, $tz);
+                $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60;
                 $exception->deleted = "1";
 
                 if(!isset($message->exceptions))
