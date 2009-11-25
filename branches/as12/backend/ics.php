@@ -1760,12 +1760,13 @@ class PHPContentsImportProxy extends MAPIMapping {
 
                 // start, end, basedate, subject, remind_before, reminderset, location, busystatus, alldayevent, label
 
+		//dw2412 This needs to be just a localtimestamp. Not in GMT! Has to match the time of the main series!
                 if(isset($change["start"]))
-                    $exception->starttime = $this->_getGMTTimeByTZ($change["start"], $tz);
+                    $exception->starttime = $change["start"];
                 if(isset($change["end"]))
-                    $exception->endtime = $this->_getGMTTimeByTZ($change["end"], $tz);
+                    $exception->endtime = $change["end"];
                 if(isset($change["basedate"]))
-                    $exception->exceptionstarttime = $this->_getGMTTimeByTZ($this->_getDayStartOfTimestamp($change["basedate"]) + $recurrence->recur["startocc"] * 60, $tz);
+                    $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($change["basedate"]) + $recurrence->recur["startocc"] * 60;
                 if(isset($change["subject"]))
                     $exception->subject = w2u($change["subject"]);
                 if(isset($change["reminder_before"]) && $change["reminder_before"])
@@ -1788,7 +1789,6 @@ class PHPContentsImportProxy extends MAPIMapping {
                 $exception = new SyncAppointment();
 
 		//dw2412 This needs to be Just a localtime starting from midnight. Not in GMT! Has to match the time of the main series!
-                //$exception->exceptionstarttime = $this->_getGMTTimeByTZ($this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60, $tz);
                 $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60;
                 $exception->deleted = "1";
 
