@@ -2077,20 +2077,12 @@ class PHPContentsImportProxy extends MAPIMapping {
         	    if ($row[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) $attach->displayname .= w2u(".eml");
 		    // END CHANGED dw2412 EML Attachment
 
-		    if ($attachprops[PR_ATTACH_FLAGS] == 0x04) {
+		    // in case the attachment has got a content id it is an inline one...
+		    if (isset($attachprops[PR_ATTACH_CONTENT_ID])) {
 			$attach->isinline=true;
-			$attach->attmethod=6;
-			$attach->contentid= $attachprops[PR_ATTACH_CONTENT_ID];
+			$attach->attmethod=$attachprops[PR_ATTACH_METHOD];
+			$attach->contentid=$attachprops[PR_ATTACH_CONTENT_ID];
 			$attach->contenttype = $attachprops[PR_ATTACH_MIME_TAG];
-//			if ($message->airsyncbasebody->type == 2) {
-//			    $attach->_data = "";
-//    			    while(1) {
-//        		        $data = mapi_stream_read($stream, 4096);
-//        			if(strlen($data) == 0)
-//		        	    break;
-//		        	$attach->_data .= $data;
-//    			    }
-//			}
 		    }
 		    
                     $attach->attname = bin2hex($this->_folderid) . ":" . bin2hex($sourcekey) . ":" . $row[PR_ATTACH_NUM];
