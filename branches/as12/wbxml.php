@@ -575,10 +575,13 @@ class WBXMLEncoder {
 		ob_start();
 		$blockstart = ((sizeof($this->_bodyparts)+1)*2)*4+4;
 		$sizeinfo = pack("iii",sizeof($this->_bodyparts)+1,$blockstart,$len);
+		debugLog("GZip compressed Multipart Debug Output Total parts " . (sizeof($this->_bodyparts)+1));
+		debugLog(sprintf("Datapart BlockStart: %d Len: %d Content: %s",$blockstart,$len,bin2hex($data)));
 		foreach($this->_bodyparts as $bp) {
 		    $blockstart = $blockstart + $len;
 		    $len = strlen(bin2hex($bp))/ 2;
 		    $sizeinfo .= pack("ii",$blockstart,$len);
+		    debugLog(sprintf("Bodypart BlockStart: %d Len: %d Content: %s",$blockstart,$len,bin2hex($bp)));
 		}
 		fwrite($this->_out,$sizeinfo);
 		fwrite($this->_out,$data);

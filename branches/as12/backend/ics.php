@@ -2080,7 +2080,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    // in case the attachment has got a content id it is an inline one...
 		    if (isset($attachprops[PR_ATTACH_CONTENT_ID])) {
 			$attach->isinline=true;
-			$attach->attmethod=$attachprops[PR_ATTACH_METHOD];
+			$attach->attmethod=6;
 			$attach->contentid=$attachprops[PR_ATTACH_CONTENT_ID];
 			$attach->contenttype = $attachprops[PR_ATTACH_MIME_TAG];
 		    }
