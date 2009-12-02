@@ -419,12 +419,14 @@ debugLog("int or long propvalue:".$value);
 debugLog("propvalue:".$mapiprops[$propTag]);
                     break;    
                 
-                case PT_BOOLEAN:
+                case PT_BOOLEAN:	
                     $hresult = $this->_readBuffer($buffer, 4, $mapiprops[$propTag]);
                         if ($hresult !== NOERROR) {
                             debugLog("There was an error reading stream property buffer");
                             return $hresult;
                         }
+		    // dw2412 ugly but has in the end a boolean valua as the result...
+                    $mapiprops[$propTag] = bin2hex($mapiprops[$propTag]{0})*1;
                     $size -= 4;
 debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
@@ -459,13 +461,26 @@ debugLog("propvalue:".$mapiprops[$propTag]);
                         $mapiprops[$namedStartTime] = $filetime;
                         $namedCommonStart = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516");
                         $mapiprops[$namedCommonStart] = $filetime;
+			//added DW2412
+                        $namedClipStart = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8235");
+                        $mapiprops[$namedClipStart] = $filetime;
                     }
                     if ($propTag == PR_END_DATE) {
                         $namedEndTime = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x820e");
                         $mapiprops[$namedEndTime] = $filetime;
                         $namedCommonEnd = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517");
                         $mapiprops[$namedCommonEnd] = $filetime;
+			//added DW2412
+                        $namedClipEnd = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8236");
+                        $mapiprops[$namedClipEnd] = $filetime;
                     }
+		    // dw2412 Set the meeting duration in case Start and End is known...
+		    if (isset($namedCommonEnd) &&
+			isset($namedCommonStart)) {
+			$namedDuration = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8213");
+                        $mapiprops[$namedDuration] = ($mapiprops[$namedCommonEnd] - $mapiprops[$namedCommonStart]) / 60;
+		    }
+			
                     $size -= 8;
 debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
