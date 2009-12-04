@@ -425,8 +425,10 @@ debugLog("propvalue:".$mapiprops[$propTag]);
                             debugLog("There was an error reading stream property buffer");
                             return $hresult;
                         }
-		    // dw2412 ugly but has in the end a boolean valua as the result...
-                    $mapiprops[$propTag] = bin2hex($mapiprops[$propTag]{0})*1;
+                    //reported by dw2412
+                    //cast to integer as it evaluates to 1 or 0 because
+                    //a non empty string evaluates to true :(
+                    $mapiprops[$propTag] = (integer) bin2hex($mapiprops[$propTag]{0});
                     $size -= 4;
 debugLog("propvalue:".$mapiprops[$propTag]);
                     break;
