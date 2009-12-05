@@ -3696,23 +3696,70 @@ class BackendICS {
         // Process the meeting response. We don't have to send the actual meeting response
         // e-mail, because the device will send it itself.
         switch($response) {
-            case 1:     // accept
-            default:
-                $entryid = $meetingrequest->doAccept(false, false, $meetingrequest->isInCalendar());
-                break;
-            case 2:        // tentative
-                $meetingrequest->doAccept(true, false, $meetingrequest->isInCalendar());
-                break;
-            case 3:        // decline
+            case '3':     // decline
                 $meetingrequest->doDecline(false);
+                break;
+            case '2':     // tentative // 
+                $newentryid = $meetingrequest->doAccept(true, false, $meetingrequest->isInCalendar());
+                break;
+            default:      // dw2412 accept = default = 1 // 
+		$newentryid = $meetingrequest->doAccept(false, false, $meetingrequest->isInCalendar());
                 break;
         }
 
         // F/B will be updated on logoff
 
         // We have to return the ID of the new calendar item, so do that here
-        $newitem = mapi_msgstore_openentry($this->_defaultstore, $entryid);
-        $newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
+        // dw2412 Outlook shows quite ugly behaviour since it creates already tentative appointment
+        // if message lays some time in inbox but does not remove the meeting request. 
+        // The EntryID that we need to return in this case is the one found by the globalobjid of 
+        // the original message that we use to find the Source_Key of the 
+        // appointment created by Outlook - otherwise we have two appointments on mobile device.
+        // This is why I do the below things to overcome the problem... 
+	if ($newentryid === false && $response != 3) {
+	    debugLog("doAccept EntryID == false $response");
+
+	    $namedgoid = GetPropIDFromString($this->_defaultstore, "PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x3");
+	    $namedgoid2 = GetPropIDFromString($this->_defaultstore, "PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x23");
+
+	    $messageprops = mapi_getprops($mapimessage, Array($namedgoid, $namedgoid2, PR_OWNER_APPT_ID));
+	    $goid2 = $messageprops[$namedgoid2];
+	    if(isset($messageprops[PR_OWNER_APPT_ID]))
+    		$apptid = $messageprops[PR_OWNER_APPT_ID];
+    	    else
+        	$apptid = false;
+
+	    $basedate = $meetingrequest->getBasedateFromGlobalID($messageprops[$namedgoid]);
+	    /**
+	     * If basedate is found in globalID, then there are two possibilities.
+	     * case 1) User has only this occurrence OR
+	     * case 2) User has recurring item and has received an update for an occurrence
+	     */
+	    if ($basedate) {
+		// First try with GlobalID(0x3) (case 1)
+		$entryid = $meetingrequest->findCalendarItems($messageprops[$namedgoid], $apptid);
+		// If not found then try with CleanGlobalID(0x23) (case 2)
+		if (!is_array($entryid))
+		    $entryid = $meetingrequest->findCalendarItems($goid2, $apptid);
+	    } else {
+		$entryid = $meetingrequest->findCalendarItems($goid2, $apptid);
+	    }
+	    $newentryid = $entryid[0];
+	    debugLog("New EntryID from our try to find it by globalid ".bin2hex($newentryid));
+    
+	    // Now just update the appointment item since otherwise it remains always tentative...
+    	    $newitem = mapi_msgstore_openentry($this->_defaultstore, $newentryid);
+	    mapi_setprops($newitem, array(
+		    GetPropIDFromString($this->_defaultstore,"PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8205") => (($response == 2) ? 1 : 2),
+		    GetPropIDFromString($this->_defaultstore,"PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8218") => (($response == 2) ? olResponseTentative : olResponseAccepted)
+		    ));
+	    mapi_savechanges($newitem);
+	} else {
+	    debugLog("New EntryID from doAccept ".bin2hex($newentryid));
+	}
+
+    	$newitem = mapi_msgstore_openentry($this->_defaultstore, $newentryid);
+	$newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
 
         $calendarid = bin2hex($newprops[PR_SOURCE_KEY]);
 
