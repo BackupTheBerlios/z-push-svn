@@ -22,9 +22,11 @@ class ZPush_ical{
     function extractProps($ical, &$mapiprops) {
         //mapping between partstat in ical and MAPI Meeting Response classes as well as icons
         $aClassMap = array(
-            "ACCEPTED"    => array("class" => "IPM.Schedule.Meeting.Resp.Pos", "icon" => 0x405),
-            "DECLINED"    => array("class" => "IPM.Schedule.Meeting.Resp.Neg", "icon" => 0x406),
-            "TENTATIVE"    => array("class" => "IPM.Schedule.Meeting.Resp.Tent", "icon" => 0x407),
+            "ACCEPTED"          => array("class" => "IPM.Schedule.Meeting.Resp.Pos", "icon" => 0x405),
+            "DECLINED"          => array("class" => "IPM.Schedule.Meeting.Resp.Neg", "icon" => 0x406),
+            "TENTATIVE"         => array("class" => "IPM.Schedule.Meeting.Resp.Tent", "icon" => 0x407),
+            "NEEDS-ACTION"      => array("class" => "IPM.Schedule.Meeting.Request", "icon" => 0x404), //iphone
+            "REQ-PARTICIPANT"   => array("class" => "IPM.Schedule.Meeting.Request", "icon" => 0x404), //nokia
         );
 
         $aical = array_map("rtrim", preg_split("/[\n]/", $ical));
@@ -103,10 +105,19 @@ class ZPush_ical{
                                         }
                                     }
                                 }
-                                if (isset($partstat) && isset($aClassMap[$partstat])) {
+                                if (isset($partstat) && isset($aClassMap[$partstat]) &&
+
+                                   (!isset($mapiprops[PR_MESSAGE_CLASS]) || $mapiprops[PR_MESSAGE_CLASS] == "IPM.Schedule.Meeting.Request")) {
                                     $mapiprops[PR_MESSAGE_CLASS] = $aClassMap[$partstat]['class'];
                                     $mapiprops[PR_ICON_INDEX] = $aClassMap[$partstat]['icon'];
                                 }
+                                // START ADDED dw2412 to support meeting requests on HTC Android Mail App
+                                elseif (isset($role) && isset($aClassMap[$role]) &&
+                                   (!isset($mapiprops[PR_MESSAGE_CLASS]) || $mapiprops[PR_MESSAGE_CLASS] == "IPM.Schedule.Meeting.Request")) {
+                                    $mapiprops[PR_MESSAGE_CLASS] = $aClassMap[$role]['class'];
+                                    $mapiprops[PR_ICON_INDEX] = $aClassMap[$role]['icon'];
+                                }
+                                // END ADDED dw2412 to support meeting requests on HTC Android Mail App
                                 $data         = str_replace ("MAILTO:", "", $data);
                                 $attendee[] = array ('name' => stripslashes($cn), 'email' => stripslashes($data));
                                 break;

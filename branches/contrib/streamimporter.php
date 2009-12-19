@@ -14,21 +14,32 @@
 // We don't support caching changes for messages
 class ImportContentsChangesStream {
     var $_encoder;
-    
+    var $_type;
+    var $_seenObjects;
+
     function ImportContentsChangesStream(&$encoder, $type) {
         $this->_encoder = &$encoder;
         $this->_type = $type;
+        $this->_seenObjects = array();
     }
-    
+
     function ImportMessageChange($id, $message) {
         if(strtolower(get_class($message)) != $this->_type)
             return true; // ignore other types
 
-        if ($message->flags === false || $message->flags === SYNC_NEWMESSAGE)           
+        // prevent sending the same object twice in one request
+        if (in_array($id, $this->_seenObjects)) {
+        	debugLog("Object $id discarded! Object already sent in this request.");
+        	return true;
+        }
+
+        $this->_seenObjects[] = $id;
+
+        if ($message->flags === false || $message->flags === SYNC_NEWMESSAGE)
             $this->_encoder->startTag(SYNC_ADD);
         else
             $this->_encoder->startTag(SYNC_MODIFY);
-            
+
         $this->_encoder->startTag(SYNC_SERVERENTRYID);
         $this->_encoder->content($id);
         $this->_encoder->endTag();
@@ -36,20 +47,20 @@ class ImportContentsChangesStream {
         $message->encode($this->_encoder);
         $this->_encoder->endTag();
         $this->_encoder->endTag();
-        
+
         return true;
     }
-    
+
     function ImportMessageDeletion($id) {
         $this->_encoder->startTag(SYNC_REMOVE);
         $this->_encoder->startTag(SYNC_SERVERENTRYID);
         $this->_encoder->content($id);
         $this->_encoder->endTag();
         $this->_encoder->endTag();
-        
+
         return true;
     }
-    
+
     function ImportMessageReadFlag($id, $flags) {
         if($this->_type != "syncmail")
             return true;
@@ -63,7 +74,7 @@ class ImportContentsChangesStream {
                 $this->_encoder->endTag();
             $this->_encoder->endTag();
         $this->_encoder->endTag();
-        
+
         return true;
     }
 
@@ -73,11 +84,11 @@ class ImportContentsChangesStream {
 };
 
 class ImportHierarchyChangesStream {
-    
+
     function ImportHierarchyChangesStream() {
         return true;
     }
-    
+
     function ImportFolderChange($folder) {
         return true;
     }

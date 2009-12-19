@@ -293,7 +293,8 @@ class MAPIMapping {
                     if($mapiprop == PR_MESSAGE_FLAGS)
                         $message->$asprop = $prop[$mapiprop] & 1; // only look at 'read' flag
                     else if($mapiprop == PR_RTF_COMPRESSED)
-                        $message->$asprop = base64_encode($prop[$mapiprop]); // send value base64 encoded
+                        //do not send rtf to the mobile
+                        continue;
                     else if(is_array($prop[$mapiprop]))
                         $message->$asprop = array_map("w2u", $prop[$mapiprop]);
                     else {
@@ -655,12 +656,17 @@ class ImportContentsChangesICS extends MAPIMapping {
 
         $this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
 
-        // Set commonstart/commonend to start/end and remindertime to start and duration
+        //sensitivity is not enough to mark an appointment as private, so we use another mapi tag
+        if (isset($appointment->sensitivity) && $appointment->sensitivity == 0) $private = false;
+        else  $private = true;
+
+        // Set commonstart/commonend to start/end and remindertime to start, duration and private
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516") =>  $appointment->starttime,
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517") =>  $appointment->endtime,
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8502") =>  $appointment->starttime,
-            $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8213") =>     $duration
+            $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8213") =>     $duration,
+            $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8506") =>  $private,
             ));
 
         // Set named prop 8510, unknown property, but enables deleting a single occurrence of a recurring
@@ -953,11 +959,12 @@ class ImportContentsChangesICS extends MAPIMapping {
             if ($picsize < MAX_EMBEDDED_SIZE) {
                 //set the has picture property to true
                 $haspic = $this->_getPropIDFromString("PT_BOOLEAN:{00062004-0000-0000-C000-000000000046}:0x8015");
+
+                $props[$haspic] = false;
+
                 //check if contact has already got a picture. delete it first in that case
-                $props[$haspic] = true;
-
+                //delete it also if it was removed on a mobile
                 $picprops = mapi_getprops($mapimessage, array($haspic));
-
                 if (isset($picprops[$haspic]) && $picprops[$haspic]) {
                     debugLog("Contact already has a picture. Delete it");
 
@@ -971,24 +978,27 @@ class ImportContentsChangesICS extends MAPIMapping {
                     }
                 }
 
-                $pic = mapi_message_createattach($mapimessage);
+                //only set picture if there's data in the request
+                if ($picbinary !== false && $picsize > 0) {
+                    $props[$haspic] = true;
+                    $pic = mapi_message_createattach($mapimessage);
+                    // Set properties of the attachment
+                    $picprops = array(
+                        PR_ATTACH_LONG_FILENAME_A => "ContactPicture.jpg",
+                        PR_DISPLAY_NAME => "ContactPicture.jpg",
+                        0x7FFF000B => true,
+                        PR_ATTACHMENT_HIDDEN => false,
+                        PR_ATTACHMENT_FLAGS => 1,
+                        PR_ATTACH_METHOD => ATTACH_BY_VALUE,
+                        PR_ATTACH_EXTENSION_A => ".jpg",
+                        PR_ATTACH_NUM => 1,
+                        PR_ATTACH_SIZE => $picsize,
+                        PR_ATTACH_DATA_BIN => $picbinary,
+                    );
 
-                // Set properties of the attachment
-                $picprops = array(
-                    PR_ATTACH_LONG_FILENAME_A => "ContactPicture.jpg",
-                    PR_DISPLAY_NAME => "ContactPicture.jpg",
-                    0x7FFF000B => true,
-                    PR_ATTACHMENT_HIDDEN => false,
-                    PR_ATTACHMENT_FLAGS => 1,
-                    PR_ATTACH_METHOD => ATTACH_BY_VALUE,
-                    PR_ATTACH_EXTENSION_A => ".jpg",
-                    PR_ATTACH_NUM => 1,
-                    PR_ATTACH_SIZE => $picsize,
-                    PR_ATTACH_DATA_BIN => $picbinary,
-                );
-
-                mapi_setprops($pic, $picprops);
-                mapi_savechanges($pic);
+                    mapi_setprops($pic, $picprops);
+                    mapi_savechanges($pic);
+                }
             }
         }
 
@@ -1082,7 +1092,7 @@ class ImportHierarchyChangesICS  {
     }
 
     function ImportFolderDeletion($id, $parent) {
-        return mapi_importhierarchychanges_importfolderdeletion ( array ($id) );
+        return mapi_importhierarchychanges_importfolderdeletion ($this->importer, 0, array (PR_SOURCE_KEY => hex2bin($id)) );
     }
 
     function GetState() {
@@ -1187,10 +1197,6 @@ class PHPContentsImportProxy extends MAPIMapping {
         $message = new SyncContact();
 
         $this->_getPropsFromMAPI($message, $mapimessage, $this->_contactmapping);
-
-        if(!isset($message->lastname) || strlen($message->lastname) == 0) {
-            $message->lastname = $message->fileas;
-        }
 
         //check the picture
         $haspic = $this->_getPropIDFromString("PT_BOOLEAN:{00062004-0000-0000-C000-000000000046}:0x8015");
@@ -1450,9 +1456,11 @@ class PHPContentsImportProxy extends MAPIMapping {
 
         // Override 'body' for truncation
         $body = mapi_openproperty($mapimessage, PR_BODY);
-        if(strlen($body) > $truncsize) {
+        $bodysize = strlen($body);
+        if($bodysize > $truncsize) {
             $body = substr($body, 0, $truncsize);
             $message->bodytruncated = 1;
+            $message->bodysize = $bodysize;
         } else {
             $message->bodytruncated = 0;
         }
@@ -1477,7 +1485,9 @@ class PHPContentsImportProxy extends MAPIMapping {
         if($fromname)
             $from = "\"" . w2u($fromname) . "\" <" . $fromaddr . ">";
         else
-            $from = $fromaddr;
+            //START CHANGED dw2412 HTC shows "error" if sender name is unknown
+            $from = "\"" . $fromaddr . "\" <" . $fromaddr . ">";
+            //END CHANGED dw2412 HTC shows "error" if sender name is unknown
 
         $message->from = $from;
 
@@ -1714,17 +1724,21 @@ class PHPHierarchyImportProxy {
             $folder->parentid = bin2hex($folderprops[PR_PARENT_SOURCE_KEY]);
         $folder->displayname = w2u($folderprops[PR_DISPLAY_NAME]);
         $folder->type = $this->_getFolderType($folderprops[PR_ENTRYID]);
-    
+
         // try to find a correct type if not one of the default folders
-        if ($folder->type == SYNC_FOLDER_TYPE_OTHER) {
+        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Note")
+                $folder->type = SYNC_FOLDER_TYPE_USER_MAIL;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
-                $folder->type = SYNC_FOLDER_TYPE_TASK;
+                $folder->type = SYNC_FOLDER_TYPE_USER_TASK;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Appointment")
-                $folder->type = SYNC_FOLDER_TYPE_APPOINTMENT;
+                $folder->type = SYNC_FOLDER_TYPE_USER_APPOINTMENT;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Contact")
-                $folder->type = SYNC_FOLDER_TYPE_CONTACT;
+                $folder->type = SYNC_FOLDER_TYPE_USER_CONTACT;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.StickyNote")
-                $folder->type = SYNC_FOLDER_TYPE_NOTE;                        
+                $folder->type = SYNC_FOLDER_TYPE_USER_NOTE;
+            if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Journal")
+                $folder->type = SYNC_FOLDER_TYPE_USER_JOURNAL;
         }
 
         return $folder;
@@ -1868,7 +1882,7 @@ class ExportChangesICS  {
                 debugLog("Exporter configured successfully. " . $changes . " changes ready to sync.");
         }
         else
-            debugLog("Exporter could not be configured: result: " . mapi_last_hresult());
+            debugLog("Exporter could not be configured: result: " . sprintf("%X", mapi_last_hresult()));
 
         return $ret;
     }
@@ -2081,10 +2095,17 @@ class BackendICS {
     }
 
     function Logoff() {
+        global $cmd;
+        //do not update last sync time on ping and provision
+        if (isset($cmd) && $cmd != '' && $cmd != 'Ping' && $cmd != 'Provision' )
+            $this->setLastSyncTime();
+
         // publish free busy time after finishing the synchronization process
         // update if the calendar folder received incoming changes
         $storeprops = mapi_getprops($this->_defaultstore, array(PR_USER_ENTRYID));
         $root = mapi_msgstore_openentry($this->_defaultstore);
+        if (!$root) return true;
+
         $rootprops = mapi_getprops($root, array(PR_IPM_APPOINTMENT_ENTRYID));
         foreach($this->_importedFolders as $folderid) {
             $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid));
@@ -2096,12 +2117,31 @@ class BackendICS {
                 $pub->publishFB(time() - (7 * 24 * 60 * 60), 6 * 30 * 24 * 60 * 60); // publish from one week ago, 6 months ahead
             }
         }
-        global $cmd;
-        //do not update last sync time on ping and provision
-        if (isset($cmd) && $cmd != '' && $cmd != 'Ping' && $cmd != 'Provision' )
-            $this->setLastSyncTime();
 
         return true;
+    }
+
+    /**
+     * Checks if the sent policykey matches the latest policykey on the server
+     *
+     * @param string $policykey
+     * @param string $devid
+     *
+     * @return status flag
+     */
+    function CheckPolicy($policykey, $devid) {
+        global $user, $auth_pw;
+
+        $status = SYNC_PROVISION_STATUS_SUCCESS;
+
+        $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
+
+        if ($user_policykey != $policykey) {
+            $status = SYNC_PROVISION_STATUS_POLKEYMISM;
+        }
+
+        if (!$policykey) $policykey = $user_policykey;
+        return $status;
     }
 
     function generatePolicyKey() {
@@ -2266,16 +2306,16 @@ class BackendICS {
                     mapi_setprops($this->_defaultstore, array(0x68891040=>$devicesprops[0x68891040]));
                 }
                 else {
-                    debugLog("No device found.");
+                    debugLog("setLastSyncTime: No device found.");
                 }
             }
             else {
-                debugLog("No devices found");
+                debugLog("setLastSyncTime: No devices found");
             }
         }
     }
 
-    function getSearchResults($searchquery){
+    function getSearchResults($searchquery, $searchrange){
         // only return users from who the displayName or the username starts with $name
         //TODO: use PR_ANR for this restriction instead of PR_DISPLAY_NAME and PR_ACCOUNT
         $addrbook = mapi_openaddressbook($this->_session);
@@ -2284,23 +2324,36 @@ class BackendICS {
 
         $table = mapi_folder_getcontentstable($ab_dir);
         $restriction = $this->_getSearchRestriction(u2w($searchquery));
-
         mapi_table_restrict($table, $restriction);
         mapi_table_sort($table, array(PR_DISPLAY_NAME => TABLE_SORT_ASCEND));
+
+        //range for the search results, default symbian range end is 50, wm 99,
+        //so we'll use that of nokia
+        $rangestart = 0;
+        $rangeend = 50;
+
+        if ($searchrange != '0') {
+            $pos = strpos($searchrange, '-');
+            $rangestart = substr($searchrange, 0, $pos);
+            $rangeend = substr($searchrange, ($pos + 1));
+        }
         $items = array();
-        for ($i = 0; $i < mapi_table_getrowcount($table); $i++) {
-            $user_data = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS), $i, 1);
-            $item = array();
-            $item["username"] = w2u($user_data[0][PR_ACCOUNT]);
-            $item["fullname"] = w2u($user_data[0][PR_DISPLAY_NAME]);
-            $item["emailaddress"] = w2u($user_data[0][PR_SMTP_ADDRESS]);
-            $item["nameid"] = $searchquery;
-            if (strlen(trim($item["fullname"])) == 0) $item["fullname"] = $item["username"];
 
-            //do not return users without email
-            if (strlen(trim($item["emailaddress"])) == 0) continue;
+        $querycnt = mapi_table_getrowcount($table);
+        //do not return more results as requested in range
+        $querylimit = (($rangeend + 1) < $querycnt) ? ($rangeend + 1) : $querycnt;
+        $items['range'] = $rangestart.'-'.($querylimit - 1);
 
-            array_push($items, $item);
+        $abentries = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS, PR_BUSINESS_TELEPHONE_NUMBER), $rangestart, $querylimit);
+
+        for ($i = 0; $i < $querylimit; $i++) {
+            $items[$i]["username"] = w2u($abentries[$i][PR_ACCOUNT]);
+            $items[$i]["fullname"] = w2u($abentries[$i][PR_DISPLAY_NAME]);
+            if (strlen(trim($items[$i]["fullname"])) == 0) $items[$i]["fullname"] = $items[$i]["username"];
+            $items[$i]["emailaddress"] = w2u($abentries[$i][PR_SMTP_ADDRESS]);
+            $items[$i]["nameid"] = $searchquery;
+            //check if an user has a business phone or it might produce warnings in the log
+            $items[$i]["businessphone"] = isset($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]) ? w2u($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]) : "";
         }
         return $items;
     }
@@ -2345,6 +2398,9 @@ class BackendICS {
     }
 
     function SendMail($rfc822, $forward = false, $reply = false, $parent = false) {
+        if (WBXML_DEBUG == true)
+            debugLog("SendMail: forward: $forward   reply: $reply   parent: $parent\n" . $rfc822);
+
         $mimeParams = array('decode_headers' => false,
                             'decode_bodies' => true,
                             'include_bodies' => true,
@@ -2431,18 +2487,30 @@ class BackendICS {
 
         mapi_message_modifyrecipients($mapimessage, 0, $recips);
 
-        // Loop through subparts. We currently only support real single-level
-        // multiparts and partly multipart/related/mixed for attachments.
-        // The PDA currently only does this because you are adding
-        // an attachment and the type will be multipart/mixed or multipart/alternative.
+        // Loop through message subparts.
         $body = "";
+        $body_html = "";
         if($message->ctype_primary == "multipart" && ($message->ctype_secondary == "mixed" || $message->ctype_secondary == "alternative")) {
-            foreach($message->parts as $part) {
-                //the last part of if (after !) is an android fix.
-                //it sends attachment as a plain text but content transport is base64 encoded.
-                if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && !(isset($part->headers['content-transfer-encoding']) && strpos($part->headers['content-transfer-encoding'], 'base64') !== false)) {// discard any other kind of text, like html
+            $mparts = $message->parts;
+            for($i=0; $i<count($mparts); $i++) {
+                $part = $mparts[$i];
+
+                // palm pre & iPhone send forwarded messages in another subpart which are also parsed
+                if($part->ctype_primary == "multipart" && ($part->ctype_secondary == "mixed" || $part->ctype_secondary == "alternative"  || $part->ctype_secondary == "related")) {
+                    foreach($part->parts as $spart)
+                        $mparts[] = $spart;
+                    continue;
+                }
+
+                // standard body
+                if($part->ctype_primary == "text" && $part->ctype_secondary == "plain" && isset($part->body) && (!isset($part->disposition) || $part->disposition != "attachment")) {
                         $body .= u2w($part->body); // assume only one text body
                 }
+                // html body
+                elseif($part->ctype_primary == "text" && $part->ctype_secondary == "html") {
+                    $body_html .= u2w($part->body);
+                }
+                // TNEF
                 elseif($part->ctype_primary == "ms-tnef" || $part->ctype_secondary == "ms-tnef") {
                     $zptnef = new ZPush_tnef($this->_defaultstore);
                     $mapiprops = array();
@@ -2457,28 +2525,35 @@ class BackendICS {
                     }
                     else debugLog("TNEF: Mapi props array was empty");
                 }
-                // do deeper multipart parsing for the iPhone when forwarding mail
-                elseif($part->ctype_primary == "multipart" && ($part->ctype_secondary == "mixed" || $part->ctype_secondary == "related")) {
-                    if(is_array($part->parts))
-                        foreach($part->parts as $part2)
-                            if (isset($part2->disposition) && ($part2->disposition == "inline" || $part2->disposition == "attachment"))
-                                $this->_storeAttachment($mapimessage, $part2);
-                }
-
+                // iCalendar
                 elseif($part->ctype_primary == "text" && $part->ctype_secondary == "calendar") {
                     $zpical = new ZPush_ical($this->_defaultstore);
                     $mapiprops = array();
                     $zpical->extractProps($part->body, $mapiprops);
+
+                    // iPhone sends a second ICS which we ignore if we can
+                    if (!isset($mapiprops[PR_MESSAGE_CLASS]) && strlen(trim($body)) == 0) {
+                        debugLog("Secondary iPhone response is being ignored!! Mail dropped!");
+                        return true;
+                    }
+
                     if (is_array($mapiprops) && !empty($mapiprops)) {
                         mapi_setprops($mapimessage, $mapiprops);
                     }
                     else debugLog("ICAL: Mapi props array was empty");
                 }
+                // any other type, store as attachment
                 else
                     $this->_storeAttachment($mapimessage, $part);
             }
         } else {
             $body = u2w($message->body);
+        }
+
+        // some devices only transmit a html body
+        if (strlen($body) == 0 && strlen($body_html)>0) {
+            debugLog("only html body sent, transformed into plain text");
+            $body = strip_tags($body_html);
         }
 
         if($forward)
@@ -2507,32 +2582,53 @@ class BackendICS {
                     $fwbody .= $data;
                 }
 
-                if(strlen($body) > 0) {
-                    if($forward) {
-                        // During a forward, we have to add the forward header ourselves. This is because
-                        // normally the forwarded message is added as an attachment. However, we don't want this
-                        // because it would be rather complicated to copy over the entire original message due
-                        // to the lack of IMessage::CopyTo ..
+                $stream = mapi_openproperty($fwmessage, PR_HTML, IID_IStream, 0, 0);
+                $fwbody_html = "";
 
-                        $fwmessageprops = mapi_getprops($fwmessage, array(PR_SENT_REPRESENTING_NAME, PR_DISPLAY_TO, PR_DISPLAY_CC, PR_SUBJECT, PR_CLIENT_SUBMIT_TIME));
-
-                        $body .= "\r\n\r\n";
-                        $body .= "-----Original Message-----\r\n";
-                        if(isset($fwmessageprops[PR_SENT_REPRESENTING_NAME]))
-                            $body .= "From: " . $fwmessageprops[PR_SENT_REPRESENTING_NAME] . "\r\n";
-                        if(isset($fwmessageprops[PR_DISPLAY_TO]) && strlen($fwmessageprops[PR_DISPLAY_TO]) > 0)
-                            $body .= "To: " . $fwmessageprops[PR_DISPLAY_TO] . "\r\n";
-                        if(isset($fwmessageprops[PR_DISPLAY_CC]) && strlen($fwmessageprops[PR_DISPLAY_CC]) > 0)
-                            $body .= "Cc: " . $fwmessageprops[PR_DISPLAY_CC] . "\r\n";
-                        if(isset($fwmessageprops[PR_CLIENT_SUBMIT_TIME]))
-                            $body .= "Sent: " . strftime("%x %X", $fwmessageprops[PR_CLIENT_SUBMIT_TIME]) . "\r\n";
-                        if(isset($fwmessageprops[PR_SUBJECT]))
-                            $body .= "Subject: " . $fwmessageprops[PR_SUBJECT] . "\r\n";
-                        $body .= "\r\n";
-                    }
-                    $body .= $fwbody;
+                while(1) {
+                    $data = mapi_stream_read($stream, 1024);
+                    if(strlen($data) == 0)
+                        break;
+                    $fwbody_html .= $data;
                 }
-            } else {
+
+                if($forward) {
+                    // During a forward, we have to add the forward header ourselves. This is because
+                    // normally the forwarded message is added as an attachment. However, we don't want this
+                    // because it would be rather complicated to copy over the entire original message due
+                    // to the lack of IMessage::CopyTo ..
+
+                    $fwmessageprops = mapi_getprops($fwmessage, array(PR_SENT_REPRESENTING_NAME, PR_DISPLAY_TO, PR_DISPLAY_CC, PR_SUBJECT, PR_CLIENT_SUBMIT_TIME));
+
+                    $fwheader = "\r\n\r\n";
+                    $fwheader .= "-----Original Message-----\r\n";
+                    if(isset($fwmessageprops[PR_SENT_REPRESENTING_NAME]))
+                        $fwheader .= "From: " . $fwmessageprops[PR_SENT_REPRESENTING_NAME] . "\r\n";
+                    if(isset($fwmessageprops[PR_DISPLAY_TO]) && strlen($fwmessageprops[PR_DISPLAY_TO]) > 0)
+                        $fwheader .= "To: " . $fwmessageprops[PR_DISPLAY_TO] . "\r\n";
+                    if(isset($fwmessageprops[PR_DISPLAY_CC]) && strlen($fwmessageprops[PR_DISPLAY_CC]) > 0)
+                        $fwheader .= "Cc: " . $fwmessageprops[PR_DISPLAY_CC] . "\r\n";
+                    if(isset($fwmessageprops[PR_CLIENT_SUBMIT_TIME]))
+                        $fwheader .= "Sent: " . strftime("%x %X", $fwmessageprops[PR_CLIENT_SUBMIT_TIME]) . "\r\n";
+                    if(isset($fwmessageprops[PR_SUBJECT]))
+                        $fwheader .= "Subject: " . $fwmessageprops[PR_SUBJECT] . "\r\n";
+                    $fwheader .= "\r\n";
+
+
+                    // add fwheader to body and body_html
+                    $body .= $fwheader;
+                    if (strlen($body_html) > 0)
+                        $body_html .= str_ireplace("\r\n", "<br>", $fwheader);
+                }
+
+                if(strlen($body) > 0)
+                    $body .= $fwbody;
+
+                if (strlen($body_html) > 0)
+                      $body_html .= $fwbody_html;
+
+            }
+            else {
                 debugLog("Unable to open item with id $orig for forward/reply");
             }
         }
@@ -2577,6 +2673,9 @@ class BackendICS {
 
         mapi_setprops($mapimessage, array(PR_BODY => $body));
 
+        if(strlen($body_html) > 0){
+            mapi_setprops($mapimessage, array(PR_HTML => $body_html));
+        }
         mapi_savechanges($mapimessage);
         mapi_message_submitmessage($mapimessage);
 
@@ -2715,7 +2814,6 @@ class BackendICS {
 
         if ($result == NOERROR){
             $rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_DEFAULT_STORE, PR_MDB_PROVIDER));
-            $result = mapi_last_hresult();
 
             foreach($rows as $row) {
                 if(isset($row[PR_DEFAULT_STORE]) && $row[PR_DEFAULT_STORE] == true) {
@@ -2767,22 +2865,21 @@ class BackendICS {
             $filename = $part->ctype_parameters["name"];
         else if(isset($part->d_parameters["name"]))
             $filename = $part->d_parameters["filename"];
-        else if (isset($part->d_parameters["filename"])) //sending appointment with nokia only filename is set
+        else if (isset($part->d_parameters["filename"])) // sending appointment with nokia & android only filename is set
             $filename = $part->d_parameters["filename"];
-        //Android just puts enconding and filename into content-transfer-encoding
-        //filename is something like filename="filename.extension (yes " is only once)
-        //meeting requests are sent the same way, there is text/calendar somewhere inside content-transfer-encoding
-        else if (isset($part->headers['content-transfer-encoding']) && strpos($part->headers['content-transfer-encoding'], 'base64')) {
-            $pos = strpos($part->headers['content-transfer-encoding'], "filename=");
-            $filename = ($pos !== false) ? substr($part->headers['content-transfer-encoding'], ($pos + 10)) : "untitled";
+        else
+            $filename = "untitled";
+
+        // Android just doesn't send content-type, so mimeDecode doesn't performs base64 decoding
+        // on meeting requests text/calendar somewhere inside content-transfer-encoding
+        if (isset($part->headers['content-transfer-encoding']) && strpos($part->headers['content-transfer-encoding'], 'base64')) {
             if (strpos($part->headers['content-transfer-encoding'], 'text/calendar') !== false) {
                 $part->ctype_primary = 'text';
                 $part->ctype_secondary = 'calendar';
             }
-            $part->body = base64_decode($part->body);
+            if (!isset($part->headers['content-type']))
+                $part->body = base64_decode($part->body);
         }
-        else
-            $filename = "untitled";
 
         // Set filename and attachment type
         mapi_setprops($attach, array(PR_ATTACH_LONG_FILENAME => u2w($filename), PR_ATTACH_METHOD => ATTACH_BY_VALUE));

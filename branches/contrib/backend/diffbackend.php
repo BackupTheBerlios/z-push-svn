@@ -363,7 +363,7 @@ class ExportChangesDiff extends DiffState {
                     $msglist = $this->_backend->GetMessageList($this->_folderid, $cutoffdate);
                     if($msglist === false)
                         return false;
-    
+
                     $this->_changes = GetDiff($this->_syncstate, $msglist);
                 }
             }
@@ -593,7 +593,7 @@ class BackendDiff {
         return false;
     }
 
-    function GetMessageList($folderid) {
+    function GetMessageList($folderid, $cutoffdate) {
         return array();
     }
 
@@ -651,6 +651,29 @@ class BackendDiff {
      */
     function getSearchResults($searchquery) {
         return false;
+    }
+
+    /**
+     * Checks if the sent policykey matches the latest policykey on the server
+     *
+     * @param string $policykey
+     * @param string $devid
+     *
+     * @return status flag
+     */
+    function CheckPolicy($policykey, $devid) {
+        global $user, $auth_pw;
+
+        $status = SYNC_PROVISION_STATUS_SUCCESS;
+
+        $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
+
+        if ($user_policykey != $policykey) {
+            $status = SYNC_PROVISION_STATUS_POLKEYMISM;
+        }
+
+        if (!$policykey) $policykey = $user_policykey;
+        return $status;
     }
 
     /**
@@ -713,13 +736,13 @@ class BackendDiff {
     function setDeviceRWStatus($user, $pass, $devid, $status) {
         return false;
     }
-    
+
     function AlterPing() {
         return false;
     }
-    
+
     function AlterPingChanges($folderid, &$syncstate) {
-        return array();        
+        return array();
     }
 }
 ?>
