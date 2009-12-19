@@ -363,7 +363,7 @@ class ExportChangesDiff extends DiffState {
                     $msglist = $this->_backend->GetMessageList($this->_folderid, $cutoffdate);
                     if($msglist === false)
                         return false;
-    
+
                     $this->_changes = GetDiff($this->_syncstate, $msglist);
                 }
             }
@@ -522,6 +522,7 @@ class ExportChangesDiff extends DiffState {
                 return 1024;
             case SYNC_TRUNCATION_5K:
                 return 5*1024;
+            case SYNC_TRUNCATION_SEVEN:
             case SYNC_TRUNCATION_ALL:
                 return 1024*1024; // We'll limit to 1MB anyway
             default:
@@ -592,7 +593,7 @@ class BackendDiff {
         return false;
     }
 
-    function GetMessageList($folderid) {
+    function GetMessageList($folderid, $cutoffdate) {
         return array();
     }
 
@@ -659,22 +660,22 @@ class BackendDiff {
      * @param string $devid
      *
      * @return status flag
-     */    
+     */
     function CheckPolicy($policykey, $devid) {
         global $user, $auth_pw;
-    
+
         $status = SYNC_PROVISION_STATUS_SUCCESS;
-    
+
         $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
-    
+
         if ($user_policykey != $policykey) {
             $status = SYNC_PROVISION_STATUS_POLKEYMISM;
         }
-    
+
         if (!$policykey) $policykey = $user_policykey;
         return $status;
     }
-        
+
     /**
      * Return a policy key for given user with a given device id.
      * If there is no combination user-deviceid available, a new key
@@ -735,13 +736,13 @@ class BackendDiff {
     function setDeviceRWStatus($user, $pass, $devid, $status) {
         return false;
     }
-    
+
     function AlterPing() {
         return false;
     }
-    
+
     function AlterPingChanges($folderid, &$syncstate) {
-        return array();        
+        return array();
     }
 }
 ?>

@@ -959,11 +959,12 @@ class ImportContentsChangesICS extends MAPIMapping {
             if ($picsize < MAX_EMBEDDED_SIZE) {
                 //set the has picture property to true
                 $haspic = $this->_getPropIDFromString("PT_BOOLEAN:{00062004-0000-0000-C000-000000000046}:0x8015");
+
+                $props[$haspic] = false;
+
                 //check if contact has already got a picture. delete it first in that case
-                $props[$haspic] = true;
-
+                //delete it also if it was removed on a mobile
                 $picprops = mapi_getprops($mapimessage, array($haspic));
-
                 if (isset($picprops[$haspic]) && $picprops[$haspic]) {
                     debugLog("Contact already has a picture. Delete it");
 
@@ -977,24 +978,27 @@ class ImportContentsChangesICS extends MAPIMapping {
                     }
                 }
 
-                $pic = mapi_message_createattach($mapimessage);
+                //only set picture if there's data in the request
+                if ($picbinary !== false && $picsize > 0) {
+                    $props[$haspic] = true;
+                    $pic = mapi_message_createattach($mapimessage);
+                    // Set properties of the attachment
+                    $picprops = array(
+                        PR_ATTACH_LONG_FILENAME_A => "ContactPicture.jpg",
+                        PR_DISPLAY_NAME => "ContactPicture.jpg",
+                        0x7FFF000B => true,
+                        PR_ATTACHMENT_HIDDEN => false,
+                        PR_ATTACHMENT_FLAGS => 1,
+                        PR_ATTACH_METHOD => ATTACH_BY_VALUE,
+                        PR_ATTACH_EXTENSION_A => ".jpg",
+                        PR_ATTACH_NUM => 1,
+                        PR_ATTACH_SIZE => $picsize,
+                        PR_ATTACH_DATA_BIN => $picbinary,
+                    );
 
-                // Set properties of the attachment
-                $picprops = array(
-                    PR_ATTACH_LONG_FILENAME_A => "ContactPicture.jpg",
-                    PR_DISPLAY_NAME => "ContactPicture.jpg",
-                    0x7FFF000B => true,
-                    PR_ATTACHMENT_HIDDEN => false,
-                    PR_ATTACHMENT_FLAGS => 1,
-                    PR_ATTACH_METHOD => ATTACH_BY_VALUE,
-                    PR_ATTACH_EXTENSION_A => ".jpg",
-                    PR_ATTACH_NUM => 1,
-                    PR_ATTACH_SIZE => $picsize,
-                    PR_ATTACH_DATA_BIN => $picbinary,
-                );
-
-                mapi_setprops($pic, $picprops);
-                mapi_savechanges($pic);
+                    mapi_setprops($pic, $picprops);
+                    mapi_savechanges($pic);
+                }
             }
         }
 
@@ -1642,6 +1646,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                 return 1024;
             case SYNC_TRUNCATION_5K:
                 return 5*1024;
+            case SYNC_TRUNCATION_SEVEN:
             case SYNC_TRUNCATION_ALL:
                 return 1024*1024; // We'll limit to 1MB anyway
             default:
@@ -1722,7 +1727,7 @@ class PHPHierarchyImportProxy {
         $folder->type = $this->_getFolderType($folderprops[PR_ENTRYID]);
 
         // try to find a correct type if not one of the default folders
-        if ($folder->type == SYNC_FOLDER_TYPE_OTHER) {
+        if ($folder->type == SYNC_FOLDER_TYPE_OTHER && isset($folderprops[PR_CONTAINER_CLASS])) {
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Note")
                 $folder->type = SYNC_FOLDER_TYPE_USER_MAIL;
             if ($folderprops[PR_CONTAINER_CLASS] == "IPF.Task")
@@ -2348,7 +2353,8 @@ class BackendICS {
             if (strlen(trim($items[$i]["fullname"])) == 0) $items[$i]["fullname"] = $items[$i]["username"];
             $items[$i]["emailaddress"] = w2u($abentries[$i][PR_SMTP_ADDRESS]);
             $items[$i]["nameid"] = $searchquery;
-            $items[$i]["businessphone"] = w2u($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]);
+            //check if an user has a business phone or it might produce warnings in the log
+            $items[$i]["businessphone"] = isset($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]) ? w2u($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]) : "";
         }
         return $items;
     }
