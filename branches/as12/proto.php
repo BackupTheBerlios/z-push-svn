@@ -81,9 +81,9 @@ class SyncAirSyncBaseBody extends Streamer {
 };
 class SyncAirSyncBaseAttachment extends Streamer {
     var $displayname;
-    var $filereference;
-    var $method;
-    var $estimateddatasize;
+    var $attname;
+    var $attmethod;
+    var $attsize;
     var $contentid;
     var $contentlocation;
     var $isinline;
@@ -92,9 +92,9 @@ class SyncAirSyncBaseAttachment extends Streamer {
     function SyncAirSyncBaseAttachment() {
         $mapping = array(
                                 SYNC_AIRSYNCBASE_DISPLAYNAME => array (STREAMER_VAR => "displayname"),
-                                SYNC_AIRSYNCBASE_FILEREFERENCE => array (STREAMER_VAR => "filereference"),
-                                SYNC_AIRSYNCBASE_METHOD => array (STREAMER_VAR => "method"),
-                                SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE => array (STREAMER_VAR => "estimateddatasize"),
+                                SYNC_AIRSYNCBASE_FILEREFERENCE => array (STREAMER_VAR => "attname"),
+                                SYNC_AIRSYNCBASE_METHOD => array (STREAMER_VAR => "attmethod"),
+                                SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE => array (STREAMER_VAR => "attsize"),
                                 SYNC_AIRSYNCBASE_CONTENTID => array (STREAMER_VAR => "contentid"),
                                 SYNC_AIRSYNCBASE_CONTENTLOCATION => array (STREAMER_VAR => "contentlocation"),
                                 SYNC_AIRSYNCBASE_ISINLINE => array (STREAMER_VAR => "isinline"),
@@ -188,8 +188,9 @@ class SyncMail extends Streamer {
 
     //START ADDED dw2412 V12.0 Support
     var $threadtopic;
-    var $attachments = array();
-    var $airsyncbaseattachments = array();
+//    var $attachments = array();
+//    var $airsyncbaseattachments = array();
+
     // var $poommailflag = array();
     var $airsyncbasenativebodytype;
     //END ADDED dw2412 V12.0 Support
@@ -207,7 +208,6 @@ class SyncMail extends Streamer {
                                 SYNC_POOMMAIL_DISPLAYTO =>  array (STREAMER_VAR => "displayto"),
                                 SYNC_POOMMAIL_IMPORTANCE => array (STREAMER_VAR => "importance"),
                                 SYNC_POOMMAIL_READ => array (STREAMER_VAR => "read"),
-                                SYNC_POOMMAIL_ATTACHMENTS => array (STREAMER_VAR => "attachments", STREAMER_TYPE => "SyncAttachment", STREAMER_ARRAY => SYNC_POOMMAIL_ATTACHMENT ),
                                 SYNC_POOMMAIL_MIMETRUNCATED => array ( STREAMER_VAR => "mimetruncated" ),//
                                 SYNC_POOMMAIL_MIMEDATA => array ( STREAMER_VAR => "mimedata", STREAMER_TYPE => STREAMER_TYPE_MAPI_STREAM),//
                                 SYNC_POOMMAIL_MIMESIZE => array ( STREAMER_VAR => "mimesize" ),//
@@ -218,6 +218,7 @@ class SyncMail extends Streamer {
 // START ADDED dw2412 Support V12.0
         if(isset($protocolversion) && $protocolversion < 12.0) {
 	    $mapping += array(
+                SYNC_POOMMAIL_ATTACHMENTS => array (STREAMER_VAR => "attachments", STREAMER_TYPE => "SyncAttachment", STREAMER_ARRAY => SYNC_POOMMAIL_ATTACHMENT ),
                 SYNC_POOMMAIL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
                 SYNC_POOMMAIL_BODYSIZE => array (STREAMER_VAR => "bodysize"),
                 SYNC_POOMMAIL_BODY => array (STREAMER_VAR => "body"),

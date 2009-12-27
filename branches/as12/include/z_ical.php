@@ -69,7 +69,7 @@ class ZPush_ical{
                                 $namedStartTime = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x820d");
                                 $mapiprops[$namedStartTime] = $data;
                                 $namedCommonStart = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516");
-                                $mapiprops[$namedCommonStart] = $data;
+                                $mapiprops[$namedCommonStart] = $data;			     
                                 $clipStart = GetPropIDFromString($this->_store, "PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8235");
                                 $mapiprops[$clipStart] = $data;
                                 $mapiprops[PR_START_DATE] = $data;
@@ -123,6 +123,14 @@ class ZPush_ical{
                                 $data          = str_replace ("MAILTO:", "", $data);
                                 $organizer[] = array ('name' => stripslashes($field), 'email' => stripslashes($data));
                                 break;
+
+                            case 'SUMMARY':
+                                $data = str_replace("\\n", "<br />", $data);
+                                $data = str_replace("\\t", "&nbsp;", $data);
+                                $data = str_replace("\\r", "<br />", $data);
+                                $data = stripslashes($data);
+                        	$mapiprops[PR_SUBJECT] = $data;
+				break;
 
                             case 'LOCATION':
                                 $data = str_replace("\\n", "<br />", $data);

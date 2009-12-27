@@ -1245,7 +1245,7 @@ class ImportContentsChangesICS extends MAPIMapping {
                     mapi_savechanges($pic);
                 }
             }
-        }
+	}
 
         mapi_setprops($mapimessage, $props);
 
@@ -1580,7 +1580,8 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
     	    }
-	    // In case we have nothing for the body, send at least a blank...
+	    // In case we have nothing for the body, send at least a blank... 
+	    // dw2412 but only in case the body is not rtf!
     	    if ($message->airsyncbasebody->type != 3 && (!isset($message->airsyncbasebody->data) || strlen($message->airsyncbasebody->data) == 0))
         	$message->airsyncbasebody->data = " ";
     	}
@@ -1768,7 +1769,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                     $exception->starttime = $this->_getGMTTimeByTZ($change["start"], $tz);
                 if(isset($change["end"]))
                     $exception->endtime = $this->_getGMTTimeByTZ($change["end"], $tz);
-		//dw2412 This needs to be just a localtimestamp. Not in GMT! Has to match the time of the main series!
+		//dw2412 This needs to be just a localtime starting from midnight, Not in GMT! Has to match the time of the main series
                 if(isset($change["basedate"]))
                     $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($change["basedate"]) + $recurrence->recur["startocc"] * 60;
                 if(isset($change["subject"]))
@@ -1791,7 +1792,6 @@ class PHPContentsImportProxy extends MAPIMapping {
             // Deleted appointments contain only the original date (basedate) and a 'deleted' tag
             foreach($recurrence->recur["deleted_occurences"] as $deleted) {
                 $exception = new SyncAppointment();
-
 		//dw2412 This needs to be Just a localtime starting from midnight. Not in GMT! Has to match the time of the main series!
                 $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60;
                 $exception->deleted = "1";
@@ -1983,7 +1983,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 	}
 	// END ADDED dw2412 to honor reply to address
 	
-
+	// Just send Appointments, too
         if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting.Request") === 0) {
             $message->meetingrequest = new SyncMeetingRequest();
             $this->_getPropsFromMAPI($message->meetingrequest, $mapimessage, $this->_meetingrequestmapping);
@@ -2052,7 +2052,6 @@ class PHPContentsImportProxy extends MAPIMapping {
 		// CHANGED dw2412 for HTML eMail Inline Attachments...
                 $attachprops = mapi_getprops($mapiattach, array(PR_ATTACH_LONG_FILENAME,PR_ATTACH_FILENAME,PR_DISPLAY_NAME,PR_ATTACH_FLAGS,PR_ATTACH_CONTENT_ID,PR_ATTACH_MIME_TAG));
                 
-            	$attach = new SyncAttachment();
 		// START CHANGED dw2412 EML Attachment
                 if ($row[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) {
 		    $stream = buildEMLAttachment($mapiattach);
@@ -2064,9 +2063,17 @@ class PHPContentsImportProxy extends MAPIMapping {
                 if($stream) {
                     $stat = mapi_stream_stat($stream);
 
-                    $attach->attsize = $stat["cb"];
+                    if(isset($message->_mapping['POOMMAIL:Attachments'])) {
+            		$attach = new SyncAttachment();
+            	    } else if(isset($message->_mapping['AirSyncBase:Attachments'])) {
+            		$attach = new SyncAirSyncBaseAttachment();
+            	    }
+
+            	    $attach->attsize = $stat["cb"];
+            	    $attach->attname = bin2hex($this->_folderid) . ":" . bin2hex($sourcekey) . ":" . $row[PR_ATTACH_NUM];
+
 		    // START CHANGED dw2412 EML Attachment
-                    if(isset($attachprops[PR_ATTACH_LONG_FILENAME])) 
+            	    if(isset($attachprops[PR_ATTACH_LONG_FILENAME])) 
                 	$attach->displayname = w2u($attachprops[PR_ATTACH_LONG_FILENAME]);
             	    else if(isset($attachprops[PR_ATTACH_FILENAME]))
 			$attach->displayname = w2u($attachprops[PR_ATTACH_FILENAME]);
@@ -2079,18 +2086,21 @@ class PHPContentsImportProxy extends MAPIMapping {
 
 		    // in case the attachment has got a content id it is an inline one...
 		    if (isset($attachprops[PR_ATTACH_CONTENT_ID])) {
-			$attach->isinline=true;
-			$attach->attmethod=6;
-			$attach->contentid=$attachprops[PR_ATTACH_CONTENT_ID];
-			$attach->contenttype = $attachprops[PR_ATTACH_MIME_TAG];
+		        $attach->isinline=true;
+		        $attach->method=6;
+		        $attach->contentid=$attachprops[PR_ATTACH_CONTENT_ID];
+		        $attach->contenttype = $attachprops[PR_ATTACH_MIME_TAG];
 		    }
-		    
-                    $attach->attname = bin2hex($this->_folderid) . ":" . bin2hex($sourcekey) . ":" . $row[PR_ATTACH_NUM];
 
-                    if(!isset($message->attachments))
-                        $message->attachments = array();
-
-                    array_push($message->attachments, $attach);
+                    if(isset($message->_mapping['POOMMAIL:Attachments'])) {
+			if (!is_array($message->attachments)) 
+			    $message->attachments = array();
+            		array_push($message->attachments, $attach);
+		    } else if(isset($message->_mapping['AirSyncBase:Attachments'])) {
+			if (!is_array($message->airsyncbaseattachments)) 
+			    $message->airsyncbaseattachments = array();
+            		array_push($message->airsyncbaseattachments, $attach);
+		    }
                 }
             }
         }
@@ -2205,6 +2215,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                 return 1024;
             case SYNC_TRUNCATION_5K:
                 return 5*1024;
+            case SYNC_TRUNCATION_SEVEN:
             case SYNC_TRUNCATION_ALL:
                 return 1024*1024; // We'll limit to 1MB anyway
             default:
@@ -3494,8 +3505,8 @@ class BackendICS {
                 }
 
 		// dw2412 Enable this only in case of AS2.5 Protocol... in AS12 this seem 
-		// being already done by winmobile client.
-                if($forward && $protocolversion==2.5) {
+		// being done already by winmobile client.
+                if($forward && $protocolversion<=2.5) {
                     // During a forward, we have to add the forward header ourselves. This is because
                     // normally the forwarded message is added as an attachment. However, we don't want this
                     // because it would be rather complicated to copy over the entire original message due
@@ -3673,6 +3684,7 @@ class BackendICS {
 
     function MeetingResponse($requestid, $folderid, $response, &$calendarid) {
         // Use standard meeting response code to process meeting request
+
         $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid), hex2bin($requestid));
         $mapimessage = mapi_msgstore_openentry($this->_defaultstore, $entryid);
 
@@ -3711,9 +3723,8 @@ class BackendICS {
 
         // We have to return the ID of the new calendar item, so do that here
         // dw2412 Outlook shows quite ugly behaviour since it creates already tentative appointment
-        // if message lays some time in inbox but does not remove the meeting request. 
-        // The EntryID that we need to return in this case is the one found by the globalobjid of 
-        // the original message that we use to find the Source_Key of the 
+        // if message lays some time in inbox. The EntryID that we need to return in this case is 
+        // the one found by the globalobjid of the original message that we use to find the Source_Key of the 
         // appointment created by Outlook - otherwise we have two appointments on mobile device.
         // This is why I do the below things to overcome the problem... 
 	if ($newentryid === false && $response != 3) {

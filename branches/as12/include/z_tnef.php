@@ -172,24 +172,53 @@ class ZPush_tnef{
                     break;
 
                 // --- TNEF attachemnts ---
+		case 0x00089006: 	// dw2412 ID TNEF VERSION
+        	    debugLog(sprintf("IGNORED ID TNEF Version Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x00069007: 	// dw2412 ID OEM Codepage
+        	    debugLog(sprintf("IGNORED OEM Codepage Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x0004800d: 	// dw2412 ID Priority
+        	    debugLog(sprintf("IGNORED Priority Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x00038005: 	// dw2412 ID Date Send
+        	    debugLog(sprintf("IGNORED Date Send Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x00030006: 	// dw2412 ID Date Start
+        	    debugLog(sprintf("IGNORED Date Start Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x00030007: 	// dw2412 ID Date End
+        	    debugLog(sprintf("IGNORED Date End Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x00038020: 	// dw2412 ID Date Modified
+        	    debugLog(sprintf("IGNORED Date Modified Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
+		case 0x0005000a: 	
+        	    debugLog(sprintf("IGNORED Unknown Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
+		    break;
                 case 0x00069002:
+        	    debugLog(sprintf("IGNORED Unknown Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
                     break;
                 case 0x00018010:        // PR_ATTACH_FILENAME
+        	    debugLog(sprintf("IGNORED Attach Filename Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
                     break;
                 case 0x00068011:        // PR_ATTACH_RENDERING, extra icon information
+        	    debugLog(sprintf("IGNORED Attach Rendering Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
                     break;
                 case 0x0006800f:        // PR_ATTACH_DATA_BIN, will be set via OpenProperty() in ECTNEF::Finish()
+        	    debugLog(sprintf("IGNORED Attach Data Bin Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
                     break;
                 case 0x00069005:        // Attachment property stream
+        	    debugLog(sprintf("IGNORED Attachment property stream Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
                     break;
-                default:
-                    // Ignore this block
+                default:                // Ignore this block
+        	    debugLog(sprintf("IGNORED Unspecified Type:\n0x%08x Component: 0x%02x Size: %d Checksum: 0x%08x %s",$type,$component,$size,$checksum,bin2hex($buffer)));
                     break;
             }
             
         }
         return NOERROR;
-    
+            
     }
     
     /*
@@ -606,7 +635,8 @@ debugLog("propvalue:".$mapiprops[$propTag]);
                         $namedLocation = GetPropIDFromString($this->_store, "PT_STRING8:{00062002-0000-0000-C000-000000000046}:0x8208");
                         $mapiprops[$namedLocation] = $mapiprops[$propTag];
                         unset($mapiprops[$propTag]);
-                        $mapiprops[$namedLocation] = iconv("UCS-2","windows-1252", $mapiprops[$namedLocation]);
+                        $propTag = $namedLocation; // dw2412 prevent error message 
+                        // dw2412 will be done later... $mapiprops[$namedLocation] = iconv("UCS-2","windows-1252", $mapiprops[$namedLocation]);
                     }
                     
                     //convert from unicode to windows encoding
