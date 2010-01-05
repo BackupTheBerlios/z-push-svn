@@ -2045,6 +2045,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         $rows = mapi_table_queryallrows($attachtable, array(PR_ATTACH_NUM, PR_ATTACH_METHOD));
 	// END CHANGED dw2412 to contain the Attach Method (needed for eml discovery)
 
+	$n=1;
         foreach($rows as $row) {
             if(isset($row[PR_ATTACH_NUM])) {
         	$mapiattach = mapi_message_openattach($mapimessage, $row[PR_ATTACH_NUM]);
@@ -2081,6 +2082,12 @@ class PHPContentsImportProxy extends MAPIMapping {
 			$attach->displayname = w2u($attachprops[PR_DISPLAY_NAME]);
 		    else
 			$attach->displayname = w2u("untitled");
+
+        	    if (strlen($attach->displayname) == 0) {
+        		$attach->displayname = "Untitled_".$n;
+        		$n++;
+        	    }
+
         	    if ($row[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) $attach->displayname .= w2u(".eml");
 		    // END CHANGED dw2412 EML Attachment
 
