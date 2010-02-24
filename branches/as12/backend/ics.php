@@ -758,7 +758,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 
         if (function_exists("mapi_importcontentschanges_updatestate")) {
         	debugLog("using mapi_importcontentschanges_updatestate");
-	        if(mapi_importcontentschanges_updatestate($this->exporter, $this->statestream) != true) {
+	        if(mapi_importcontentschanges_updatestate($this->importer, $this->statestream) != true) {
 	            debugLog("Unable to update state: " . sprintf("%X", mapi_last_hresult()));
 	            return false;
 	        }
@@ -2424,10 +2424,13 @@ class ExportChangesICS  {
             $mapiimporter = mapi_wrap_importcontentschanges($phpimportproxy);
             $exporterflags |= SYNC_NORMAL | SYNC_READ_STATE;
 
-            // Initial sync, we don't want deleted items. On subsequent syncs, we do want to receive delete
-            // events.
-            if(strlen($syncstate) == 0)
+            // Initial sync, we don't want deleted items. If the initial sync is chunked 
+            // we check the change ID of the syncstate (0 at initial sync) 
+            // On subsequent syncs, we do want to receive delete events.
+            if(strlen($syncstate) == 0 || bin2hex(substr($syncstate,4,4)) == "00000000") {
+                debugLog("synching inital data");
                 $exporterflags |= SYNC_NO_SOFT_DELETIONS | SYNC_NO_DELETIONS;
+            }
         } else {
             $phpimportproxy = new PHPHierarchyImportProxy($this->_store, $importer);
             $mapiimporter = mapi_wrap_importhierarchychanges($phpimportproxy);
