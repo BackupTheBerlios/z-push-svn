@@ -28,9 +28,9 @@ class SyncFolder extends Streamer {
                                 SYNC_FOLDERHIERARCHY_SERVERENTRYID => array (STREAMER_VAR => "serverid"),
                                 SYNC_FOLDERHIERARCHY_PARENTID => array (STREAMER_VAR => "parentid"),
                                 SYNC_FOLDERHIERARCHY_DISPLAYNAME => array (STREAMER_VAR => "displayname"),
-                                SYNC_FOLDERHIERARCHY_TYPE => array (STREAMER_VAR => "type")
-                              );
-
+                            	SYNC_FOLDERHIERARCHY_TYPE => array (STREAMER_VAR => "type"),
+			);
+	
         parent::Streamer($mapping);
     }
 };
@@ -81,26 +81,33 @@ class SyncAirSyncBaseBody extends Streamer {
 };
 class SyncAirSyncBaseAttachment extends Streamer {
     var $displayname;
-    var $attname;
-    var $attmethod;
-    var $attsize;
+    var $filereference;
+    var $method;
+    var $estimateddatasize;
     var $contentid;
     var $contentlocation;
     var $isinline;
     var $_data;
 
     function SyncAirSyncBaseAttachment() {
+        global $protocolversion;
+
         $mapping = array(
                                 SYNC_AIRSYNCBASE_DISPLAYNAME => array (STREAMER_VAR => "displayname"),
-                                SYNC_AIRSYNCBASE_FILEREFERENCE => array (STREAMER_VAR => "attname"),
-                                SYNC_AIRSYNCBASE_METHOD => array (STREAMER_VAR => "attmethod"),
-                                SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE => array (STREAMER_VAR => "attsize"),
+                                SYNC_AIRSYNCBASE_FILEREFERENCE => array (STREAMER_VAR => "filereference"),
+                                SYNC_AIRSYNCBASE_METHOD => array (STREAMER_VAR => "method"),
+                                SYNC_AIRSYNCBASE_ESTIMATEDDATASIZE => array (STREAMER_VAR => "estimateddatasize"),
                                 SYNC_AIRSYNCBASE_CONTENTID => array (STREAMER_VAR => "contentid"),
                                 SYNC_AIRSYNCBASE_CONTENTLOCATION => array (STREAMER_VAR => "contentlocation"),
                                 SYNC_AIRSYNCBASE_ISINLINE => array (STREAMER_VAR => "isinline"),
                                 SYNC_AIRSYNCBASE_DATA => array (STREAMER_VAR => "_data"),
                         );
-
+	if ($protocolversion >= 14.0) {
+    	    $mapping += array(
+                              SYNC_POOMMAIL2_UMATTDURATION => array (STREAMER_VAR => "umattduration"),
+                              SYNC_POOMMAIL2_UMATTORDER => array (STREAMER_VAR => "umattorder"),
+                    	    );
+	}
         parent::Streamer($mapping);
     }
 };
@@ -188,9 +195,8 @@ class SyncMail extends Streamer {
 
     //START ADDED dw2412 V12.0 Support
     var $threadtopic;
-//    var $attachments = array();
-//    var $airsyncbaseattachments = array();
-
+    var $attachments = array();
+    var $airsyncbaseattachments = array();
     // var $poommailflag = array();
     var $airsyncbasenativebodytype;
     //END ADDED dw2412 V12.0 Support
@@ -203,11 +209,12 @@ class SyncMail extends Streamer {
                                 SYNC_POOMMAIL_CC => array (STREAMER_VAR => "cc"),
                                 SYNC_POOMMAIL_FROM => array (STREAMER_VAR => "from"),
                                 SYNC_POOMMAIL_SUBJECT => array (STREAMER_VAR => "subject"),
-                                SYNC_POOMMAIL_THREADTOPIC => array (STREAMER_VAR => "threadtopic"),
                                 SYNC_POOMMAIL_DATERECEIVED => array (STREAMER_VAR => "datereceived", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES ),
                                 SYNC_POOMMAIL_DISPLAYTO =>  array (STREAMER_VAR => "displayto"),
+                                SYNC_POOMMAIL_THREADTOPIC => array (STREAMER_VAR => "threadtopic"),
                                 SYNC_POOMMAIL_IMPORTANCE => array (STREAMER_VAR => "importance"),
                                 SYNC_POOMMAIL_READ => array (STREAMER_VAR => "read"),
+                                SYNC_POOMMAIL_ATTACHMENTS => array (STREAMER_VAR => "attachments", STREAMER_TYPE => "SyncAttachment", STREAMER_ARRAY => SYNC_POOMMAIL_ATTACHMENT ),
                                 SYNC_POOMMAIL_MIMETRUNCATED => array ( STREAMER_VAR => "mimetruncated" ),//
                                 SYNC_POOMMAIL_MIMEDATA => array ( STREAMER_VAR => "mimedata", STREAMER_TYPE => STREAMER_TYPE_MAPI_STREAM),//
                                 SYNC_POOMMAIL_MIMESIZE => array ( STREAMER_VAR => "mimesize" ),//
@@ -218,18 +225,28 @@ class SyncMail extends Streamer {
 // START ADDED dw2412 Support V12.0
         if(isset($protocolversion) && $protocolversion < 12.0) {
 	    $mapping += array(
-                SYNC_POOMMAIL_ATTACHMENTS => array (STREAMER_VAR => "attachments", STREAMER_TYPE => "SyncAttachment", STREAMER_ARRAY => SYNC_POOMMAIL_ATTACHMENT ),
                 SYNC_POOMMAIL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
                 SYNC_POOMMAIL_BODYSIZE => array (STREAMER_VAR => "bodysize"),
                 SYNC_POOMMAIL_BODY => array (STREAMER_VAR => "body"),
     	    );
         }
         if(isset($protocolversion) && $protocolversion >= 12.0) {
-	    $mapping += array(SYNC_AIRSYNCBASE_NATIVEBODYTYPE => array(STREAMER_VAR => "airsyncbasenativebodytype"),
-                              SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
+	    $mapping += array(SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
                               SYNC_AIRSYNCBASE_ATTACHMENTS => array (STREAMER_VAR => "airsyncbaseattachments", STREAMER_TYPE => "AirSyncBaseAttachment", STREAMER_ARRAY => SYNC_AIRSYNCBASE_ATTACHMENT ),
                     	      SYNC_POOMMAIL_FLAG => array(STREAMER_VAR => "poommailflag", STREAMER_TYPE => "SyncPoommailFlag"),
                     	      SYNC_POOMMAIL_CONTENTCLASS => array(STREAMER_VAR => "contentclass"),
+                    	      SYNC_AIRSYNCBASE_NATIVEBODYTYPE => array(STREAMER_VAR => "airsyncbasenativebodytype"),
+                              );
+        }
+        if(isset($protocolversion) && $protocolversion >= 14.0) {
+	    $mapping += array(SYNC_POOMMAIL2_UMCALLERID => array(STREAMER_VAR => "umcallerid"),
+                              SYNC_POOMMAIL2_USERNOTES => array(STREAMER_VAR => "usernotes"),
+                              SYNC_POOMMAIL2_CONVERSATIONID => array (STREAMER_VAR => "conversationid"),
+                              SYNC_POOMMAIL2_CONVERSATIONINDEX => array (STREAMER_VAR => "conversationindex"),
+                              SYNC_POOMMAIL2_LASTVERBEXECUTED => array (STREAMER_VAR => "lastverbexecuted"),
+                              SYNC_POOMMAIL2_LASTVERBEXECUTIONTIME => array (STREAMER_VAR => "lastverbexecutiontime", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
+                              SYNC_POOMMAIL2_RECEIVEDASBCC => array (STREAMER_VAR => "receivedasbcc"),
+                              SYNC_POOMMAIL2_SENDER => array (STREAMER_VAR => "sender"),
                              );
         }
 // END ADDED dw2412 Support V12.0
@@ -244,6 +261,38 @@ class SyncMail extends Streamer {
         parent::Streamer($mapping);
     }
 };
+
+class SyncSMS extends Streamer {
+    var $body;
+    var $datereceived;
+    var $importance;
+    var $messageclass;
+    var $read;
+    var $to;
+    var $cc;
+    var $from;
+
+    function SyncSMS() {
+        global $protocolversion;
+
+        $mapping = array (
+                                SYNC_POOMMAIL_TO => array (STREAMER_VAR => "to"),
+                                SYNC_POOMMAIL_FROM => array (STREAMER_VAR => "from"),
+                                SYNC_POOMMAIL_CC => array (STREAMER_VAR => "cc"),
+                                SYNC_POOMMAIL_DATERECEIVED => array (STREAMER_VAR => "datereceived", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES ),
+                                SYNC_POOMMAIL_IMPORTANCE => array (STREAMER_VAR => "importance"),
+                                SYNC_POOMMAIL_READ => array (STREAMER_VAR => "read"),
+				SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
+                                SYNC_POOMMAIL_INTERNETCPID => array (STREAMER_VAR => "internetcpid"),
+                    	        SYNC_POOMMAIL_FLAG => array(STREAMER_VAR => "poommailflag", STREAMER_TYPE => "SyncPoommailFlag"),
+                                SYNC_POOMMAIL2_CONVERSATIONID => array (STREAMER_VAR => "conversationid"),
+                                SYNC_POOMMAIL2_CONVERSATIONINDEX => array (STREAMER_VAR => "conversationindex"),
+                              );
+
+        parent::Streamer($mapping);
+    }
+};
+
 
 class SyncContact extends Streamer {
     var $anniversary;
@@ -480,6 +529,8 @@ class SyncRecurrence extends Streamer {
     var $monthofyear;
 
     function SyncRecurrence() {
+	global $protocolversion;
+	
         $mapping = array (
                       SYNC_POOMCAL_TYPE => array (STREAMER_VAR => "type"),
                       SYNC_POOMCAL_UNTIL => array (STREAMER_VAR => "until", STREAMER_TYPE => STREAMER_TYPE_DATE),
@@ -490,6 +541,12 @@ class SyncRecurrence extends Streamer {
                       SYNC_POOMCAL_WEEKOFMONTH => array (STREAMER_VAR => "weekofmonth"),
                       SYNC_POOMCAL_MONTHOFYEAR => array (STREAMER_VAR => "monthofyear")
         );
+	if ($protocolversion >= 14.0) {
+	    $mapping += array (
+                              SYNC_POOMMAIL2_CALENDARTYPE => array (STREAMER_VAR => "calendartype"),
+                              SYNC_POOMMAIL2_ISLEAPMONTH => array (STREAMER_VAR => "isleapmonth"),
+    	    );
+	}
 
         parent::Streamer($mapping);
     }
@@ -569,5 +626,25 @@ class SyncTask extends Streamer {
         parent::Streamer($mapping);
     }
 }
+
+// START ADDED dw2412 Support V14.0
+class SyncNote extends Streamer {
+    var $body;
+    var $subject;
+    var $categories = array();
+    function SyncNote() {
+        global $protocolversion;
+        $mapping = array (
+                      SYNC_POOMNOTES_SUBJECT => array (STREAMER_VAR => "subject"),
+                      SYNC_POOMNOTES_MESSAGECLASS => array (STREAMER_VAR => "messageclass"),
+                      SYNC_POOMNOTES_LASTMODIFIEDDATE => array (STREAMER_VAR => "lastmodifieddate", STREAMER_TYPE => STREAMER_TYPE_DATE),
+                      SYNC_AIRSYNCBASE_BODY => array(STREAMER_VAR => "airsyncbasebody", STREAMER_TYPE => "SyncAirSyncBaseBody"),
+                      SYNC_POOMNOTES_CATEGORIES => array (STREAMER_VAR => "categories", STREAMER_ARRAY => SYNC_POOMNOTES_CATEGORY),
+        );
+
+        parent::Streamer($mapping);
+    }
+}
+// END ADDED dw2412 Support V14.0
 
 ?>

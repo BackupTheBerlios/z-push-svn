@@ -204,6 +204,8 @@ class WBXMLDecoder {
             case EN_TYPE_CONTENT:
                 debugLog("I " . $spaces . " " . $el[EN_CONTENT]);
                 break;
+	    default:
+                debugLog("I " . $spaces . " " . $el[EN_TYPE]);
         }
     }
 
@@ -604,6 +606,13 @@ class WBXMLEncoder {
         $this->_content($content);
     }
 
+    function contentopaque($content) {
+        if("x" . $content == "x")
+            return;
+        $this->_outputStack();
+        $this->_contentopaque($content);
+    }
+
     // Output any tags on the stack that haven't been output yet
     function _outputStack() {
         for($i=0;$i<count($this->_stack);$i++) {
@@ -649,6 +658,14 @@ class WBXMLEncoder {
         $this->outTermStr($content);
     }
 
+    // Outputs actual data
+    function _contentopaque($content) {
+        $this->logContent("OPAQUE: ".bin2hex($content));
+        $this->outByte(WBXML_OPAQUE);
+	$this->outByte(strlen($content));
+        $this->outOpaque($content);
+    }
+
     // Outputs an actual end tag
     function _endTag() {
         $this->logEndTag();
@@ -677,6 +694,10 @@ class WBXMLEncoder {
     function outTermStr($content) {
         fwrite($this->_out, $content);
         fwrite($this->_out, chr(0));
+    }
+
+    function outOpaque($content) {
+        fwrite($this->_out, $content);
     }
 
     function outAttributes() {

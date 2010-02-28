@@ -27,27 +27,29 @@ include_once("version.php");
 ini_set('max_execution_time', SCRIPT_TIMEOUT);
 set_time_limit(SCRIPT_TIMEOUT);
 
-debugLog("Start ------ THIS IS AN UNOFFICIAL AS 12 DEVELOPER VERSION!");
+debugLog("Start ------ THIS IS AN UNOFFICIAL DEVELOPER VERSION!");
 debugLog("Z-Push version: $zpush_version");
 debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
-//debugLog(print_r($_SERVER,true));
-//debugLog(print_r($_GET,true));
-//debugLog(print_r($_POST,true));
-//debugLog(print_r(apache_request_headers(),true));
-
+// debugLog(print_r($_SERVER,true));
+// debugLog(print_r($_GET,true));
+// debugLog(print_r($_POST,true));
+// debugLog(print_r(apache_request_headers(),true));
+ 
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
 
 // The script must always be called with authorisation info
+
 if(!isset($_SERVER['PHP_AUTH_PW'])) {
-    header("WWW-Authenticate: Basic realm=\"ZPush\"");
     header("HTTP/1.1 401 Unauthorized");
+    header("WWW-Authenticate: Basic realm=\"ZPush\"");
     print("Access denied. Please send authorisation information");
     debugLog("Access denied: no password sent.");
     debugLog("end");
     debugLog("--------");
     return;
 }
+
 
 // split username & domain if received as one
 $pos = strrpos($_SERVER['PHP_AUTH_USER'], '\\');
@@ -71,6 +73,42 @@ if(isset($_GET["DeviceId"]))
     $devid = $_GET["DeviceId"];
 if(isset($_GET["DeviceType"]))
     $devtype = $_GET["DeviceType"];
+// Get the parameters from Query String in case they`re not in the get.
+// AS >=12.1
+if (!isset($_GET['Cmd']) &&
+    !isset($_GET['DeviceId']) &&
+    !isset($_GET['DeviceType']) &&
+    isset($_SERVER['QUERY_STRING']) &&
+    strlen($_SERVER['QUERY_STRING']) >= 10) {
+    $user = $auth_user;
+    $uri_decoded = base64uri_decode($_SERVER['QUERY_STRING']);
+    $devid = $uri_decoded['DevID'];
+    switch($uri_decoded['DevType']) {
+	case 'PPC' 	: $devtype = 'PocketPC'; break;
+	case 'SP' 	: $devtype = 'SmartPhone'; break;
+    };
+    switch($uri_decoded['Command']) {
+	case '0' 	: $cmd = 'Sync'; break;
+	case '1' 	: $cmd = 'SendMail'; break;
+	case '2' 	: $cmd = 'SmartForward'; break;
+	case '3' 	: $cmd = 'SmartReply'; break;
+	case '4' 	: $cmd = 'GetAttachment'; break;
+	case '9' 	: $cmd = 'FolderSync'; break;
+	case '10' 	: $cmd = 'FolderCreate'; break;
+	case '11' 	: $cmd = 'FolderDelete'; break;
+	case '12' 	: $cmd = 'FolderUpdate'; break;
+	case '13' 	: $cmd = 'MoveItems'; break;
+	case '14' 	: $cmd = 'GetItemEstimate'; break;
+	case '15' 	: $cmd = 'MeetingResponse'; break;
+	case '16' 	: $cmd = 'Search'; break;
+	case '17' 	: $cmd = 'Settings'; break;
+	case '18' 	: $cmd = 'Ping'; break;
+	case '19' 	: $cmd = 'ItemOperations'; break;
+	case '20' 	: $cmd = 'Provision'; break;
+	case '21' 	: $cmd = 'ResolveRecipients'; break;
+	case '22' 	: $cmd = 'ValidateCert'; break;
+    }
+};
 
 // The GET parameters are required
 if($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -83,10 +121,13 @@ if($_SERVER["REQUEST_METHOD"] == "POST") {
 // Get the request headers so we can see the versions
 $requestheaders = apache_request_headers();
 if (isset($requestheaders["Ms-Asprotocolversion"])) $requestheaders["MS-ASProtocolVersion"] = $requestheaders["Ms-Asprotocolversion"];
-if(isset($requestheaders["MS-ASProtocolVersion"])) {
+if(isset($requestheaders["MS-ASProtocolVersion"]) ||
+   isset($uri_decoded['ProtVer'])) {
     global $protocolversion;
-
-    $protocolversion = $requestheaders["MS-ASProtocolVersion"];
+    if (isset($requestheaders["MS-ASProtocolVersion"])) 
+	$protocolversion = $requestheaders["MS-ASProtocolVersion"];
+    else
+	$protocolversion = $uri_decoded['ProtVer']/10;
     debugLog("Client supports version " . $protocolversion);
 } else {
     global $protocolversion;
@@ -95,8 +136,14 @@ if(isset($requestheaders["MS-ASProtocolVersion"])) {
 }
 
 // START ADDED dw2412 Support Multipart response
-if (isset($requestheaders["MS-ASAcceptMultiPart"]) &&
-    $requestheaders["MS-ASAcceptMultiPart"] == "T") {
+// From AS 12.1 there is no request header field for this. 
+// Looks like that multipart is in general accepted, requested, expected and ...
+// this is documented different in MS-ASCMD Page 52 (v20091030)
+// || 
+//    $protocolversion>=12.1
+//
+if ((isset($requestheaders["MS-ASAcceptMultiPart"]) &&
+    $requestheaders["MS-ASAcceptMultiPart"] == "T")) {
     $multipart = true;
 } else {
     $multipart = false;
@@ -104,7 +151,7 @@ if (isset($requestheaders["MS-ASAcceptMultiPart"]) &&
 // END ADDED dw2412 Support Multipart response
 
 // START ADDED dw2412 Support gzip compression in result
-if (isset($requestheaders["Accept-Encoding"])) {
+if (1==2 && isset($requestheaders["Accept-Encoding"])) {
     $encodings = explode(", ",$requestheaders["Accept-Encoding"]);
     debugLog("Current zlib output compression setting: ".ini_get("zlib.output_compression"));
 
@@ -124,10 +171,13 @@ if (isset($requestheaders["Accept-Encoding"])) {
 // END ADDED dw2412 Support gzip compression in result
 
 if (isset($requestheaders["X-Ms-Policykey"])) $requestheaders["X-MS-PolicyKey"] = $requestheaders["X-Ms-Policykey"];
-if (isset($requestheaders["X-MS-PolicyKey"])) {
+if (isset($requestheaders["X-MS-PolicyKey"]) ||
+    isset($uri_decoded['PolKey'])) {
     global $policykey;
-    $policykey = $requestheaders["X-MS-PolicyKey"];
-
+    if (isset($requestheaders["X-MS-PolicyKey"])) 
+	$policykey = $requestheaders["X-MS-PolicyKey"];
+    else 
+	$policykey = $uri_decoded['PolKey'];
 } else {
     global $policykey;
     $policykey = 0;
@@ -171,10 +221,13 @@ if($backend->Logon($auth_user, $auth_domain, $auth_pw) == false  && !$policykey)
 if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] != 'OPTIONS' && $cmd != 'Ping' && $cmd != 'Provision' && 
     $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS &&
     (LOOSE_PROVISIONING === false ||
-    (LOOSE_PROVISIONING === true && isset($requestheaders["X-MS-PolicyKey"])))) {    	
+    (LOOSE_PROVISIONING === true && (isset($requestheaders["X-MS-PolicyKey"]) || isset($uri_decoded['PolKey']) )))) {    	
     header("HTTP/1.1 449 Retry after sending a PROVISION command");
-    header("MS-Server-ActiveSync: 6.5.7638.1");
-    header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0");
+    // dw2412 changed to support AS14 Protocol
+    header("MS-Server-ActiveSync: 14.00.048.018");
+    header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0,12.1,14.0");
+    header("MS-ASProtocolRevisions: 12.1r1");
+    header("X-MS-MV: 14.0.255");
     // CHANGED dw2412 Support for Settings and ItemOperations command
     header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,Provision,ResolveRecipients,ValidateCert,Settings,Search,Ping,ItemOperations");
     header("Cache-Control: private");
@@ -199,14 +252,30 @@ if($backend->Setup($user, $devid, $protocolversion) == false) {
 // Do the actual request
 switch($_SERVER["REQUEST_METHOD"]) {
     case 'OPTIONS':
-        header("MS-Server-ActiveSync: 6.5.7638.1");
-        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0");
+	// dw2412 changed to support AS14 Protocol
+        header("MS-Server-ActiveSync: 14.00.048.018");
+        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0,12.1,14.0");
+	header("MS-ASProtocolRevisions: 12.1r1");
+	header("X-MS-MV: 14.0.255");
+	// START ADDED dw2412 
+	// Compare and send X-MS-RP depending on Protocol Version string
+	// write the new Protocol Version string if update send
+	include_once ('statemachine.php');
+	$protstate = new StateMachine($devid);
+	if ($protstate->getProtocolState() != "2.0,2.1,2.5,12.0,12.1,14.0") {
+    	    header("X-MS-RP: 2.0,2.1,2.5,12.0,12.1,14.0");
+	    debugLog("Sending X-MS-RP to update Protocol Version on Device");
+    	    $protstate->setProtocolState("2.0,2.1,2.5,12.0,12.1,14.0");
+    	}
+    	unset($protstate);
+	// END ADDED dw2412 
 	// START CHANGED dw2412 Settings and ItemOperations Command Support
         header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,ResolveRecipients,ValidateCert,Provision,Settings,Search,Ping,ItemOperations");
         debugLog("Options request");
         break;
     case 'POST':
-        header("MS-Server-ActiveSync: 6.5.7638.1");
+	// dw2412 changed to support AS14 Protocol
+	header("MS-Server-ActiveSync: 14.0");
         debugLog("POST cmd: $cmd");
         // Do the actual request
         if(!HandleRequest($backend, $cmd, $devid, $protocolversion, $multipart)) {

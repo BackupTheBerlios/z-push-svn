@@ -149,6 +149,13 @@ function buildAddressString($street, $zip, $city, $state, $country) {
     return ($out)?$out:null;
 }
 
+function base64uri_decode($uri) {
+    $uri = base64_decode($uri);
+    $lenDevID = ord($uri{4});
+    $lenPolKey = ord($uri{4+(1+$lenDevID)});
+    $lenDevType = ord($uri{4+(1+$lenDevID)+(1+$lenPolKey)});
+    return unpack("CProtVer/CCommand/vLocale/CDevIDLen/H".($lenDevID*2)."DevID/CPolKeyLen".($lenPolKey == 4 ? "/VPolKey" : "")."/CDevTypeLen/A".($lenDevType)."DevType",$uri);
+}
 
 /**
  * Read the correct message body 

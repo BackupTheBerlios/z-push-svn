@@ -42,10 +42,13 @@
     // devices which don't support provisioning (like WM 5 and HTC Android Mail) - dw2412 contribution
     // false (default) - Enforce provisioning for all devices
     // true - allow older devices, but enforce policies on devices which support it  
-    define('LOOSE_PROVISIONING', true); 
+    define('LOOSE_PROVISIONING', false); 
 
     // Palm Pre AS2.5 PoomTasks:RTF Fix
     define('ENABLE_PALM_PRE_AS25_CONTACT_FIX',true);
+
+    // Switch of imtoinet because of segfaults
+    define('ICS_IMTOINET_SEGFAULT',false);
 
     // The data providers that we are using (see configuration below)
     $BACKEND_PROVIDER = "BackendICS";

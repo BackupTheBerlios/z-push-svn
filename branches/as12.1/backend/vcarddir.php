@@ -26,7 +26,7 @@ class BackendVCDir extends BackendDiff {
         return true;
     }
 
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {
+    function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {
         return false;
     }
 

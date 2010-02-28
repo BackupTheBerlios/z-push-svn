@@ -145,11 +145,28 @@ class Streamer {
     function encode(&$encoder) {
         $attributes = isset($this->attributes) ? $this->attributes : array();
 
+// START ADDED dw2412 Support V12.0
+	if(isset($this->_mapping["AirSyncBase:Attachments"])) {
+	    if (isset($this->attachments) &&
+		sizeof($this->attachments) > 0) {
+		for ($i=0;$i<sizeof($this->attachments);$i++) {
+		    $this->airsyncbaseattachments[$i] = new SyncAirSyncBaseAttachment();
+		    $this->airsyncbaseattachments[$i]->method = $this->attachments[$i]->attmethod;
+	    	    $this->airsyncbaseattachments[$i]->estimateddatasize = $this->attachments[$i]->attsize;
+		    $this->airsyncbaseattachments[$i]->displayname = $this->attachments[$i]->displayname;
+		    $this->airsyncbaseattachments[$i]->filereference = $this->attachments[$i]->attname;
+		    $this->airsyncbaseattachments[$i]->isinline = $this->attachments[$i]->isinline;
+		    $this->airsyncbaseattachments[$i]->contentlocation = $this->attachments[$i]->contentlocation;
+		    $this->airsyncbaseattachments[$i]->contentid = $this->attachments[$i]->contentid;
+		    if (isset($this->attachments[$i]->_data)) $this->airsyncbaseattachments[$i]->_data = $this->attachments[$i]->_data;
+		}
+		unset($this->attachments);
+	    }
+	}
+// END ADDED dw2412 Support V12.0
         foreach($this->_mapping as $tag => $map) {
-//	    debugLog("streamer encode element ".$tag." ".print_r($map,true));
             if(isset($this->$map[STREAMER_VAR])) {
                 // Variable is available
-//		debugLog(print_r($this->$map[STREAMER_VAR],true));
                 if(is_object($this->$map[STREAMER_VAR])) {
                     // Subobjects can do their own encoding
                     $encoder->startTag($tag);
@@ -200,7 +217,12 @@ class Streamer {
                     } else if(isset($map[STREAMER_TYPE]) && $map[STREAMER_TYPE] == STREAMER_TYPE_MAPI_STREAM) {
                         $encoder->content($this->$map[STREAMER_VAR]);
                     } else {
-                        $encoder->content($this->$map[STREAMER_VAR]);
+                	if ($tag == SYNC_POOMMAIL2_CONVERSATIONINDEX ||
+                	    $tag == SYNC_POOMMAIL2_CONVERSATIONID) {
+                    	    $encoder->contentopaque($this->$map[STREAMER_VAR]);
+                	} else {
+                    	    $encoder->content($this->$map[STREAMER_VAR]);
+                    	}
                     }
                     $encoder->endTag();
                 }

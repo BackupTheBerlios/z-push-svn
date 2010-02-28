@@ -90,8 +90,9 @@ class BackendIMAP extends BackendDiff {
      * want it in 'sent items', then the next sync on the 'sent items' folder should return
      * the new message as any other new message in a folder.
      */
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {
-        debugLog("IMAP-SendMail: " . $rfc822 . "for: $forward   reply: $reply   parent: $parent" );
+    function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {
+        if ($protocolversion < 14.0) 
+    	    debugLog("IMAP-SendMail: " . $rfc822 . "task: ".$smartdata['task']." itemid: ".(isset($smartdata['itemid']) ? $smartdata['itemid'] : "")." parent: ".(isset($smartdata['folderid']) ? $smartdata['folderid'] : ""));
 
         $mobj = new Mail_mimeDecode($rfc822);
         $message = $mobj->decode(array('decode_headers' => false, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $rfc822, 'crlf' => "\n", 'charset' => 'utf-8'));
@@ -123,7 +124,7 @@ class BackendIMAP extends BackendDiff {
 
             if ($k == "content-type") {
                 // save the original content-type header for the body part when forwarding
-                if ($forward) {
+                if ($smartdata['task'] == 'forward' && $smartdata['itemid']) {
                     $forward_h_ct = $v;
                     continue;
                 }
@@ -138,14 +139,14 @@ class BackendIMAP extends BackendDiff {
                 if (trim($v) == "base64") $body_base64 = true;
 
                 // save the original encoding header for the body part when forwarding
-                if ($forward) {
+                if ($smartdata['task'] == 'forward' && $smartdata['itemid']) {
                     $forward_h_cte = $v;
                     continue;
                 }
             }
 
             // if the message is a multipart message, then we should use the sent body
-            if (!$forward && $k == "content-type" && preg_match("/multipart/i", $v)) {
+            if ($smartdata['task'] == 'reply' && $k == "content-type" && preg_match("/multipart/i", $v)) {
                 $use_orgbody = true;
             }
 
@@ -198,10 +199,10 @@ class BackendIMAP extends BackendDiff {
             $body = $this->getBody($message);
 
         // reply
-        if (isset($reply) && isset($parent) &&  $reply && $parent) {
-            $this->imap_reopenFolder($parent);
+        if ($smartdata['task'] == 'reply' && isset($smartdata['itemid']) && isset($smartdata['folderid']) && $smartdata['itemid'] && $smartdata['folderid']) {
+            $this->imap_reopenFolder($smartdata['folderid']);
             // receive entire mail (header + body) to decode body correctly
-            $origmail = @imap_fetchheader($this->_mbox, $reply, FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $reply, FT_PEEK | FT_UID);
+            $origmail = @imap_fetchheader($this->_mbox, $smartdata['itemid'], FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $smartdata['itemid'], FT_PEEK | FT_UID);
             $mobj2 = new Mail_mimeDecode($origmail);
             // receive only body
             $body .= $this->getBody($mobj2->decode(array('decode_headers' => false, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $origmail, 'crlf' => "\n", 'charset' => 'utf-8')));
@@ -216,10 +217,10 @@ class BackendIMAP extends BackendDiff {
 
 
         // forward
-        if (isset($forward) && isset($parent) && $forward && $parent) {
-            $this->imap_reopenFolder($parent);
+        if ($smartdata['task'] == 'forward' && isset($smartdata['itemid']) && isset($smartdata['folderid']) && $smartdata['itemid'] && $smartdata['folderid']) {
+            $this->imap_reopenFolder($smartdata['folderid']);
             // receive entire mail (header + body)
-            $origmail = @imap_fetchheader($this->_mbox, $forward, FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $forward, FT_PEEK | FT_UID);
+            $origmail = @imap_fetchheader($this->_mbox, $smartdata['itemid'], FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $smartdata['itemid'], FT_PEEK | FT_UID);
 
             // build a new mime message, forward entire old mail as file
             list($aheader, $body) = $this->mail_attach("forwarded_message.eml",strlen($origmail),$origmail, $body, $forward_h_ct, $forward_h_cte);
@@ -883,9 +884,7 @@ class BackendIMAP extends BackendDiff {
 
     // adds a message as seen to a specified folder (used for saving sent mails)
     function addSentMessage($folderid, $header, $body) {
-        $header_body = str_replace("\n", "\r\n", str_replace("\r", "", $header . "\n\n" . $body));
-
-        return @imap_append($this->_mbox, $this->_server . $folderid, $header_body, "\\Seen");
+        return @imap_append($this->_mbox,$this->_server . $folderid, $header . "\n\n" . $body ,"\\Seen");
     }
 
 

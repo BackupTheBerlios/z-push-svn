@@ -42,6 +42,10 @@ define("SYNC_SOFTDELETE","SoftDelete");
 define("SYNC_MIMESUPPORT","MIMESupport");
 define("SYNC_MIMETRUNCATION","MIMETruncation");
 define("SYNC_NEWMESSAGE","NewMessage");
+define("SYNC_PARTIAL","Partial");
+define("SYNC_WAIT","Wait");
+define("SYNC_HEARTBEATINTERVAL","HeartbeatInterval");
+define("SYNC_CONVERSATIONMODE","ConversationMode");
 
 // POOMCONTACTS
 define("SYNC_POOMCONTACTS_ANNIVERSARY","POOMCONTACTS:Anniversary");
@@ -161,6 +165,19 @@ define("SYNC_POOMMAIL_FLAG","POOMMAIL:Flag");
 define("SYNC_POOMMAIL_FLAGSTATUS","POOMMAIL:FlagStatus");
 define("SYNC_POOMMAIL_FLAGTYPE","POOMMAIL:FlagType");
 define("SYNC_POOMMAIL_COMPLETETIME","POOMMAIL:CompleteTime");
+// ADDED dw2412 V14.0 Support
+define("SYNC_POOMMAIL2_UMCALLERID","POOMMAIL2:UmCallerId");
+define("SYNC_POOMMAIL2_USERNOTES","POOMMAIL2:UserNotes");
+define("SYNC_POOMMAIL2_UMATTDURATION","POOMMAIL2:UmAttDuration");
+define("SYNC_POOMMAIL2_UMATTORDER","POOMMAIL2:UmAttOrder");
+define("SYNC_POOMMAIL2_CONVERSATIONID","POOMMAIL2:ConversationId");
+define("SYNC_POOMMAIL2_CONVERSATIONINDEX","POOMMAIL2:ConversationIndex");
+define("SYNC_POOMMAIL2_LASTVERBEXECUTED","POOMMAIL2:LastVerbExecuted");
+define("SYNC_POOMMAIL2_LASTVERBEXECUTIONTIME","POOMMAIL2:LastVerbExecutionTime");
+define("SYNC_POOMMAIL2_RECEIVEDASBCC","POOMMAIL2:ReceivedAsBcc");
+define("SYNC_POOMMAIL2_SENDER","POOMMAIL2:Sender");
+define("SYNC_POOMMAIL2_CALENDARTYPE","POOMMAIL2:CalendarType");
+define("SYNC_POOMMAIL2_ISLEAPMONTH","POOMMAIL2:IsLeapMonth");
 
 // AIRNOTIFY
 define("SYNC_AIRNOTIFY_NOTIFY","AirNotify:Notify");
@@ -514,6 +531,32 @@ define("SYNC_POOMMAIL2_CALENDARTYPE","POOMMAIL2:CalendarType");
 define("SYNC_POOMMAIL2_ISLEAPMONTH","POOMMAIL2:IsLeapMonth");
 // END ADDED dw2412 12.0 PoomMail2 Support
 
+// START ADDED dw2412 14.0 ComposeMail Support
+
+define("SYNC_COMPOSEMAIL_SENDMAIL","ComposeMail:SendMail");
+define("SYNC_COMPOSEMAIL_SMARTFORWARD","ComposeMail:SmartForward");
+define("SYNC_COMPOSEMAIL_SMARTREPLY","ComposeMail:SmartReply");
+define("SYNC_COMPOSEMAIL_SAVEINSENTITEMS","ComposeMail:SaveInSentItems");
+define("SYNC_COMPOSEMAIL_REPLACEMIME","ComposeMail:ReplaceMime");
+define("SYNC_COMPOSEMAIL_TYPE","ComposeMail:Type");
+define("SYNC_COMPOSEMAIL_SOURCE","ComposeMail:Source");
+define("SYNC_COMPOSEMAIL_FOLDERID","ComposeMail:FolderId");
+define("SYNC_COMPOSEMAIL_ITEMID","ComposeMail:ItemId");
+define("SYNC_COMPOSEMAIL_LONGID","ComposeMail:LongId");
+define("SYNC_COMPOSEMAIL_INSTANCEID","ComposeMail:InstanceId");
+define("SYNC_COMPOSEMAIL_MIME","ComposeMail:MIME");
+define("SYNC_COMPOSEMAIL_CLIENTID","ComposeMail:ClientId");
+define("SYNC_COMPOSEMAIL_STATUS","ComposeMail:Status");
+
+// END ADDED dw2412 14.0 ComposeMail Support
+
+// START ADDED dw2412 14.0 PoomNotes Support
+define("SYNC_POOMNOTES_SUBJECT","POOMNOTES:Subject");
+define("SYNC_POOMNOTES_MESSAGECLASS","POOMNOTES:MessageClass");
+define("SYNC_POOMNOTES_LASTMODIFIEDDATE","POOMNOTES:LastModifiedDate");
+define("SYNC_POOMNOTES_CATEGORIES","POOMNOTES:Categories");
+define("SYNC_POOMNOTES_CATEGORY","POOMNOTES:Category");
+// END ADDED dw2412 14.0 PoomNotes Support
 
 // Other constants
 define("SYNC_FOLDER_TYPE_OTHER", 1);

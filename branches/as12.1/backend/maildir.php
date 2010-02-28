@@ -64,7 +64,7 @@ class BackendMaildir extends BackendDiff {
      * want it in 'sent items', then the next sync on the 'sent items' folder should return
      * the new message as any other new message in a folder.
      */
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {
+    function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {
         // Unimplemented
         return true;
     }

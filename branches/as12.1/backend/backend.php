@@ -75,7 +75,7 @@ class Backend {
 
     // Called when a message has to be sent and the message needs to be saved to the 'sent items'
     // folder
-    function SendMail($rfc822, $forward = false, $reply = false, $parent = false, $protocolversion = false) {}
+    function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {}
 
     // START ADDED dw2412 Settings Support
     function getSettings($request,$devid) {}
