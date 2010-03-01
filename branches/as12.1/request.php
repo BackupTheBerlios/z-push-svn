@@ -2504,8 +2504,8 @@ function HandleProvision($backend, $devid, $protocolversion) {
 			$encoder->startTag('Provision:MaxCalendarAgeFilter');$encoder->content('0');$encoder->endTag();
 			$encoder->startTag('Provision:AllowHTMLEmail');$encoder->content('1');$encoder->endTag();
 			$encoder->startTag('Provision:MaxEmailAgeFilter');$encoder->content('0');$encoder->endTag();
-			$encoder->startTag('Provision:MaxEmailBodyTruncationSize');$encoder->content('-1');$encoder->endTag();
-			$encoder->startTag('Provision:MaxHTMLBodyTruncationSize');$encoder->content('-1');$encoder->endTag();
+			$encoder->startTag('Provision:MaxEmailBodyTruncationSize');$encoder->content('5000000');$encoder->endTag();
+			$encoder->startTag('Provision:MaxHTMLBodyTruncationSize');$encoder->content('5000000');$encoder->endTag();
 			$encoder->startTag('Provision:RequireSignedSMIMEMessages');$encoder->content('0');$encoder->endTag();
 			$encoder->startTag('Provision:RequireEncryptedSMIMEMessages');$encoder->content('0');$encoder->endTag();
 			$encoder->startTag('Provision:RequireSignedSMIMEAlgorithm');$encoder->content('0');$encoder->endTag();
