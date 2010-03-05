@@ -241,10 +241,12 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
 	_ErrorHandleFolderSync(abs($status));
         return true;
     } else {
-	// Clear the SyncCache in case the SyncKey = 0
+	$foldercache = unserialize($statemachine->getSyncCache());
+	// Clear the foldercache in SyncCache in case the SyncKey = 0
 	if ($synckey == "0") {
-	    $statemachine->deleteSyncCache();
-	    debugLog("Clean the synccache");
+	    // $statemachine->deleteSyncCache();
+	    unset($foldercache['folders']);
+	    debugLog("Clean the folders in foldercache");
 	} 
 	debugLog("GetSyncState OK");
     }
@@ -255,7 +257,6 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
     $seenfolders = unserialize($seenfolders);
     if (!$seenfolders) $seenfolders = array();
     
-    $foldercache = unserialize($statemachine->getSyncCache());
     if (!is_array($foldercache) ||
 	sizeof($foldercache) == 0) $foldercache = array();
     if (!$foldercache) $foldercache = array();
@@ -393,6 +394,11 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
     $syncstate = $exporter->GetState();
     $statemachine->setSyncState($newsynckey, $syncstate);
     $statemachine->setSyncState("s".$newsynckey, serialize($seenfolders));
+
+    // Remove collections from foldercache for that no folder exists
+    foreach ($foldercache['collections'] as $key => $value) {
+	if (!isset($foldercache['folders'][$key])) unset($foldercache['collections'][$key]);
+    }
     $statemachine->setSyncCache(serialize($foldercache));
 
     return true;
@@ -839,6 +845,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    if (isset($collection["collectionid"])) {
 		if (isset($collection["class"])) 	  $SyncCache['collections'][$collection["collectionid"]]["class"] = $collection["class"];
 	        if (isset($collection["maxitems"])) 	  $SyncCache['collections'][$collection["collectionid"]]["maxitems"] = $collection["maxitems"];
+	        if (isset($collection["optionfoldertype"])) $SyncCache['collections'][$collection["collectionid"]]["optionfoldertype"] = $collection["optionfoldertype"];
 	        if (isset($collection["deletesasmoves"])) $SyncCache['collections'][$collection["collectionid"]]["deletesasmoves"] = $collection["deletesasmoves"];
 	        if (isset($collection["getchanges"])) 	  $SyncCache['collections'][$collection["collectionid"]]["getchanges"] = $collection["getchanges"];
 	        if (isset($collection["filtertype"])) 	  $SyncCache['collections'][$collection["collectionid"]]["filtertype"] = $collection["filtertype"];
@@ -868,7 +875,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    }
 	    
 	};
-	if (isset($values['synckey']) && $values['synckey'] != '0') $collections[$key]["getchanges"] = true;
+	//  && $values['synckey'] != '0'
+	if (isset($values['synckey'])) $collections[$key]["getchanges"] = true;
 	if ($protocolversion >= 12.0) {
 //	    if (!isset($values["BodyPreference"]) && $values['synckey'] != '0' && $values['class'] == 'Email') {
 	    if (!isset($values["BodyPreference"]) && $values['synckey'] != '0') {
@@ -881,14 +889,16 @@ function HandleSync($backend, $protocolversion, $devid) {
 		}
 	    }
 	}
-	if (!isset($values["filtertype"]) && $values['synckey'] != '0' && ($values['class'] == 'Email' || $values['class'] == 'Calendar' || $values['class'] == 'Tasks')) {
-	    if (isset($SyncCache['folders'][$values["collectionid"]]['filtertype'])) {
-		$collections[$key]["filtertype"] = $SyncCache['folders'][$values["collectionid"]]['filtertype'];
+//	if (!isset($values["filtertype"])) debugLog(print_r($SyncCache,true));
+	if (!isset($values["filtertype"])  && $values['synckey'] != '0'&& ($values['class'] == 'Email' || $values['class'] == 'Calendar' || $values['class'] == 'Tasks')) {
+	    if (isset($SyncCache['collections'][$values["collectionid"]]['filtertype'])) {
+		$collections[$key]["filtertype"] = $SyncCache['collections'][$values["collectionid"]]['filtertype'];
 	    } else {
-		_HandleSyncError("12");
+		$collections[$key]["filtertype"] = 0;
+/*		_HandleSyncError("12");
 		debugLog("(".$SyncCache['folders'][$values["collectionid"]]['displayname'].") No filtertype even in cache, sending status 12 to recover from this");
 	        return true;		    
-	    }
+*/	    }
 	}
 	if (!isset($values["maxitems"])) 
 	    $collections[$key]["maxitems"] = (isset($SyncCache['collections'][$values["collectionid"]]['maxitems']) ? 
@@ -903,10 +913,11 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    $values['synckey'] == '0' && 
 	    isset($SyncCache['collections'][$values["collectionid"]]['synckey']) && 
 	    $SyncCache['collections'][$values["collectionid"]]['synckey'] != '0') {
-	    _HandleSyncError("12");
+	    debugLog("ERROR Synckey 0 and Cache has synckey... Invalidation disabled, check of maybe existing dups!");
+/*	    _HandleSyncError("12");
 	    debugLog("ERROR Synckey 0 and Cache has synckey... Invalidate!");
 	    return true;		    
-	}
+*/	}
 
     }
     if (!isset($SyncCache['hierarchy']['synckey'])) {
@@ -1029,12 +1040,14 @@ function HandleSync($backend, $protocolversion, $devid) {
         	$state = $collection["syncstate"];
         	$class = $collection["class"];
         	$truncation = $collection["truncation"];
+        	$filtertype = (isset($collection["filtertype"]) ? $collection["filtertype"] : 0);
         	$waitimporter = false;
                 $onlyoptionbodypreference = $protocolversion >= 14.0 && (!isset($collection["BodyPreference"][1]) && !isset($collection["BodyPreference"][2]) && !isset($collection["BodyPreference"][3]) && !isset($collection["BodyPreference"][4]));
 		
 		if ($onlyoptionbodypreference == false) {
         	    $exporter = $backend->GetExporter($collection["collectionid"]);
-        	    $ret = $exporter->Config($waitimporter, $collection["class"], false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
+//        	    $ret = $exporter->Config($waitimporter, $collection["class"], false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
+        	    $ret = $exporter->Config($waitimporter, $collection["class"], $filtertype, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
         	    // stop ping if exporter can not be configured (e.g. after Zarafa-server restart)
         	    if ($ret === false ) {
@@ -1055,8 +1068,10 @@ function HandleSync($backend, $protocolversion, $devid) {
 		    $collection["optionfoldertype"] == "SMS") {
         	    $exporter = $backend->GetExporter($collection["collectionid"]);
         	    $state = $collection[$collection["optionfoldertype"]."syncstate"];
+        	    $filtertype = (isset($collection["optionfoldertype"]["filtertype"]) ? $collection["optionfoldertype"]["filtertype"] : 0);
         	    $waitimporter = false;
-        	    $ret = $exporter->Config($waitimporter, $collection["optionfoldertype"], false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
+//        	    $ret = $exporter->Config($waitimporter, $collection["optionfoldertype"], false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
+        	    $ret = $exporter->Config($waitimporter, $collection["optionfoldertype"], $filtertype, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
         	    // stop ping if exporter can not be configured (e.g. after Zarafa-server restart)
         	    if ($ret === false ) {
@@ -1108,6 +1123,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 	};
     }
 
+    // Do a short answer to allow short sync requests
     if ($protocolversion >= 12.1 &&
 	isset($dataavailable) &&
 	$dataavailable == false &&
@@ -1183,7 +1199,6 @@ function HandleSync($backend, $protocolversion, $devid) {
                 if(isset($collection["clientids"]) || (isset($collection["fetchids"]) && count($collection["fetchids"]) > 0)) {
                     $encoder->startTag(SYNC_REPLIES);
                     foreach($collection["clientids"] as $clientid => $servervals) {
-			debugLog("HERE Clientids".print_r($collection["clientids"],true));
                         $encoder->startTag(SYNC_ADD);
 			if (isset($clientid["optionfoldertype"]) && is_array($servervals['serverid'])) {
                     	    $encoder->startTag(SYNC_FOLDERTYPE);
@@ -1365,6 +1380,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		    else
 			$SyncCache['collections'][$collection["collectionid"]]["synckey"] = $collection["synckey"];
 		    if (isset($collection["class"])) 		$SyncCache['collections'][$collection["collectionid"]]["class"] = $collection["class"];
+		    if (isset($collection["optionfoldertype"])) $SyncCache['collections'][$collection["collectionid"]]["optionfoldertype"] = $collection["optionfoldertype"];
 		    if (isset($collection["maxitems"])) 	$SyncCache['collections'][$collection["collectionid"]]["maxitems"] = $collection["maxitems"];
 		    if (isset($collection["deletesasmoves"])) 	$SyncCache['collections'][$collection["collectionid"]]["deletesasmoves"] = $collection["deletesasmoves"];	
 		    if (isset($collection["getchanges"])) 	$SyncCache['collections'][$collection["collectionid"]]["getchanges"] = $collection["getchanges"];	

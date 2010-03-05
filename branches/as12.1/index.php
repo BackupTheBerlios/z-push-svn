@@ -143,7 +143,8 @@ if(isset($requestheaders["MS-ASProtocolVersion"]) ||
 //    $protocolversion>=12.1
 //
 if ((isset($requestheaders["MS-ASAcceptMultiPart"]) &&
-    $requestheaders["MS-ASAcceptMultiPart"] == "T")) {
+    $requestheaders["MS-ASAcceptMultiPart"] == "T") ||
+    $protocolversion>=14.0) {
     $multipart = true;
 } else {
     $multipart = false;
@@ -151,7 +152,7 @@ if ((isset($requestheaders["MS-ASAcceptMultiPart"]) &&
 // END ADDED dw2412 Support Multipart response
 
 // START ADDED dw2412 Support gzip compression in result
-if (1==2 && isset($requestheaders["Accept-Encoding"])) {
+if (isset($requestheaders["Accept-Encoding"])) {
     $encodings = explode(", ",$requestheaders["Accept-Encoding"]);
     debugLog("Current zlib output compression setting: ".ini_get("zlib.output_compression"));
 

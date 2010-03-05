@@ -1249,7 +1249,13 @@ class ImportContentsChangesICS extends MAPIMapping {
         $this->_setPropsInMAPI($mapimessage, $contact, $this->_contactmapping);
 
         // Set display name and subject to a combined value of firstname and lastname
-        $cname = "".u2w($contact->firstname . " " . $contact->lastname);
+        $cname = (isset($contact->prefix))?u2w($contact->prefix)." ":"";
+        $cname .= u2w($contact->firstname);
+        $cname .= (isset($contact->middlename))?" ". u2w($contact->middlename):"";
+        $cname .= " ". u2w($contact->lastname);
+        $cname .= (isset($contact->suffix))?" ". u2w($contact->suffix):"";
+        $cname = trim($cname);
+         
 
         //set contact specific mapi properties
         $props = array();
@@ -2316,21 +2322,30 @@ class PHPContentsImportProxy extends MAPIMapping {
 	// START ADDED dw2412 conversation index
         $messageprops = mapi_getprops($mapimessage, array(PR_CONVERSATION_INDEX));
 	
-	if (CONVERSATIONINDEX == true &&
-	    isset($messageprops[PR_CONVERSATION_INDEX]) &&
-	    strlen($messageprops[PR_CONVERSATION_INDEX]) >= 22) {
-	    $tmp = $messageprops[PR_CONVERSATION_INDEX];
-	    $convid = substr($tmp,6,16);
-	    $convindex = substr($tmp,0,22);
-	    $tmp = substr($messageprops[PR_CONVERSATION_INDEX],22,strlen($messageprops[PR_CONVERSATION_INDEX]-22));
-	    while (strlen($tmp) > 0) {
-		$convindex .= substr($tmp,0,5);
-		$tmp = substr($tmp,5,strlen($tmp)-5);
-	    }
+	if (CONVERSATIONINDEX == true) {
+	    if (isset($messageprops[PR_CONVERSATION_INDEX]) &&
+		strlen($messageprops[PR_CONVERSATION_INDEX]) >= 22) {
+		$tmp = $messageprops[PR_CONVERSATION_INDEX];
+		$convid = substr($tmp,6,16);
+		$convindex = substr($tmp,0,22);
+		$tmp = substr($messageprops[PR_CONVERSATION_INDEX],22,strlen($messageprops[PR_CONVERSATION_INDEX]-22));
+		while (strlen($tmp) > 0) {
+		    $convindex .= substr($tmp,0,5);
+		    $tmp = substr($tmp,5,strlen($tmp)-5);
+		}
+	    } else {
+		debugLog("New conversation Index");
+		$ci = new ConversationIndex();
 
+		$ci->Create();
+    		$tmp = $ci->Encode();
+		$convid = substr($tmp,6,16);
+		$convindex = substr($tmp,0,22);
+		debugLog("New conversation Index ". $convid . " " . $convindex);
+	    }
 	    $message->conversationid = $convid;
 	    $message->conversationindex = $convindex;
-	}
+	} 
 	// END ADDED dw2412 conversation index
 
 	// Just send Appointments, too
@@ -2788,6 +2803,7 @@ class ExportChangesICS  {
 
         $this->statestream = $stream;
 
+//	debugLog(($this->_folderid ? "Have Folder" : "No Folder"). " " . $mclass . " restriction " . $restrict);
         switch($mclass) {
 	    case "SMS" :
                 $restriction = $this->_getSMSRestriction($this->_getCutOffDate($restrict));
