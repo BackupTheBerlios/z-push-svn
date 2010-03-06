@@ -25,10 +25,23 @@ function getDebugInfo() {
 }
 
 function debugLog($message) {
-    @$fp = fopen(BASE_PATH . "/debug.txt","a");
-    @$date = strftime("%x %X");
-    @fwrite($fp, "$date [". getmypid() ."] $message\n");
-    @fclose($fp);
+    global $devid;
+
+    // global log
+    if ((@$fp = fopen(BASE_PATH . "/debug.txt","a"))) {
+	@$date = strftime("%x %X");
+	@fwrite($fp, "$date [". getmypid() ."] $message\n");
+        @fclose($fp);
+    }
+    // logging by device
+    if (isset($devid) && strlen($devid) > 0 && 
+	($fn = BASE_PATH . STATE_DIR . "/". strtolower($devid). "/debug.txt") &&
+	file_exists($fn)) {
+    	@$fp = fopen($fn,"a");
+    	@$date = strftime("%x %X");
+	@fwrite($fp, "$date [". getmypid() ."] $message\n");
+	@fclose($fp);
+    }
 }
 
 function zarafa_error_handler($errno, $errstr, $errfile, $errline, $errcontext) {    

@@ -438,10 +438,26 @@ function HandleSync($backend, $protocolversion, $devid) {
     $statemachine = new StateMachine($devid);
 
     // Start decode
+    $shortsyncreq = false;
     if(!$decoder->getElementStartTag(SYNC_SYNCHRONIZE)) {
-	_HandleSyncError("13");
-	debugLog("Empty Sync request. STATUS = 13");
-        return true;
+	// short request is allowed in >= 12.1 but we enforce a full sync request in case cache is older than
+	// 10 minutes
+	if ($protocolversion >= 12.1) {
+	    if (!($SyncCache = unserialize($statemachine->getSyncCache())) ||
+		!isset($SyncCache['collections']) ||
+		$SyncCache['lastuntil']+600 >= time()) {
+    		_HandleSyncError("13");
+		debugLog("Empty Sync request and no or too old SyncCache. STATUS = 13");
+    		return true;
+	    } else {
+		$shortsyncreq = true;
+		debugLog("Empty Sync request and taken info from SyncCache.");
+	    }
+	} else {
+    	    _HandleSyncError("13");
+	    debugLog("Empty Sync request. STATUS = 13");
+    	    return true;
+    	}
     }
     if ($decoder->getElementStartTag(SYNC_MAXITEMS)) {
 	$default_maxitems = $decoder->getElementContent();
@@ -930,31 +946,32 @@ function HandleSync($backend, $protocolversion, $devid) {
     if($decoder->getElementStartTag(SYNC_WAIT)) {
         $wait = $decoder->getElementContent();
 	debugLog("Got Wait Sync ($wait Minutes)");
+	$SyncCache['wait'] = $wait;
 	$decoder->getElementEndTag();
     } else {
-	$wait = false;
+	if ($shortsyncreq == false) $SyncCache['wait'] = false;
     }
 
     if($decoder->getElementStartTag(SYNC_HEARTBEATINTERVAL)) {
-        $hbinterval = $decoder->getElementContent();
-	debugLog("Got Heartbeate Interval Sync ($hbinterval Seconds)");
+        $SyncCache['hbinterval'] = $decoder->getElementContent();
+	debugLog("Got Heartbeat Interval Sync (".$SyncCache['hbinterval']." Seconds)");
 	$decoder->getElementEndTag();
     } else {
-	$hbinterval = false;
+	if ($shortsyncreq == false) $SyncCache['hbinterval'] = false;
     }
 
-    if ($hbinterval !== false &&
-	$wait !== false) {
+    if ($SyncCache['hbinterval'] !== false &&
+	$SyncCache['wait'] !== false) {
 	_HandleSyncError("4");
 	debugLog("HandleSync got Found HeartbeatInterval and Wait in request. This violates the protocol spec. (STATUS = 4)");
 	return true;		    
     }
-    if ($wait > 59) {
+    if ($SyncCache['wait'] > 59) {
 	_HandleSyncError("14","59");
 	debugLog("Wait larger than 59 Minutes. This violates the protocol spec. (STATUS = 14, LIMIT = 59)");
 	return true;		    
     }
-    if ($hbinterval> 3540) {
+    if ($SyncCache['hbinterval'] > 3540) {
 	_HandleSyncError("14","3540");
 	debugLog("HeartbeatInterval larger than 3540 Seconds. This violates the protocol spec. (STATUS = 14, LIMIT = 3540)");
 	return true;		    
@@ -1006,12 +1023,14 @@ function HandleSync($backend, $protocolversion, $devid) {
     // AS14 the HeartbeatInterval in seconds.
     // Both is handeled below.
     if ($protocolversion >= 12.1 &&
-	($wait !== false ||
-	 $hbinterval !== false)) {
+	($SyncCache['wait'] !== false ||
+	 $SyncCache['hbinterval'] !== false)) {
 	$dataavailable = false;
-	if ($wait !== false) $until = time()+($wait*60);
-	else if ($hbinterval !== false) $until = time()+($hbinterval);
+	$timeout = 10;
+	if ($SyncCache['wait'] !== false) $until = time()+($SyncCache['wait']*60);
+	else if ($SyncCache['hbinterval'] !== false) $until = time()+($SyncCache['hbinterval']);
 	debugLog("Looking for changes for ".($until - time())." seconds");
+	$SyncCache['lastuntil'] = $until;
 	while (time()<$until) {
 	    // we try to find changes as long as time is lower than wait time 
 
@@ -1120,7 +1139,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		return true;		    
 	    }
 	    // 5 seconds sleep to keep the load low...
-	    sleep (5);
+	    sleep ($timeout);
 	};
     }
 

@@ -105,14 +105,18 @@ class StateMachine {
 
         if(file_exists($filename)) {
 	    $content = file_get_contents($filename);
-	    // invalidate current syncstate files in case a newer version exists already
-	    // Prevent endless loops. Once it might be because of transmission errors
-	    // 2nd time we force by this a complete resync.
+	    // In case a newer file exists, we read the newer state even in case an old state is being requested
+	    // This is necessary for nokia MfE 3.0 devices since they request i.e. folder states with old sync
+	    // keys and without this change the sync would break. 
+	    // At Nokia MfE 3.0 this occurs only at the 2nd sync where it requests with sync key of 1st sync
 	    // debugLog("GetSyncState: Does file ".BASE_PATH . STATE_DIR . '/'.$key.'{'.$guid.'}'.($n+1)." exist?");
-//            if (file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1))) {
+            if ($n==1 &&
+        	file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1))) {
+		debugLog("GetSyncState: Using new Sync State to stattisfy Nokia MfE 3.0");
 //		debugLog("GetSyncState: Removing ".BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.$n . " since newer version already exists");
 //        	unlink(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.$n);
-//            }
+		$content = file_get_contents(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1));
+            }
             return $content;
         } else {
 	    debugLog("GetSyncState: File $filename not existing");
