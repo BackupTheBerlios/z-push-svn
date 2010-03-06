@@ -136,11 +136,9 @@ if(isset($requestheaders["MS-ASProtocolVersion"]) ||
 }
 
 // START ADDED dw2412 Support Multipart response
-// From AS 12.1 there is no request header field for this. 
+// From AS 14.0 there is no request header field for this. 
 // Looks like that multipart is in general accepted, requested, expected and ...
 // this is documented different in MS-ASCMD Page 52 (v20091030)
-// || 
-//    $protocolversion>=12.1
 //
 if ((isset($requestheaders["MS-ASAcceptMultiPart"]) &&
     $requestheaders["MS-ASAcceptMultiPart"] == "T") ||

@@ -109,10 +109,10 @@ class StateMachine {
 	    // Prevent endless loops. Once it might be because of transmission errors
 	    // 2nd time we force by this a complete resync.
 	    // debugLog("GetSyncState: Does file ".BASE_PATH . STATE_DIR . '/'.$key.'{'.$guid.'}'.($n+1)." exist?");
-            if (file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1))) {
-		debugLog("GetSyncState: Removing ".BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.$n . " since newer version already exists");
-        	unlink(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.$n);
-            }
+//            if (file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1))) {
+//		debugLog("GetSyncState: Removing ".BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.$n . " since newer version already exists");
+//        	unlink(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.$n);
+//            }
             return $content;
         } else {
 	    debugLog("GetSyncState: File $filename not existing");
@@ -137,7 +137,9 @@ class StateMachine {
     // Writes the sync state to a new synckey
     function setSyncState($synckey, $syncstate) {
         // Check if synckey is allowed
+	debugLog("setSyncState: Try writing to file ".BASE_PATH . STATE_DIR . "/". $this->_devid . "/$synckey");
         if(!preg_match('/^(s|SMS){0,1}\{[0-9A-Za-z-]+\}[0-9]+$/', $synckey)) {
+	    debugLog("setSyncState: Format not match!");
             return false;
         }
 

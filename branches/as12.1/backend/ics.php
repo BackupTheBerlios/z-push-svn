@@ -2065,9 +2065,9 @@ class PHPContentsImportProxy extends MAPIMapping {
     	    $message = new SyncMail();
 	if (isset($messageprops[PR_LAST_VERB_EXECUTED])) {
 	    switch($messageprops[PR_LAST_VERB_EXECUTED]) {
-		case 0x102	: $message->lastverbexecuted = 1; break;
-		case 0x103	: $message->lastverbexecuted = 2; break;
-		case 0x104	: $message->lastverbexecuted = 3; break;
+		case 0x66	: $message->lastverbexecuted = 1; break;
+		case 0x67	: $message->lastverbexecuted = 2; break;
+		case 0x68	: $message->lastverbexecuted = 3; break;
 		default 	: $message->lastverbexecuted = 0; 
 	    }
 	    $message->lastverbexecutiontime = $messageprops[PR_LAST_VERB_EXECUTION_TIME];
@@ -2341,7 +2341,6 @@ class PHPContentsImportProxy extends MAPIMapping {
     		$tmp = $ci->Encode();
 		$convid = substr($tmp,6,16);
 		$convindex = substr($tmp,0,22);
-		debugLog("New conversation Index ". $convid . " " . $convindex);
 	    }
 	    $message->conversationid = $convid;
 	    $message->conversationindex = $convindex;

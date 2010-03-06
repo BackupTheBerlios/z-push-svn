@@ -396,9 +396,10 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
     $statemachine->setSyncState("s".$newsynckey, serialize($seenfolders));
 
     // Remove collections from foldercache for that no folder exists
-    foreach ($foldercache['collections'] as $key => $value) {
-	if (!isset($foldercache['folders'][$key])) unset($foldercache['collections'][$key]);
-    }
+    if (isset($foldercache['collections']))
+	foreach ($foldercache['collections'] as $key => $value) {
+	    if (!isset($foldercache['folders'][$key])) unset($foldercache['collections'][$key]);
+	}
     $statemachine->setSyncCache(serialize($foldercache));
 
     return true;
@@ -517,7 +518,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 				}
 				break;
     		    case SYNC_GETCHANGES : 
-        			if (($collection["getchanges"] = $decoder->getElementContent())) {
+        			if (($collection["getchanges"] = $decoder->getElementContent()) !== false) {
         			    if(!$decoder->getElementEndTag()) {
             				return false;
             			    };
@@ -1260,7 +1261,7 @@ function HandleSync($backend, $protocolversion, $devid) {
                     $filtertype = isset($collection["filtertype"]) ? $collection["filtertype"] : false;
                     $onlyoptionbodypreference = $protocolversion >= 14.0 && (!isset($collection["BodyPreference"][1]) && !isset($collection["BodyPreference"][2]) && !isset($collection["BodyPreference"][3]) && !isset($collection["BodyPreference"][4]));
 
-                    if ($onlyoptionbodypreference == false) {
+                    if ($onlyoptionbodypreference === false) {
                 	$exporter = $backend->GetExporter($collection["collectionid"]);
             		$exporter->Config($importer, $collection["class"], $filtertype, $collection["syncstate"], 0, $collection["truncation"], (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
@@ -1461,7 +1462,7 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 			            return false;
 			        break;
 		case SYNC_CONVERSATIONMODE : 
-				if(($conversationmode = $decoder->getElementContent())) {
+				if(($conversationmode = $decoder->getElementContent()) !== false) {
 			    	    if(!$decoder->getElementEndTag())
 			        	return false;
 			        } else {
@@ -1507,9 +1508,9 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
         }
 
 	if ($protocolversion >= 12.1 && !isset($class)) {
-	    $class = $SyncCache['collections'][$collectionid]['class'];
+	    $class = $SyncCache['folders'][$collectionid]['class'];
 	} else if ($protocolversion >= 12.1)  {
-	    $SyncCache['collections'][$collectionid]['class'] = $class;
+	    $SyncCache['folders'][$collectionid]['class'] = $class;
 	}
 	if ($protocolversion >= 12.1 && !isset($filtertype)) {
 	    debugLog("filtertype not set! SyncCache Result ".$SyncCache['collections'][$collectionid]['filtertype']);
@@ -2592,7 +2593,7 @@ function ParseQuery($decoder, $subquery=NULL) {
 		    $decoder->getElementEndTag();
 		    break;
 	    default 			:
-		    if (($query[$type] = $decoder->getElementContent())) {
+		    if (($query[$type] = $decoder->getElementContent()) !== false) {
 			$decoder->getElementEndTag();
 	    	    } else {
 			$decoder->getElementStartTag(SYNC_SEARCH_VALUE);
@@ -2988,20 +2989,20 @@ function HandleSettings($backend, $devid, $protocolversion) {
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_OSLANGUAGE) 			 ? SYNC_SETTINGS_OSLANGUAGE 				: 
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_PHONENUMBER) 			 ? SYNC_SETTINGS_PHONENUMBER 				: 
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_USERAGENT) 			 ? SYNC_SETTINGS_USERAGENT 				: 
-				 ($decoder->getElementStartTag(SYNC_SETTINGS_ENABLEOUTBOUNDSMS)		 	 ? SYNC_SETTINGS_ENABLEOUTBOUNDSMS			: 
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_MOBILEOPERATOR) 			 ? SYNC_SETTINGS_MOBILEOPERATOR 			: 
+				 ($decoder->getElementStartTag(SYNC_SETTINGS_ENABLEOUTBOUNDSMS)		 	 ? SYNC_SETTINGS_ENABLEOUTBOUNDSMS			: 
 				 -1)))))))))) != -1) {
-
-        	    if (($deviceinfo[$field] = $decoder->getElementContent()) !== false) 
-        		$decoder->getElementEndTag(); // end $field
+        	    if (($deviceinfo[$field] = $decoder->getElementContent()) !== false) {
+        	        $decoder->getElementEndTag(); // end $field
+		    }
 		};
 		$request["set"]["deviceinformation"] = $deviceinfo;    
-    		$decoder->getElementEndTag(); // end SYNC_SETTINGS_SET
+     		$decoder->getElementEndTag(); // end SYNC_SETTINGS_SET
         	$decoder->getElementEndTag(); // end SYNC_SETTINGS_DEVICEINFORMATION
 
 	    } elseif ($reqtype == SYNC_SETTINGS_DEVICEPASSWORD) {
 		$decoder->getElementStartTag(SYNC_SETTINGS_PASSWORD);
-        	if (($password = $decoder->getElementContent())) $decoder->getElementEndTag(); // end $field
+        	if (($password = $decoder->getElementContent()) !== false) $decoder->getElementEndTag(); // end $field
 		$request["set"]["devicepassword"] = $password;    
 	
     	    } else { return false; };
