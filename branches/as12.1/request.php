@@ -2992,7 +2992,8 @@ function HandleSettings($backend, $devid, $protocolversion) {
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_MOBILEOPERATOR) 			 ? SYNC_SETTINGS_MOBILEOPERATOR 			: 
 				 -1)))))))))) != -1) {
 
-        	    if (($deviceinfo[$field] = $decoder->getElementContent())) $decoder->getElementEndTag(); // end $field
+        	    if (($deviceinfo[$field] = $decoder->getElementContent()) !== false) 
+        		$decoder->getElementEndTag(); // end $field
 		};
 		$request["set"]["deviceinformation"] = $deviceinfo;    
     		$decoder->getElementEndTag(); // end SYNC_SETTINGS_SET
