@@ -439,6 +439,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 
     // Start decode
     $shortsyncreq = false;
+    $dataimported = false;
+    $dataavailable = false;
     if(!$decoder->getElementStartTag(SYNC_SYNCHRONIZE)) {
 	// short request is allowed in >= 12.1 but we enforce a full sync request in case cache is older than
 	// 10 minutes
@@ -479,10 +481,7 @@ function HandleSync($backend, $protocolversion, $devid) {
     
 	if($decoder->getElementStartTag(SYNC_FOLDERS)) {
     	    $dataimported = false;
-	    foreach($SyncCache['collections'] as $key=>$value) {
-		debugLog("Removing SyncCache[synckey] from collection ".$key);
-		unset($SyncCache['collections'][$key]['synckey']);
-	    }
+
 	    while($decoder->getElementStartTag(SYNC_FOLDER)) {
     		$collection = array();
         	$collection["truncation"] = SYNC_TRUNCATION_ALL;
@@ -860,7 +859,7 @@ function HandleSync($backend, $protocolversion, $devid) {
             		$collection[$collection['optionfoldertype']."syncstate"] = $optionimporter[$collection['optionfoldertype']]->getState();
 	    	    if ($collection["importedchanges"] == true) $dataimported = true;
         
-    		    if (isset($collection["synckey"])) $SyncCache['collections'][$collection["collectionid"]]["synckey"] = $collection["synckey"];
+    		    // if (isset($collection["synckey"])) $SyncCache['collections'][$collection["collectionid"]]["synckey"] = $collection["synckey"];
     
 
         	    if(!$decoder->getElementEndTag()) // end commands
@@ -1021,9 +1020,22 @@ function HandleSync($backend, $protocolversion, $devid) {
 		}
 	    }
 	    unset($TempSyncCache);
+	};
+	// Update the synckeys in SyncCache
+	foreach($SyncCache['collections'] as $key=>$value) {
+	    if (isset($SyncCache['collections'][$key]['synckey'])) {
+	        debugLog("Removing SyncCache[synckey] from collection ".$key);
+	        unset($SyncCache['collections'][$key]['synckey']);
+	    }
 	}
-
-
+	foreach($collections as $key=>$value) {
+	    if (isset($value['synckey'])) {
+	        debugLog("Adding SyncCache[synckey] from collection ".$value['collectionid']);
+	        $SyncCache['collections'][$value['collectionid']]['synckey'] = $value['synckey'];
+	    }
+	}
+	// End Update the synckeys in SyncCache
+	
 	if(!$decoder->getElementEndTag()) // end sync
     	    return false;
     };
@@ -1155,11 +1167,14 @@ function HandleSync($backend, $protocolversion, $devid) {
     }
 
     // Do a short answer to allow short sync requests
+    debugLog("dataavailable: ".($dataavailable == true ? "Yes" : "No")." dataimported: ".($dataimported == true ? "Yes" : "No"));
     if ($protocolversion >= 12.1 &&
 	isset($dataavailable) &&
 	$dataavailable == false &&
 	isset($dataimported) &&
-	$dataimported == false) {
+	$dataimported == false &&
+	($SyncCache['wait'] !== false ||
+	 $SyncCache['hbinterval'] !== false)) {
         $statemachine->setSyncCache(serialize($SyncCache));
 	return true;	
     }	
