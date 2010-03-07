@@ -3949,7 +3949,7 @@ class BackendICS {
 		// START CHANGED dw2412 LAST Verb Exec Props included
                 //update icon when forwarding or replying message
                 if ($smartdata['task'] == 'forward') {
-		    mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x104, PR_LAST_VERB_EXECUTION_TIME => time()));
+		    mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x68, PR_LAST_VERB_EXECUTION_TIME => time()));
             	    mapi_setprops($fwmessage, array(PR_ICON_INDEX=>262));
             	} elseif ($smartdata['task'] == 'reply') {
 		    // START ADDED dw2412 update/create conversation index
@@ -3958,9 +3958,9 @@ class BackendICS {
 			$conversationindex = $fwmessageprops[PR_CONVERSATION_INDEX];
 		    // END ADDED dw2412 update/create conversation index
 		    if (sizeof($recips) > 1)
-		        mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x103, PR_LAST_VERB_EXECUTION_TIME => time()));
+		        mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x67, PR_LAST_VERB_EXECUTION_TIME => time()));
 		    else 
-			mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x102, PR_LAST_VERB_EXECUTION_TIME => time()));
+			mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x66, PR_LAST_VERB_EXECUTION_TIME => time()));
             	    mapi_setprops($fwmessage, array(PR_ICON_INDEX=>261));
             	} else {
 		    mapi_setprops($fwmessage, array(PR_LAST_VERB_EXECUTED => 0x000, PR_LAST_VERB_EXECUTION_TIME => time()));
