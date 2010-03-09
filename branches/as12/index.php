@@ -142,6 +142,12 @@ if (isset($requestheaders["User-Agent"])) {
     $useragent = "unknown";
 }
 
+// if useragent starts with nokia limit message recipients - otherwise client will retrieve item unlimitted!!!
+if (strncmp($useragent,"Nokia",5) == 0) {
+    debugLog("Nokia detected! Limit recipients to 100!");
+    define("LIMIT_RECIPIENTS",100);
+}
+
 // Load our backend driver
 $backend_dir = opendir(BASE_PATH . "/backend");
 while($entry = readdir($backend_dir)) {

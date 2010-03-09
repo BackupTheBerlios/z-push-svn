@@ -199,9 +199,36 @@ function HandleFolderSync($backend, $protocolversion) {
     $syncstate = $statemachine->getSyncState($synckey);
 
     // additional information about already seen folders
-    $seenfolders = unserialize($statemachine->getSyncState("s".$synckey));
-    if (!$seenfolders) $seenfolders = array();
+    $seenfolders = $statemachine->getSyncState("s".$synckey);
+    // if we have any error with one of the requests bail out here!
+    if (($synckey != "0" && 
+	 is_numeric($seenfolders) &&
+	 $seenfolders<0) ||
+	(is_numeric($syncstate) &&
+	 $syncstate<0)) { // if we get a numeric syncstate back it means we have an error...
+	debugLog("GetSyncState ERROR (Seenfolders: ".abs($seenfolders).", Syncstate: ".abs($syncstate).")");
+	if ($seenfolders < 0) $status = abs($seenfolders);
+	if ($syncstate < 0) $status = abs($syncstate);
+	// Output our WBXML reply now
+	$encoder->StartWBXML();
 
+	$encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDERSYNC);
+	{
+    	    $encoder->startTag(SYNC_FOLDERHIERARCHY_STATUS);
+	    $encoder->content(abs($status));
+    	    $encoder->endTag();
+	}
+        $encoder->endTag();
+        return true;
+    } else {
+	debugLog("GetSyncState OK");
+    }
+    if ($synckey == "0" && 
+	 is_numeric($seenfolders) &&
+	 $seenfolders<0) $seenfolders = false;
+    $seenfolders = unserialize($seenfolders);
+    if (!$seenfolders) $seenfolders = array();
+    
     // We will be saving the sync state under 'newsynckey'
     $newsynckey = $statemachine->getNewSyncKey($synckey);
 
@@ -357,6 +384,7 @@ function HandleSync($backend, $protocolversion, $devid) {
     if(!$decoder->getElementStartTag(SYNC_FOLDERS))
         return false;
 
+    $status = 1; // SYNC_STATUS
     while($decoder->getElementStartTag(SYNC_FOLDER))
     {
         $collection = array();
@@ -516,6 +544,12 @@ function HandleSync($backend, $protocolversion, $devid) {
 
         // Get our sync state for this collection
         $collection["syncstate"] = $statemachine->getSyncState($collection["synckey"]);
+	if(is_numeric($collection["syncstate"]) && 
+	    $collection["syncstate"] < 0) {
+	    debugLog("GetSyncState: Got an error in HandleSync");
+	    $collection["syncstate"] = false;
+	    $status = 3;
+	} 
         if($decoder->getElementStartTag(SYNC_PERFORM)) {
 
             // Configure importer with last state
@@ -679,7 +713,7 @@ function HandleSync($backend, $protocolversion, $devid) {
                 $encoder->endTag();
 
                 $encoder->startTag(SYNC_STATUS);
-                $encoder->content(1);
+                $encoder->content($status);
                 $encoder->endTag();
 
                 //check the mimesupport because we need it for advanced emails
@@ -879,6 +913,11 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 
                     $statemachine = new StateMachine();
                     $syncstate = $statemachine->getSyncState($collection["synckey"]);
+		    if(is_numeric($syncstate) &&
+			$syncstate < 0) {
+			debugLog("GetSyncState: Got an error in HandleGetItemEstimate");
+			$syncstate = false;
+		    } 
 
                     $exporter = $backend->GetExporter($collection["collectionid"]);
                     $exporter->Config($importer, $collection["class"], $collection["filtertype"], $syncstate, 0, 0, false);
@@ -1203,10 +1242,22 @@ function HandleFolderCreate($backend, $protocolversion) {
     // Get state of hierarchy
     $statemachine = new StateMachine();
     $syncstate = $statemachine->getSyncState($synckey);
+    if (is_numeric($syncstate) &&
+	$syncstate < 0) {
+	debugLog("GetSyncState: Got an error in HandleGetFolderCreate - syncstate");
+	$syncstate = false;
+    } 
     $newsynckey = $statemachine->getNewSyncKey($synckey);
 
     // additional information about already seen folders
-    $seenfolders = unserialize($statemachine->getSyncState("s".$synckey));
+    $seenfolders = $statemachine->getSyncState("s".$synckey);
+    if ($synckey != "0" &&
+	is_numeric($seenfolders) &&
+	$seenfolders < 0) {
+	debugLog("GetSyncState: Got an error in HandleGetFolderCreate - seenfolders");
+	$seenfolders = false;
+    } 
+    $seenfolders = unserialize($seenfolders);;
     if (!$seenfolders) $seenfolders = array();
     
     // Configure importer with last state
@@ -1370,7 +1421,6 @@ function HandleMeetingResponse($backend, $protocolversion) {
 
     return true;
 }
-
 
 function HandleFolderUpdate($backend, $protocolversion) {
     return HandleFolderCreate($backend, $protocolversion);
@@ -2038,7 +2088,7 @@ function HandleSettings($backend, $devid, $protocolversion) {
 				 ($decoder->getElementStartTag(SYNC_SETTINGS_MOBILEOPERATOR) 			 ? SYNC_SETTINGS_MOBILEOPERATOR 			: 
 				 -1)))))))))) != -1) {
 
-        	    if (($deviceinfo[$field] = $decoder->getElementContent())) $decoder->getElementEndTag(); // end $field
+        	    if (($deviceinfo[$field] = $decoder->getElementContent()) !== false) $decoder->getElementEndTag(); // end $field
 		};
 		$request["set"]["deviceinformation"] = $deviceinfo;    
     		$decoder->getElementEndTag(); // end SYNC_SETTINGS_SET

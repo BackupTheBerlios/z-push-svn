@@ -12,7 +12,7 @@
 ************************************************/
 include_once('debug.php');
 
-define('WBXML_DEBUG', false);
+define('WBXML_DEBUG', true);
 
 define('WBXML_SWITCH_PAGE',     0x00);
 define('WBXML_END',             0x01);
@@ -204,6 +204,8 @@ class WBXMLDecoder {
             case EN_TYPE_CONTENT:
                 debugLog("I " . $spaces . " " . $el[EN_CONTENT]);
                 break;
+	    default:
+                debugLog("I " . $spaces . " " . $el[EN_TYPE]);
         }
     }
 

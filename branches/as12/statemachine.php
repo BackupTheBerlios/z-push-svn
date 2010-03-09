@@ -46,26 +46,32 @@ class StateMachine {
     // state machine will tidy up these files.
     function getSyncState($synckey) {
         // No sync state for sync key '0'
-        if($synckey == "0")
+        if($synckey == "0") {
             return "";
-
+	}
+	
         // Check if synckey is allowed
-        if(!preg_match('/^s{0,1}\{([0-9A-Za-z-]+)\}([0-9]+)$/', $synckey, $matches)) {
-            return false;
+        if(!preg_match('/^(s|SMS){0,1}\{([0-9A-Za-z-]+)\}([0-9]+)$/', $synckey, $matches)) {
+	    debugLog("GetSyncState: Sync key invalid formatted");
+            return -9;
         }
 
-        // Remember synckey GUID and ID
-        $guid = $matches[1];
-        $n = $matches[2];
+        // Remember synckey key, GUID and ID
+	$key = $matches[1];
+        $guid = $matches[2];
+        $n = $matches[3];
 
         // Cleanup all older syncstates
         $dir = opendir(BASE_PATH . STATE_DIR);
-        if(!$dir)
-            return false;
+        if(!$dir) {
+	    debugLog("GetSyncState: Sync key folder not existing");
+            return -12;
+	}
 
         while($entry = readdir($dir)) {
             if(preg_match('/^s{0,1}\{([0-9A-Za-z-]+)\}([0-9]+)$/', $entry, $matches)) {
                 if($matches[1] == $guid && $matches[2] < $n) {
+		    debugLog("GetSyncState: Removing old Sync Key ".BASE_PATH . STATE_DIR . "/$entry");
                     unlink(BASE_PATH . STATE_DIR . "/$entry");
                 }
             }
@@ -74,9 +80,21 @@ class StateMachine {
         // Read current sync state
         $filename = BASE_PATH . STATE_DIR . "/$synckey";
 
-        if(file_exists($filename))
-            return file_get_contents(BASE_PATH . STATE_DIR . "/$synckey");
-        else return false;
+        if(file_exists($filename)) {
+	    $content = file_get_contents(BASE_PATH . STATE_DIR . "/$synckey");
+	    // In case a newer file exists, we read the newer state even in case an old state is being requested
+	    // on 2nd sync attempt in case there is already a newer state available.
+	    // At Nokia MfE 3.0 this occurs only at the 2nd sync where it requests with sync key of 1st sync.
+            if ($n==1 &&
+        	file_exists(BASE_PATH . STATE_DIR . '/'.$key.'{'.$guid.'}'.($n+1))) {
+		debugLog("GetSyncState: Reading SyncKey ".($n+1)." state instead of ".$n." since new State exists but Old being requested. Normal behaviour with Nokia MfE 3.0");
+		$content = file_get_contents(BASE_PATH . STATE_DIR . '/'.$key.'{'.$guid.'}'.($n+1));
+            }
+            return $content;
+        } else {
+	    debugLog("GetSyncState: File $filename not existing");
+    	    return -9;
+    	}
     }
 
     // Gets the new sync key for a specified sync key. You must save the new sync state
@@ -103,6 +121,21 @@ class StateMachine {
         return file_put_contents(BASE_PATH . STATE_DIR . "/$synckey", $syncstate);
     }
 
+    // Writes the sync state to a new synckey
+    function setSyncCache($devid, $cachestate) {
+        return file_put_contents(BASE_PATH . STATE_DIR . "/cache_$devid", $cachestate);
+    }
+    function getSyncCache($devid) {
+        if(file_exists(BASE_PATH . STATE_DIR . "/cache_".$devid))
+            return file_get_contents(BASE_PATH . STATE_DIR . "/cache_".$devid);
+        else return false;
+    }
+    function deleteSyncCache($devid) {
+    	// Remove the cache in case full sync is requested with a synckey 0. 
+    	if(file_exists(BASE_PATH . STATE_DIR . "/cache_".$devid))
+    	    unlink(BASE_PATH . STATE_DIR . "/cache_".$devid);
+    }
+    
     function uuid()
     {
         return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',

@@ -765,7 +765,6 @@ class ImportContentsChangesICS extends MAPIMapping {
         }
 
         mapi_stream_seek($this->statestream, 0, STREAM_SEEK_SET);
-
         $state = "";
         while(true) {
             $data = mapi_stream_read($this->statestream, 4096);
@@ -1108,8 +1107,13 @@ class ImportContentsChangesICS extends MAPIMapping {
         $this->_setPropsInMAPI($mapimessage, $contact, $this->_contactmapping);
 
         // Set display name and subject to a combined value of firstname and lastname
-        $cname = "".u2w($contact->firstname . " " . $contact->lastname);
-
+        $cname = (isset($contact->prefix))?u2w($contact->prefix)." ":"";
+        $cname .= u2w($contact->firstname);
+        $cname .= (isset($contact->middlename))?" ". u2w($contact->middlename):"";
+        $cname .= " ". u2w($contact->lastname);
+        $cname .= (isset($contact->suffix))?" ". u2w($contact->suffix):"";
+        $cname = trim($cname);
+         
         //set contact specific mapi properties
         $props = array();
         $nremails = array();
@@ -1571,6 +1575,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$message->airsyncbasebody->data = base64_encode($rtf);
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
 		$message->airsyncbasebody->truncated = 0;
+		unset($message->airsyncbasebody->truncated);
     	    } elseif (isset($bodypreference[2]) && 
     		$message->airsyncbasenativebodytype==2) {
 		// Send HTML if requested and native type was html
@@ -1582,6 +1587,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    $message->airsyncbasebody->truncated = 1;
     		} else {
 		    $message->airsyncbasebody->truncated = 0;
+		    unset($message->airsyncbasebody->truncated);
     		}
 		$message->airsyncbasebody->data = $html;
 		$message->airsyncbasebody->estimateddatasize = strlen($html);
@@ -1595,6 +1601,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    $message->airsyncbasebody->truncated = 1;
     		} else {
 		    $message->airsyncbasebody->truncated = 0;
+    		    unset($message->airsyncbasebody->truncated);
     		}
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -1936,6 +1943,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$message->airsyncbasebody->data = base64_encode($rtf);
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
 		$message->airsyncbasebody->truncated = 0;
+		unset($message->airsyncbasebody->truncated);
 		debugLog("RTFL Body!");
     	    } elseif (isset($bodypreference[2]) && 
     		$message->airsyncbasenativebodytype==2) {
@@ -1947,6 +1955,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    $message->airsyncbasebody->truncated = 1;
     		} else {
 		    $message->airsyncbasebody->truncated = 0;
+		    unset($message->airsyncbasebody->truncated);
     		}
 		$message->airsyncbasebody->data = $html;
 		$message->airsyncbasebody->estimateddatasize = strlen($html);
@@ -1960,6 +1969,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    $message->airsyncbasebody->truncated = 1;
     		} else {
 		    $message->airsyncbasebody->truncated = 0;
+		    unset($message->airsyncbasebody->truncated);
     		}
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -2119,11 +2129,13 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    }
 
                     if(isset($message->_mapping['POOMMAIL:Attachments'])) {
-			if (!is_array($message->attachments)) 
+			if (!isset($message->attachments) ||
+			    !is_array($message->attachments)) 
 			    $message->attachments = array();
             		array_push($message->attachments, $attach);
 		    } else if(isset($message->_mapping['AirSyncBase:Attachments'])) {
-			if (!is_array($message->airsyncbaseattachments)) 
+			if (!isset($message->airsyncbaseattachments) ||
+			    !is_array($message->airsyncbaseattachments)) 
 			    $message->airsyncbaseattachments = array();
             		array_push($message->airsyncbaseattachments, $attach);
 		    }
@@ -2169,6 +2181,17 @@ class PHPContentsImportProxy extends MAPIMapping {
                 array_push($cc, $fulladdr);
             }
         }
+    	if (defined('LIMIT_RECIPIENTS')) {
+    	    if(count($to) > LIMIT_RECIPIENTS) {
+    	        debugLog("Recipient amount limitted. No to recipients added!");
+    		$to = array();
+    		$message->displayto = "";
+    	    }
+    	    if(count($cc) > LIMIT_RECIPIENTS) {
+    		debugLog("Recipient amount limitted. No cc recipients added!");
+    		$cc = array();
+    	    }
+    	}
 
         $message->to = implode(", ", $to);
         $message->cc = implode(", ", $cc);
@@ -2429,8 +2452,9 @@ class ExportChangesICS  {
             // On subsequent syncs, we do want to receive delete events.
             if(strlen($syncstate) == 0 || bin2hex(substr($syncstate,4,4)) == "00000000") {
                 debugLog("synching inital data");
-                $exporterflags |= SYNC_NO_SOFT_DELETIONS | SYNC_NO_DELETIONS;
+        	$exporterflags |= SYNC_NO_SOFT_DELETIONS | SYNC_NO_DELETIONS;
             }
+
         } else {
             $phpimportproxy = new PHPHierarchyImportProxy($this->_store, $importer);
             $mapiimporter = mapi_wrap_importhierarchychanges($phpimportproxy);
@@ -3440,12 +3464,13 @@ class BackendICS {
                         if (isset($mapiprops[$tnefrecurr])) {
                             $this -> _handleRecurringItem($mapimessage, $mapiprops);
                         }
+			debugLog(print_r($mapiprops,true));
                         mapi_setprops($mapimessage, $mapiprops);
                     }
                     else debugLog("TNEF: Mapi props array was empty");
                 }
 
-		// iCalendar
+		// iCalendar 
                 elseif($part->ctype_primary == "text" && $part->ctype_secondary == "calendar") {
                     $zpical = new ZPush_ical($this->_defaultstore);
                     $mapiprops = array();
@@ -3458,6 +3483,37 @@ class BackendICS {
                     }
 
                     if (is_array($mapiprops) && !empty($mapiprops)) {
+                        mapi_setprops($mapimessage, $mapiprops);
+                    }
+                    else debugLog("ICAL: Mapi props array was empty");
+                }
+
+		// dw2412 iCalendar Nokia Nokia MfE sends secondary type x-vCalendar
+                elseif($part->ctype_primary == "text" && $part->ctype_secondary == "x-vCalendar") {
+                    $zpical = new ZPush_ical($this->_defaultstore);
+                    $mapiprops = array();
+                    $zpical->extractProps($part->body, $mapiprops);
+
+                    if (is_array($mapiprops) && !empty($mapiprops)) {
+			// dw2412 Nokia sends incomplete iCal calendar item, so we have to add properties like 
+			// message class and icon index
+			if ((isset($mapiprops[PR_MESSAGE_CLASS]) &&
+			    $mapiprops[PR_MESSAGE_CLASS] == "IPM.Note") ||
+			    !isset($mapiprops[PR_MESSAGE_CLASS])) {
+			    $mapiprops[PR_ICON_INDEX] = 0x404;
+			    $mapiprops[PR_OWNER_APPT_ID] = 0;
+			    $mapiprops[PR_MESSAGE_CLASS] = "IPM.Schedule.Meeting.Request";
+                        };
+                        // dw2412 Nokia sends no location information field in case user did not type in some
+                        // thing in this field...
+			$namedIntentedBusyStatus = GetPropIDFromString($this->_defaultstore, "PT_LONG:{00062002-0000-0000-C000-000000000046}:8224");
+			if (!isset($mapiprops[$namedIntentedBusyStatus])) $mapiprops[$namedIntentedBusyStatus] = 0;
+                        $namedLocation = GetPropIDFromString($this->_defaultstore, "PT_STRING8:{00062002-0000-0000-C000-000000000046}:0x8208");
+			if (!isset($mapiprops[$namedLocation])) $mapiprops[$namedLocation] = "";
+                        $tnefLocation = GetPropIDFromString($this->_defaultstore, "PT_STRING8:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x2");
+			if (!isset($mapiprops[$tnefLocation])) $mapiprops[$tnefLocation] = "";
+    			$useTNEF = GetPropIDFromString($this->_defaultstore, "PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8582");
+    			$mapiprops[$useTNEF] = true;
                         mapi_setprops($mapimessage, $mapiprops);
                     }
                     else debugLog("ICAL: Mapi props array was empty");
