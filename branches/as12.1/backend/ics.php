@@ -3676,14 +3676,19 @@ class BackendICS {
 	// CHANGED dw2412 AS V12.0 Support (to menetain single return way...
         $items['rows'] = array();
         for ($i = 0; $i < mapi_table_getrowcount($table); $i++) {
-            $user_data = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS, PR_BUSINESS_TELEPHONE_NUMBER), $i, 1);
+            $user_data = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS, PR_BUSINESS_TELEPHONE_NUMBER, PR_HOME_TELEPHONE_NUMBER, PR_MOBILE_TELEPHONE_NUMBER, PR_COMPANY_NAME, PR_OFFICE_LOCATION, PR_TITLE), $i, 1);
             $item = array();
             $item["username"] = w2u($user_data[0][PR_ACCOUNT]);
             $item["fullname"] = w2u($user_data[0][PR_DISPLAY_NAME]);
             if (strlen(trim($item["fullname"])) == 0) $item["fullname"] = $item["username"];
             $item["emailaddress"] = w2u($user_data[0][PR_SMTP_ADDRESS]);
             $item["nameid"] = $searchquery;
-            $item["businessphone"] = isset($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]) ? w2u($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]) : "";
+            $item["phone"] = isset($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]) ? w2u($user_data[0][PR_BUSINESS_TELEPHONE_NUMBER]) : "";
+            $item["homephone"] = isset($user_data[0][PR_HOME_TELEPHONE_NUMBER]) ? w2u($user_data[0][PR_HOME_TELEPHONE_NUMBER]) : "";
+            $item["mobilephone"] = isset($user_data[0][PR_MOBILE_TELEPHONE_NUMBER]) ? w2u($user_data[0][PR_MOBILE_TELEPHONE_NUMBER]) : "";
+            $item["company"] = isset($user_data[0][PR_COMPANY_NAME]) ? w2u($user_data[0][PR_COMPANY_NAME]) : "";
+            $item["office"] = isset($user_data[0][PR_OFFICE_LOCATION]) ? w2u($user_data[0][PR_OFFICE_LOCATION]) : "";
+            $item["title"] = isset($user_data[0][PR_TITLE]) ? w2u($user_data[0][PR_TITLE]) : "";
 
             //do not return users without email
             if (strlen(trim($item["emailaddress"])) == 0) continue;

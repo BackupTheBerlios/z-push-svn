@@ -2906,17 +2906,54 @@ function HandleSearch($backend, $devid, $protocolversion) {
 				case 'gal'  : 
                     		    $encoder->startTag(SYNC_SEARCH_RESULT);
                         		$encoder->startTag(SYNC_SEARCH_PROPERTIES);
-                            	    $encoder->startTag(SYNC_GAL_DISPLAYNAME);
-                            	    $encoder->content($u["fullname"]);
-                        	    $encoder->endTag();
+                            		
+				    if (isset($u["fullname"]) && $u["fullname"] != "") {
+                            		$encoder->startTag(SYNC_GAL_DISPLAYNAME);
+                            		$encoder->content($u["fullname"]);
+                        		$encoder->endTag();
+				    }
 
-                            	    $encoder->startTag(SYNC_GAL_PHONE);
-            			    $encoder->content($u["businessphone"]);
-                            	    $encoder->endTag();
+				    if (isset($u["phone"]) && $u["phone"] != "") {
+                            		$encoder->startTag(SYNC_GAL_PHONE);
+            				$encoder->content($u["phone"]);
+                            		$encoder->endTag();
+				    }
 
-                            	    $encoder->startTag(SYNC_GAL_ALIAS);
-                            	    $encoder->content($u["username"]);
-                            	    $encoder->endTag();
+				    if (isset($u["homephone"]) && $u["homephone"] != "") {
+                            		$encoder->startTag(SYNC_GAL_HOMEPHONE);
+            				$encoder->content($u["homephone"]);
+                            		$encoder->endTag();
+				    }
+
+				    if (isset($u["mobilephone"]) && $u["mobilephone"] != "") {
+                            		$encoder->startTag(SYNC_GAL_MOBILEPHONE);
+            				$encoder->content($u["mobilephone"]);
+                            		$encoder->endTag();
+				    }
+
+				    if (isset($u["company"]) && $u["company"] != "") {
+                            		$encoder->startTag(SYNC_GAL_COMPANY);
+            				$encoder->content($u["company"]);
+                            		$encoder->endTag();
+				    }
+
+				    if (isset($u["office"]) && $u["office"] != "") {
+                            		$encoder->startTag(SYNC_GAL_OFFICE);
+                            		$encoder->content($u["office"]);
+                            		$encoder->endTag();
+				    }
+
+				    if (isset($u["title"]) && $u["title"] != "") {
+                            	        $encoder->startTag(SYNC_GAL_TITLE);
+                            	        $encoder->content($u["title"]);
+                            		$encoder->endTag();
+				    }
+
+				    if (isset($u["username"]) && $u["username"] != "") {
+                            		$encoder->startTag(SYNC_GAL_ALIAS);
+                            		$encoder->content($u["username"]);
+                            		$encoder->endTag();
+				    }
 
                             	    //it's not possible not get first and last name of an user
                             	    //from the gab and user functions, so we just set fullname
