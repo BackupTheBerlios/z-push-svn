@@ -16,12 +16,14 @@ class ImportContentsChangesStream {
     var $_encoder;
     var $_type;
     var $_seenObjects;    
+    var $_deletedObjects;
 
     function ImportContentsChangesStream(&$encoder, $type) {
         $this->_encoder = &$encoder;
         $this->_type = $type;
         $this->_seenObjects = array();
-     }
+        $this->_deletedObjects = array();
+    }
     
     function ImportMessageChange($id, $message) {
         if(strtolower(get_class($message)) != $this->_type)
@@ -33,6 +35,12 @@ class ImportContentsChangesStream {
                return true;
         } 
         
+	// prevent sending changes for objects that delete information was sent prior the change details arrived
+        if (in_array($id, $this->_deletedObjects)) {
+               debugLog("Object $id discarded! Object deleted prior change submission.");
+               return true;
+        } 
+
         $this->_seenObjects[] = $id;
             
         if ($message->flags === false || $message->flags === SYNC_NEWMESSAGE)           
@@ -52,6 +60,13 @@ class ImportContentsChangesStream {
     }
     
     function ImportMessageDeletion($id) {
+	// prevent sending changes for objects that delete information was sent already
+        if (in_array($id, $this->_deletedObjects)) {
+               debugLog("Object $id discarded! Object already deleted.");
+               return true;
+        } 
+        $this->_deletedObjects[] = $id;
+
         $this->_encoder->startTag(SYNC_REMOVE);
         $this->_encoder->startTag(SYNC_SERVERENTRYID);
         $this->_encoder->content($id);
@@ -64,6 +79,12 @@ class ImportContentsChangesStream {
     function ImportMessageReadFlag($id, $flags) {
         if($this->_type != "syncmail")
             return true;
+	// prevent sending readflags for objects that delete information was sentbefore
+        if (in_array($id, $this->_deletedObjects)) {
+               debugLog("Object $id discarded! Object got deleted prior the readflag set request arrived.");
+               return true;
+        } 
+
         $this->_encoder->startTag(SYNC_MODIFY);
             $this->_encoder->startTag(SYNC_SERVERENTRYID);
                 $this->_encoder->content($id);
