@@ -903,7 +903,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		}
 	    
 	    };
-	    if (isset($values['synckey'])) $collections[$key]["getchanges"] = true;
+	    if (isset($values['synckey']) && $values['synckey'] != '0') $collections[$key]["getchanges"] = true;
 	    if ($protocolversion >= 12.0) {
 //	    	if (!isset($values["BodyPreference"]) && $values['synckey'] != '0' && $values['class'] == 'Email') {
 		if (!isset($values["BodyPreference"]) && $values['synckey'] != '0') {
