@@ -369,6 +369,21 @@ class MAPIMapping {
         return GetPropIDFromString($this->_store, $mapiprop);
     }
 
+    // PHP localtime function replacement that includes timezone    
+    function _localtimeByTZ($gmtts,$tz, $assoc = false) {
+	if ($tz == false) return localtime($gmtts);
+	$local = $this->_getLocaltimeByTZ($gmtts,$tz);
+	if ($assoc == true) 
+	    list($arr['tm_isdst'], $arr['tm_yday'], $arr['tm_wday'], $arr['tm_year'], $arr['tm_mon'], $arr['tm_mday'], $arr['tm_hour'], $arr['tm_min'], $arr['tm_sec']) = 
+		    split('\|',gmstrftime(($this->_isDST($local,$tz) === false ? "0" : "1")."|".(gmstrftime("%j",$local)-1)."|%w|".(gmstrftime("%Y",$local)-1900)."|".(gmstrftime("%m",$local)-1)."|%d|%H|%M|%S",$local));
+	else    
+	    $arr = split('\|',gmstrftime("%S|%M|%H|%d|".(gmstrftime("%m",$local)-1)."|".(gmstrftime("%Y",$local)-1900)."|%w|".(gmstrftime("%j",$local)-1)."|".($this->_isDST($local,$tz) === false ? "0" : "1"),$local));
+	foreach($arr as $key=>$value) {
+	    $arr[$key] = (int)$value;
+	}
+	return $arr;
+    }
+
     function _getGMTTZ() {
         $tz = array("bias" => 0, "stdbias" => 0, "dstbias" => 0, "dstendyear" => 0, "dstendmonth" =>0, "dstendday" =>0, "dstendweek" => 0, "dstendhour" => 0, "dstendminute" => 0, "dstendsecond" => 0, "dstendmillis" => 0,
                                       "dststartyear" => 0, "dststartmonth" =>0, "dststartday" =>0, "dststartweek" => 0, "dststarthour" => 0, "dststartminute" => 0, "dststartsecond" => 0, "dststartmillis" => 0);
@@ -1087,9 +1102,9 @@ class ImportContentsChangesICS extends MAPIMapping {
                     break;
             }
 
-	    // dw2412 Zarafa expects start & endtime in Localtime for the recurrence!
-            $starttime = localtime($appointment->starttime,1);
-            $endtime = localtime($appointment->endtime,1);
+	    // dw2412 Zarafa expects start & endtime in Localtime for the recurrence! We need localtime depending on tz provided.
+            $starttime = $this->_localtimeByTZ($appointment->starttime,$tz,true);
+            $endtime = $this->_localtimeByTZ($appointment->endtime,$tz,true);
 
             $recur["startocc"] = $starttime["tm_hour"] * 60 + $starttime["tm_min"];
             $recur["endocc"] = $recur["startocc"] + $duration; // Note that this may be > 24*60 if multi-day
