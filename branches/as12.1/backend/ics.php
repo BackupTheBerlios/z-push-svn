@@ -2507,24 +2507,24 @@ class PHPContentsImportProxy extends MAPIMapping {
 
 	    if ($message->messageclass == "IPM.Note.Mobile.SMS") {
         	if($name == "" || $name == $address)
-            	    $fulladdr = "\"".$address."\" [MOBILE:".$address."]";
+            	    $fulladdr = "\"".w2u($address."\" [MOBILE:".w2u($address)."]";
         	else {
             	    if (substr($name, 0, 1) != '"' && substr($name, -1) != '"') {
-                	$fulladdr = "\"" . w2u($name) ."\" [MOBILE:" . $address . "]";
+                	$fulladdr = "\"" . w2u($name) ."\" [MOBILE:" . w2u($address) . "]";
             	    }
             	    else {
-                	$fulladdr = w2u($name) ." [MOBILE:" . $address . "]";
+                	$fulladdr = w2u($name) ." [MOBILE:" . w2u($address) . "]";
             	    }
                 }
 	    } else {
         	if($name == "" || $name == $address)
-            	    $fulladdr = $address;
+            	    $fulladdr = w2u($address);
         	else {
             	    if (substr($name, 0, 1) != '"' && substr($name, -1) != '"') {
-                	$fulladdr = "\"" . w2u($name) ."\" <" . $address . ">";
+                	$fulladdr = "\"" . w2u($name) ."\" <" . w2u($address) . ">";
             	    }
             	    else {
-                	$fulladdr = w2u($name) ."<" . $address . ">";
+                	$fulladdr = w2u($name) ."<" . w2u($address) . ">";
             	    }
                 }
             }
