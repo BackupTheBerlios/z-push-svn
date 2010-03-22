@@ -486,6 +486,12 @@ function HandleSync($backend, $protocolversion, $devid) {
 		$SyncCache['timestamp'] = time();
 		$statemachine->setSyncCache(serialize($SyncCache));
 		debugLog("Empty Sync request and taken info from SyncCache.");
+		$collections = array();
+		foreach ($SyncCache['collections'] as $key=>$value) {
+		    $collection = $value;
+		    $collection['collectionid'] = $key;
+		    array_push($collections,$collection);
+		}
 	    }
 	} else {
     	    _HandleSyncError("13");
