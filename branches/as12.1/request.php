@@ -350,6 +350,31 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
 
         $encoder->startTag(SYNC_FOLDERHIERARCHY_CHANGES);
         {
+	    // remove unnecessary updates where details between cache and real folder are equal
+    	    if(count($importer->changed) > 0) {
+                foreach($importer->changed as $key=>$folder) {
+		    if (isset($folder->serverid) && in_array($folder->serverid, $seenfolders) &&
+			isset($foldercache['folders'][$folder->serverid]) &&
+			$foldercache['folders'][$folder->serverid]['parentid'] == $folder->parentid &&
+			$foldercache['folders'][$folder->serverid]['displayname'] == $folder->displayname &&
+			$foldercache['folders'][$folder->serverid]['type'] == $folder->type) {
+                	debugLog("Ignoring ".$folder->serverid." from importer->changed because it is folder update request without changes in data!");
+    			unset($importer->changed[$key]);
+    			$importer->count--;
+		    }
+        	}
+            }
+	    // remove unnecessary deletes where folders never got sent to the device
+    	    if(count($importer->deleted) > 0) {
+                foreach($importer->deleted as $key=>$folder) {
+                    if (($sid = array_search($folder, $seenfolders)) === false) {
+                	debugLog("Removing $folder from importer->deleted because sid $sid (not in seenfolders)!");
+    			unset($importer->deleted[$key]);
+    			$importer->count--;
+    		    }
+    		}
+    	    }
+
             $encoder->startTag(SYNC_FOLDERHIERARCHY_COUNT);
             $encoder->content($importer->count);
             $encoder->endTag();

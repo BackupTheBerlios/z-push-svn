@@ -105,14 +105,6 @@ class StateMachine {
 
         if(file_exists($filename)) {
 	    $content = file_get_contents($filename);
-	    // In case a newer file exists, we read the newer state even in case an old state is being requested
-	    // on 2nd sync attempt in case there is already a newer state available.
-	    // At Nokia MfE 3.0 this occurs only at the 2nd sync where it requests with sync key of 1st sync.
-            if ($n==1 &&
-        	file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1))) {
-		debugLog("GetSyncState: Reading SyncKey ".($n+1)." state instead of ".$n." since new State exists but Old being requested. Normal behaviour with Nokia MfE 3.0");
-		$content = file_get_contents(BASE_PATH . STATE_DIR . "/". $this->_devid . '/'.$key.'{'.$guid.'}'.($n+1));
-            }
             return $content;
         } else {
 	    debugLog("GetSyncState: File $filename not existing");
