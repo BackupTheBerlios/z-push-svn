@@ -2507,7 +2507,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 
 	    if ($message->messageclass == "IPM.Note.Mobile.SMS") {
         	if($name == "" || $name == $address)
-            	    $fulladdr = "\"".w2u($address."\" [MOBILE:".w2u($address)."]";
+            	    $fulladdr = "\"".w2u($address)."\" [MOBILE:".w2u($address)."]";
         	else {
             	    if (substr($name, 0, 1) != '"' && substr($name, -1) != '"') {
                 	$fulladdr = "\"" . w2u($name) ."\" [MOBILE:" . w2u($address) . "]";
