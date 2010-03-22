@@ -180,6 +180,7 @@ class StateMachine {
 	    case 18	: 
 	    default	: $cache['folders'][$serverid]['class'] = "Email";
 	}
+	$cache['folders'][$serverid]['type'] = $type;
 	$cache['folders'][$serverid]['filtertype'] = "0";
 	$cache['timestamp'] = time();
     }
