@@ -240,7 +240,7 @@ class SyncMail extends Streamer {
         }
         if(isset($protocolversion) && $protocolversion >= 14.0) {
 	    $mapping += array(SYNC_POOMMAIL2_UMCALLERID => array(STREAMER_VAR => "umcallerid"),
-                              SYNC_POOMMAIL2_USERNOTES => array(STREAMER_VAR => "usernotes"),
+                              SYNC_POOMMAIL2_UMUSERNOTES => array(STREAMER_VAR => "umusernotes"),
                               SYNC_POOMMAIL2_CONVERSATIONID => array (STREAMER_VAR => "conversationid"),
                               SYNC_POOMMAIL2_CONVERSATIONINDEX => array (STREAMER_VAR => "conversationindex"),
                               SYNC_POOMMAIL2_LASTVERBEXECUTED => array (STREAMER_VAR => "lastverbexecuted"),
