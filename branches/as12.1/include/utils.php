@@ -38,14 +38,14 @@ function _saveFolderData($devid, $folders) {
     if (!array_key_exists(SYNC_FOLDER_TYPE_CONTACT, $unique_folders))         
         $unique_folders[SYNC_FOLDER_TYPE_CONTACT] = SYNC_FOLDER_TYPE_DUMMY;
 
-    if (!file_put_contents(BASE_PATH.STATE_DIR."/compat-$devid", serialize($unique_folders))) {
+    if (!file_put_contents(BASE_PATH.STATE_DIR."/".$devid."/compat-$devid", serialize($unique_folders))) {
         debugLog("_saveFolderData: Data could not be saved!");
     }
 }
 
 // returns information about folder data for a specific device    
 function _getFolderID($devid, $class) {
-    $filename = BASE_PATH.STATE_DIR."/compat-$devid";
+    $filename = BASE_PATH.STATE_DIR."/".$devid."/compat-$devid";
 
     if (file_exists($filename)) {
         $arr = unserialize(file_get_contents($filename));
