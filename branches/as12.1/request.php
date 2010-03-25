@@ -490,6 +490,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		foreach ($SyncCache['collections'] as $key=>$value) {
 		    $collection = $value;
 		    $collection['collectionid'] = $key;
+		    $collection['syncstate'] = $statemachine->getSyncState($collection['synckey']);
 		    array_push($collections,$collection);
 		}
 	    }
