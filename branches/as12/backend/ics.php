@@ -1056,7 +1056,7 @@ class ImportContentsChangesICS extends MAPIMapping {
             foreach($appointment->attendees as $attendee) {
                 $recip = array();
                 $recip[PR_DISPLAY_NAME] = u2w($attendee->name);
-                $recip[PR_EMAIL_ADDRESS] = $attendee->email;
+                $recip[PR_EMAIL_ADDRESS] = u2w($attendee->email);
                 $recip[PR_ADDRTYPE] = "SMTP";
 		// START CHANGED dw2412 to support AS 12.0 attendee type
                 if (isset($attendee->type)) {
@@ -1853,7 +1853,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         $messageprops = mapi_getprops($mapimessage, array($meetingstatustag, PR_SENT_REPRESENTING_ENTRYID, PR_SENT_REPRESENTING_NAME));
 
         if(isset($messageprops[$meetingstatustag]) && $messageprops[$meetingstatustag] > 0 && isset($messageprops[PR_SENT_REPRESENTING_ENTRYID]) && isset($messageprops[PR_SENT_REPRESENTING_NAME])) {
-            $message->organizeremail = $this->_getSMTPAddressFromEntryID($messageprops[PR_SENT_REPRESENTING_ENTRYID]);
+            $message->organizeremail = w2u($this->_getSMTPAddressFromEntryID($messageprops[PR_SENT_REPRESENTING_ENTRYID]));
             $message->organizername = w2u($messageprops[PR_SENT_REPRESENTING_NAME]);
         }
 
@@ -1869,16 +1869,16 @@ class PHPContentsImportProxy extends MAPIMapping {
             $attendee->name = w2u($row[PR_DISPLAY_NAME]);
             //smtp address is always a proper email address
             if(isset($row[PR_SMTP_ADDRESS]))
-                $attendee->email = $row[PR_SMTP_ADDRESS];
+                $attendee->email = w2u($row[PR_SMTP_ADDRESS]);
             elseif (isset($row[PR_ADDRTYPE]) && isset($row[PR_EMAIL_ADDRESS])) {
                 //if address type is SMTP, it's also a proper email address
-                if (PR_ADDRTYPE == "SMTP")
-                    $attendee->email = $row[PR_EMAIL_ADDRESS];
+                if ($row[PR_ADDRTYPE] == "SMTP")
+                    $attendee->email = w2u($row[PR_EMAIL_ADDRESS]);
                 //if address type is ZARAFA, the PR_EMAIL_ADDRESS contains username
-                elseif (PR_ADDRTYPE == "ZARAFA") {
+                elseif ($row[PR_ADDRTYPE] == "ZARAFA") {
                     $userinfo = mapi_zarafa_getuser_by_name($this->_store, $row[PR_EMAIL_ADDRESS]);
                     if (is_array($userinfo) && isset($userinfo["emailaddress"]))
-                        $attendee->email = $userinfo["emailaddress"];
+                        $attendee->email = w2u($userinfo["emailaddress"]);
                 }
             }
             // Some attendees have no email or name (eg resources), and if you
@@ -3789,9 +3789,8 @@ class BackendICS {
 
     function MeetingResponse($requestid, $folderid, $response, &$calendarid) {
         // Use standard meeting response code to process meeting request
-
-        $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid), hex2bin($requestid));
-        $mapimessage = mapi_msgstore_openentry($this->_defaultstore, $entryid);
+        $reqentryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid), hex2bin($requestid));
+        $mapimessage = mapi_msgstore_openentry($this->_defaultstore, $reqentryid);
 
         if(!$mapimessage) {
             debugLog("Unable to open request message for response");
@@ -3813,72 +3812,30 @@ class BackendICS {
         // Process the meeting response. We don't have to send the actual meeting response
         // e-mail, because the device will send it itself.
         switch($response) {
-            case '3':     // decline
+            case 1:     // accept
+            default:
+                $entryid = $meetingrequest->doAccept(false, false, false, false, false, false, true); // last true is the $userAction
+                break;
+            case 2:        // tentative
+                $entryid = $meetingrequest->doAccept(true, false, false, false, false, false, true); // last true is the $userAction
+                break;
+            case 3:        // decline
                 $meetingrequest->doDecline(false);
-                break;
-            case '2':     // tentative // 
-                $newentryid = $meetingrequest->doAccept(true, false, $meetingrequest->isInCalendar());
-                break;
-            default:      // dw2412 accept = default = 1 // 
-		$newentryid = $meetingrequest->doAccept(false, false, $meetingrequest->isInCalendar());
                 break;
         }
 
         // F/B will be updated on logoff
 
         // We have to return the ID of the new calendar item, so do that here
-        // dw2412 Outlook shows quite ugly behaviour since it creates already tentative appointment
-        // if message lays some time in inbox. The EntryID that we need to return in this case is 
-        // the one found by the globalobjid of the original message that we use to find the Source_Key of the 
-        // appointment created by Outlook - otherwise we have two appointments on mobile device.
-        // This is why I do the below things to overcome the problem... 
-	if ($newentryid === false && $response != 3) {
-	    debugLog("doAccept EntryID == false $response");
-
-	    $namedgoid = GetPropIDFromString($this->_defaultstore, "PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x3");
-	    $namedgoid2 = GetPropIDFromString($this->_defaultstore, "PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x23");
-
-	    $messageprops = mapi_getprops($mapimessage, Array($namedgoid, $namedgoid2, PR_OWNER_APPT_ID));
-	    $goid2 = $messageprops[$namedgoid2];
-	    if(isset($messageprops[PR_OWNER_APPT_ID]))
-    		$apptid = $messageprops[PR_OWNER_APPT_ID];
-    	    else
-        	$apptid = false;
-
-	    $basedate = $meetingrequest->getBasedateFromGlobalID($messageprops[$namedgoid]);
-	    /**
-	     * If basedate is found in globalID, then there are two possibilities.
-	     * case 1) User has only this occurrence OR
-	     * case 2) User has recurring item and has received an update for an occurrence
-	     */
-	    if ($basedate) {
-		// First try with GlobalID(0x3) (case 1)
-		$entryid = $meetingrequest->findCalendarItems($messageprops[$namedgoid], $apptid);
-		// If not found then try with CleanGlobalID(0x23) (case 2)
-		if (!is_array($entryid))
-		    $entryid = $meetingrequest->findCalendarItems($goid2, $apptid);
-	    } else {
-		$entryid = $meetingrequest->findCalendarItems($goid2, $apptid);
-	    }
-	    $newentryid = $entryid[0];
-	    debugLog("New EntryID from our try to find it by globalid ".bin2hex($newentryid));
-    
-	    // Now just update the appointment item since otherwise it remains always tentative...
-    	    $newitem = mapi_msgstore_openentry($this->_defaultstore, $newentryid);
-	    mapi_setprops($newitem, array(
-		    GetPropIDFromString($this->_defaultstore,"PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8205") => (($response == 2) ? 1 : 2),
-		    GetPropIDFromString($this->_defaultstore,"PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8218") => (($response == 2) ? olResponseTentative : olResponseAccepted)
-		    ));
-	    mapi_savechanges($newitem);
-	} else {
-	    debugLog("New EntryID from doAccept ".bin2hex($newentryid));
-	}
-
-    	$newitem = mapi_msgstore_openentry($this->_defaultstore, $newentryid);
-	$newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
-
+        $newitem = mapi_msgstore_openentry($this->_defaultstore, $entryid);
+        $newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
         $calendarid = bin2hex($newprops[PR_SOURCE_KEY]);
-
+        
+        // delete meeting request from Inbox
+        $folderentryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid));
+        $folder = mapi_msgstore_openentry($this->_defaultstore, $folderentryid);
+        mapi_folder_deletemessages($folder, array($reqentryid), 0);
+        
         return true;
     }
 
@@ -4091,6 +4048,7 @@ class BackendICS {
         // attachment
         $attach = mapi_message_createattach($mapimessage);
 
+        $filename = "";
         // Filename is present in both Content-Type: name=.. and in Content-Disposition: filename=
         if(isset($part->ctype_parameters["name"]))
             $filename = $part->ctype_parameters["name"];
@@ -4098,6 +4056,12 @@ class BackendICS {
             $filename = $part->d_parameters["filename"];
         else if (isset($part->d_parameters["filename"])) // sending appointment with nokia & android only filename is set
             $filename = $part->d_parameters["filename"];
+        // filenames with more than 63 chars as splitted several strings
+        else if (isset($part->d_parameters["filename*0"])) {
+        	for ($i=0; $i< count($part->d_parameters); $i++) 
+        	   if (isset($part->d_parameters["filename*".$i]))
+        	       $filename .= $part->d_parameters["filename*".$i];
+        }
         else
             $filename = "untitled";
 
