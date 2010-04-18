@@ -182,6 +182,7 @@ function _ErrorHandleFolderSync($errorcode) {
 function HandleFolderSync($backend, $devid, $protocolversion) {
     global $zpushdtd;
     global $input, $output;
+    global $useragent;
 
     // Maps serverid -> clientid for items that are received from the PIM
     $map = array();
@@ -220,7 +221,8 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
 	    	return true;
 	    }
 	    $exporter = $backend->GetExporter($key);
-	    if ($exporter->exporter === false) unset($SyncCache['folders'][$key]);
+	    if (isset($exporter->exporter) &&
+		$exporter->exporter === false) unset($SyncCache['folders'][$key]);
 	}
     }
 
@@ -1236,8 +1238,8 @@ function HandleSync($backend, $protocolversion, $devid) {
                     // Try to get the exporter. In case it is not possible (i.e. folder removed) set
                     // status according. 
                     $exporter = $backend->GetExporter($collection["collectionid"]);
-		    debugLog("Exporter Value: ".is_object($exporter). " " .$exporter->exporter);
-            	    if (!is_object($exporter) || $exporter->exporter === false) {
+		    debugLog("Exporter Value: ".is_object($exporter). " " .(isset($exporter->exporter) ? $exporter->exporter : "unset"));
+            	    if (!is_object($exporter) || (isset($exporter->exporter) && $exporter->exporter === false)) {
             		$folderstatus = 8;
             	    }
                 };

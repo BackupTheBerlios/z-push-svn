@@ -448,14 +448,14 @@ class BackendIMAP extends BackendDiff {
         // define the rest as other-folders
         else {
                if (count($fhir) > 1) {
-                   $folder->displayname = windows1252_to_utf8(imap_utf7_decode(array_pop($fhir)));
+                   $folder->displayname = w2u(imap_utf7_decode(array_pop($fhir)));
                    $folder->parentid = implode(".", $fhir);
                }
                else {
-                $folder->displayname = windows1252_to_utf8(imap_utf7_decode($id));
+                $folder->displayname = w2u(imap_utf7_decode($id));
                 $folder->parentid = "0";
                }
-            $folder->type = SYNC_FOLDER_TYPE_OTHER;
+            $folder->type = SYNC_FOLDER_TYPE_USER_MAIL; // Type Other is not displayed on i.e. Nokia
         }
 
            //advanced debugging
@@ -590,7 +590,7 @@ class BackendIMAP extends BackendDiff {
      * Tasks folder will not do anything. The SyncXXX objects should be filled with as much information as possible,
      * but at least the subject, body, to, from, etc.
      */
-    function GetMessage($folderid, $id, $truncsize, $mimesupport = 0) {
+    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $mimesupport = 0) {
         debugLog("IMAP-GetMessage: (fid: '$folderid'  id: '$id'  truncsize: $truncsize)");
 
         // Get flags, etc
@@ -605,19 +605,77 @@ class BackendIMAP extends BackendDiff {
 
             $output = new SyncMail();
 
-            $body = $this->getBody($message);
-            // truncate body, if requested
-            if(strlen($body) > $truncsize) {
-                $body = utf8_truncate($body, $truncsize);
-                $output->bodytruncated = 1;
-            } else {
-                $body = $body;
-                $output->bodytruncated = 0;
-            }
-            $body = str_replace("\n","\r\n", str_replace("\r","",$body));
+	    if ($bodypreference === false) {
+        	$body = $this->getBody($message);
+        	$body = str_replace("\n","\r\n", str_replace("\r","",$body));
 
-            $output->bodysize = strlen($body);
-            $output->body = $body;
+    	        // truncate body, if requested
+        	if(strlen($body) > $truncsize) {
+                    $body = utf8_truncate($body, $truncsize);
+	            $output->bodytruncated = 1;
+    	        } else {
+        	    $body = $body;
+            	    $output->bodytruncated = 0;
+        	}
+        	$output->bodysize = strlen($body);
+        	$output->body = $body;
+	    } else {
+	        if (isset($bodypreference[1]) && !isset($bodypreference[1]["TruncationSize"])) 
+	    	    $bodypreference[1]["TruncationSize"] = 1024*1024;
+		if (isset($bodypreference[2]) && !isset($bodypreference[2]["TruncationSize"])) 
+		    $bodypreference[2]["TruncationSize"] = 1024*1024;
+		if (isset($bodypreference[3]) && !isset($bodypreference[3]["TruncationSize"]))
+		    $bodypreference[3]["TruncationSize"] = 1024*1024;
+		if (isset($bodypreference[4]) && !isset($bodypreference[4]["TruncationSize"]))
+		    $bodypreference[4]["TruncationSize"] = 1024*1024;
+		$output->airsyncbasebody = new SyncAirSyncBaseBody();
+		debugLog("airsyncbasebody!");
+		$this->getBodyRecursive($message, "html", $body);
+		if ($body != "") 
+		    $output->airsyncbasenativebodytype=2;
+		else 
+		    $output->airsyncbasenativebodytype=1;
+		if (isset($bodypreference[2])) {
+		    // Send HTML if requested and native type was html
+		    $output->airsyncbasebody->type = 2;
+		    if ($output->airsyncbasenativebodytype==2) {
+			$html = $body;
+		    } else {
+			$html = '<html>'.
+			    '<head>'.
+			    '<meta name="Generator" content="Z-Push">'.
+			    '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'.
+			    '</head>'.
+			    '<body>'.
+			    str_replace("\n","<BR>",str_replace("\r","<BR>", str_replace("\r\n","<BR>",$body))).
+			    '</body>'.
+			    '</html>';
+		    }
+    		    if(isset($bodypreference[2]["TruncationSize"]) &&
+    	    		strlen($html) > $bodypreference[2]["TruncationSize"]) {
+        		$html = substr($html,0,$bodypreference[2]["TruncationSize"]);
+			$output->airsyncbasebody->truncated = 1;
+		    }
+		    $output->airsyncbasebody->data = w2u($html);
+		    $output->airsyncbasebody->estimateddatasize = strlen($html);
+    		} else {
+		    // Send Plaintext as Fallback or if original body is plaintext
+		    $body = $this->getBody($message);
+	
+		    $output->airsyncbasebody->type = 1;
+    		    if(isset($bodypreference[1]["TruncationSize"]) &&
+    			strlen($body) > $bodypreference[1]["TruncationSize"]) {
+        		$body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
+			$output->airsyncbasebody->truncated = 1;
+    	    	    }
+		    $output->airsyncbasebody->estimateddatasize = strlen($body);
+    		    $output->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
+    		}
+		// In case we have nothing for the body, send at least a blank... 
+		// dw2412 but only in case the body is not rtf!
+    		if ($output->airsyncbasebody->type != 3 && (!isset($output->airsyncbasebody->data) || strlen($output->airsyncbasebody->data) == 0))
+        	    $output->airsyncbasebody->data = " ";
+            }
             $output->datereceived = isset($message->headers["date"]) ? strtotime($message->headers["date"]) : null;
             $output->displayto = isset($message->headers["to"]) ? $message->headers["to"] : null;
             $output->importance = isset($message->headers["x-priority"]) ? preg_replace("/\D+/", "", $message->headers["x-priority"]) : null;
@@ -899,6 +957,60 @@ class BackendIMAP extends BackendDiff {
         }
         return $addr_string;
     }
+
+    // START ADDED dw2412 Settings Support
+    function setSettings($request,$devid) 
+    {
+	if (isset($request["oof"])) {
+	    if ($request["oof"]["oofstate"] == 1) {
+		// in case oof should be switched on do it here
+		// store somehow your oofmessage in case your system supports. 
+		// response["oof"]["status"] = true per default and should be false in case 
+		// the oof message could not be set
+		$response["oof"]["status"] = true; 
+	    } else {
+		// in case oof should be switched off do it here
+		$response["oof"]["status"] = true; 
+	    }
+	}
+	if (isset($request["deviceinformation"])) {
+	    // in case you'd like to store device informations do it here. 
+    	    $response["deviceinformation"]["status"] = true;
+	}
+	if (isset($request["devicepassword"])) {
+	    // in case you'd like to store device informations do it here. 
+    	    $response["devicepassword"]["status"] = true;
+	}
+
+	return $response;
+    }
+    function getSettings($request,$devid) 
+    {
+	if (isset($request["userinformation"])) {
+	    $response["userinformation"]["status"] = true;
+	    $response["userinformation"]["emailaddresses"][] = $userdetails["emailaddress"];
+	}
+	if (isset($request["oof"])) {
+	    if ($props != false) {
+		$response["oof"]["status"] 	= 1;
+		// return oof messsage and where it should apply here
+		$response["oof"]["oofstate"]	= 0;
+
+		$oofmsg["appliesto"]		= SYNC_SETTINGS_APPLIESTOINTERNAL;
+		$oofmsg["replymessage"] 	= w2u("");
+		$oofmsg["enabled"]		= 0;
+		$oofmsg["bodytype"] 		= $request["oof"]["bodytype"];
+
+	        $response["oof"]["oofmsgs"][]	= $oofmsg;
+	    // $this->settings["outofoffice"]["subject"] = windows1252_to_utf8(isset($props[PR_EC_OUTOFOFFICE_SUBJECT]) ? $props[PR_EC_OUTOFOFFICE_SUBJECT] : "");
+	    } else {
+		$response["oof"]["status"] 	= 0;
+	    }
+	}
+	return $response;
+    }
+    // END ADDED dw2412 Settings Support
+
 
 };
 

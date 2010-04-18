@@ -441,7 +441,7 @@ class ExportChangesDiff extends DiffState {
                         // calls. This may cause our algorithm to 'double see' changes.
 
                         $stat = $this->_backend->StatMessage($this->_folderid, $change["id"]);
-                        $message = $this->_backend->GetMessage($this->_folderid, $change["id"], $truncsize);
+                        $message = $this->_backend->GetMessage($this->_folderid, $change["id"], $truncsize,(isset($this->_bodypreference) ? $this->_bodypreference : false));
 
                         // copy the flag to the message
                         $message->flags = (isset($change["flags"])) ? $change["flags"] : 0;
@@ -578,8 +578,8 @@ class BackendDiff {
         return $folders;
     }
 
-    function Fetch($folderid, $id, $mimesupport = 0) {
-        return $this->GetMessage($folderid, $id, 1024*1024, $mimesupport); // Forces entire message (up to 1Mb)
+    function Fetch($folderid, $id, $bodypreference=false, $mimesupport = 0) {
+        return $this->GetMessage($folderid, $id, 1024*1024, $bodypreference, $mimesupport); // Forces entire message (up to 1Mb)
     }
 
     function GetAttachmentData($attname) {
@@ -602,7 +602,7 @@ class BackendDiff {
         return false;
     }
 
-    function GetMessage($folderid, $id, $truncsize, $mimesupport = 0) {
+    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $mimesupport = 0) {
         return false;
     }
 

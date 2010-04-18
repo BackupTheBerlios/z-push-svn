@@ -77,12 +77,6 @@ class Backend {
     // folder
     function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {}
 
-    // START ADDED dw2412 Settings Support
-    function getSettings($request,$devid) {}
-    function setSettings($request,$devid) {}
-    // END ADDED dw2412 Settings Support
-
-
 };
 
 ?>
