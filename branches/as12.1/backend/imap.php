@@ -605,6 +605,7 @@ class BackendIMAP extends BackendDiff {
 
             $output = new SyncMail();
 
+	    // start AS12 Stuff (bodypreference === false) case = old behaviour
 	    if ($bodypreference === false) {
         	$body = $this->getBody($message);
         	$body = str_replace("\n","\r\n", str_replace("\r","",$body));
@@ -676,6 +677,7 @@ class BackendIMAP extends BackendDiff {
     		if ($output->airsyncbasebody->type != 3 && (!isset($output->airsyncbasebody->data) || strlen($output->airsyncbasebody->data) == 0))
         	    $output->airsyncbasebody->data = " ";
             }
+	    // end AS12 Stuff
             $output->datereceived = isset($message->headers["date"]) ? strtotime($message->headers["date"]) : null;
             $output->displayto = isset($message->headers["to"]) ? $message->headers["to"] : null;
             $output->importance = isset($message->headers["x-priority"]) ? preg_replace("/\D+/", "", $message->headers["x-priority"]) : null;
@@ -686,6 +688,13 @@ class BackendIMAP extends BackendDiff {
             $output->cc = isset($message->headers["cc"]) ? $message->headers["cc"] : null;
             $output->from = isset($message->headers["from"]) ? $message->headers["from"] : null;
             $output->reply_to = isset($message->headers["reply-to"]) ? $message->headers["reply-to"] : null;
+
+	    // start AS12 Stuff
+	    $output->poommailflag = new SyncPoommailFlag();
+	    $output->poommailflag->flagstatus = 0;
+    	    $output->internetcpid = 65001;
+	    $output->contentclass="urn:content-classes:message";
+	    // end AS12 Stuff
 
             // Attachments are only searched in the top-level part
             $n = 0;

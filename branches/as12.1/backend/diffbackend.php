@@ -267,6 +267,13 @@ class ImportContentsChangesDiff extends DiffState {
     function ImportMessageMove($id, $newfolder) {
         return true;
     }
+
+    // Outlook Supports flagging messages - Imap afaik not. Simply return true in this case not to break sync...
+    function ImportMessageFlag($id, $flag) {
+	return true;
+    }
+
+
 };
 
 class ImportHierarchyChangesDiff extends DiffState {
