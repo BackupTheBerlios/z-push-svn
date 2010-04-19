@@ -42,11 +42,20 @@ function GetDiff($old, $new) {
 
         if($old[$iold]["id"] == $new[$inew]["id"]) {
             // Both messages are still available, compare flags and mod
+            // isset($old[$iold]["flags"]) && isset($new[$inew]["flags"]) && $old[$iold]["flags"] != $new[$inew]["flags"]
             if(isset($old[$iold]["flags"]) && isset($new[$inew]["flags"]) && $old[$iold]["flags"] != $new[$inew]["flags"]) {
                 // Flags changed
                 $change["type"] = "flags";
                 $change["id"] = $new[$inew]["id"];
                 $change["flags"] = $new[$inew]["flags"];
+                $changes[] = $change;
+            }
+
+            if(isset($old[$iold]["olflags"]) && isset($new[$inew]["olflags"]) && $old[$iold]["olflags"] != $new[$inew]["olflags"]) {
+                // Outlook Flags changed
+                $change["type"] = "olflags";
+                $change["id"] = $new[$inew]["id"];
+                $change["olflags"] = 0;
                 $changes[] = $change;
             }
 
@@ -122,6 +131,9 @@ class DiffState {
                     if($type == "flags") {
                         // Update flags
                         $this->_syncstate[$i]["flags"] = $change["flags"];
+                    } elseif($type == "olflags") {
+                        // Update Outlook flags
+                        $this->_syncstate[$i]["olflags"] = $change["olflags"];
                     } else if($type == "delete") {
                         // Delete item
                         array_splice($this->_syncstate, $i, 1);
@@ -206,6 +218,7 @@ class ImportContentsChangesDiff extends DiffState {
             $change["mod"] = 0; // dummy, will be updated later if the change succeeds
             $change["parent"] = $this->_folderid;
             $change["flags"] = (isset($message->read)) ? $message->read : 0;
+            $change["olflags"] = 0;
             $this->updateState("change", $change);
 
             if($conflict && $this->_flags == SYNC_CONFLICT_OVERWRITE_PIM)
@@ -213,7 +226,6 @@ class ImportContentsChangesDiff extends DiffState {
         }
 
         $stat = $this->_backend->ChangeMessage($this->_folderid, $id, $message);
-
         if(!is_array($stat))
             return $stat;
 
@@ -270,6 +282,16 @@ class ImportContentsChangesDiff extends DiffState {
 
     // Outlook Supports flagging messages - Imap afaik not. Simply return true in this case not to break sync...
     function ImportMessageFlag($id, $flag) {
+        //do nothing if it is a dummy folder
+        if ($this->_folderid == SYNC_FOLDER_TYPE_DUMMY)
+            return true;
+
+        // Update client state
+        $change = array();
+        $change["id"] = $id;
+        $change["olflags"] = 1;
+        $this->updateState("olflags", $change);
+
 	return true;
     }
 
@@ -440,6 +462,8 @@ class ExportChangesDiff extends DiffState {
                 $change = $this->_changes[$this->_step];
 
                 switch($change["type"]) {
+                    case "flags":
+                    case "olflags":
                     case "change":
                         $truncsize = $this->getTruncSize($this->_truncation);
 
@@ -454,17 +478,16 @@ class ExportChangesDiff extends DiffState {
                         $message->flags = (isset($change["flags"])) ? $change["flags"] : 0;
 
                         if($stat && $message) {
-                            if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageChange($change["id"], $message) == true)
-                                $this->updateState("change", $stat);
+                            if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageChange($change["id"], $message) == true) {
+                                if ($change["type"] == "change") $this->updateState("change", $stat);
+                        	if ($change["type"] == "flags") $this->updateState("flags", $change);
+                        	if ($change["type"] == "olflags") $this->updateState("olflags", $change);
+			    }
                         }
                         break;
                     case "delete":
                         if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageDeletion($change["id"]) == true)
                             $this->updateState("delete", $change);
-                        break;
-                    case "flags":
-                        if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageReadFlag($change["id"], $change["flags"]) == true)
-                            $this->updateState("flags", $change);
                         break;
                     case "move":
                         if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageMove($change["id"], $change["parent"]) == true)

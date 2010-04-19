@@ -360,6 +360,8 @@ class BackendIMAP extends BackendDiff {
                     $message["id"] = $overview->uid;
                     // 'seen' aka 'read' is the only flag we want to know about
                     $message["flags"] = 0;
+		    // outlook supports additional flags, set them to 0
+                    $message["olflags"] = 0;
 
                     if(array_key_exists( "seen", $vars) && $overview->seen)
                         $message["flags"] = 1;
@@ -613,6 +615,7 @@ class BackendIMAP extends BackendDiff {
             $entry["id"] = $overview[0]->uid;
             // 'seen' aka 'read' is the only flag we want to know about
             $entry["flags"] = 0;
+            $entry["olflags"] = 0;
 
             if(array_key_exists( "seen", $vars) && $overview[0]->seen)
                 $entry["flags"] = 1;
