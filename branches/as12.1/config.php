@@ -50,6 +50,11 @@
     // Switch of imtoinet because of segfaults
     define('ICS_IMTOINET_SEGFAULT',false);
 
+    // Defines the charset used in Backend. AirSync charset is UTF-8!
+    // Leave as is in case you use default Zarafa Server. 
+    // In case your Backend needs another value just adapt it.
+    define('BACKEND_CHARSET','windows-1252');
+
     // The data providers that we are using (see configuration below)
     $BACKEND_PROVIDER = "BackendICS";
 

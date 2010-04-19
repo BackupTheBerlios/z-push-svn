@@ -640,7 +640,7 @@ debugLog("propvalue:".$mapiprops[$propTag]);
                     }
                     
                     //convert from unicode to windows encoding
-                    if (isset($mapiprops[$propTag])) $mapiprops[$propTag] = iconv("UCS-2","windows-1252", $mapiprops[$propTag]);
+                    if (isset($mapiprops[$propTag])) $mapiprops[$propTag] = iconv("UCS-2",BACKEND_CHARSET, $mapiprops[$propTag]);
                     $size -= $len;
                     
                     //Re-align

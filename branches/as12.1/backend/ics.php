@@ -597,8 +597,8 @@ class MAPIMapping {
 	    }
 				
 	    // Put data in recipient array
-	    $recipients[] = Array("display_name" => windows1252_to_utf8($tempArray[0]),
-				  "email_address" => windows1252_to_utf8($tempArray[2]));
+	    $recipients[] = Array("display_name" => w2u($tempArray[0]),
+				  "email_address" => w2u($tempArray[2]));
 	}
 			
 	return $recipients;
@@ -4277,8 +4277,8 @@ class BackendICS {
 		foreach ($request["oof"]["oofmsgs"] as $oofmsg) {
 		    switch ($oofmsg["appliesto"]) {
 			case SYNC_SETTINGS_APPLIESTOINTERNAL :  
-			    $result = mapi_setprops($this->_defaultstore, array(PR_EC_OUTOFOFFICE_MSG 		=> utf8_to_windows1252(isset($oofmsg["replymessage"]) ? $oofmsg["replymessage"] : ""),
-			    					    		PR_EC_OUTOFOFFICE_SUBJECT 	=> utf8_to_windows1252(_("Out of office notification"))));
+			    $result = mapi_setprops($this->_defaultstore, array(PR_EC_OUTOFOFFICE_MSG 		=> u2w(isset($oofmsg["replymessage"]) ? $oofmsg["replymessage"] : ""),
+			    					    		PR_EC_OUTOFOFFICE_SUBJECT 	=> u2w(_("Out of office notification"))));
 			    break;
 		    }
 		}
@@ -4405,7 +4405,7 @@ class BackendICS {
 		$response["oof"]["oofstate"]	= isset($props[PR_EC_OUTOFOFFICE]) ? ($props[PR_EC_OUTOFOFFICE] ? 1 : 0) : 0;
 
 		$oofmsg["appliesto"]		= SYNC_SETTINGS_APPLIESTOINTERNAL;
-		$oofmsg["replymessage"] 	= windows1252_to_utf8(isset($props[PR_EC_OUTOFOFFICE_MSG]) ? $props[PR_EC_OUTOFOFFICE_MSG] : "");
+		$oofmsg["replymessage"] 	= w2u(isset($props[PR_EC_OUTOFOFFICE_MSG]) ? $props[PR_EC_OUTOFOFFICE_MSG] : "");
 		$oofmsg["enabled"]		= isset($props[PR_EC_OUTOFOFFICE]) ? ($props[PR_EC_OUTOFOFFICE] ? 1 : 0) : 0;
 		$oofmsg["bodytype"] 		= $request["oof"]["bodytype"];
 

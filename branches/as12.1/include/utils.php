@@ -76,29 +76,29 @@ function hex2bin($data)
     return $newdata;
 }
 
-function utf8_to_windows1252($string, $option = "")
+function utf8_to_backendcharset($string, $option = "")
 {
     if (function_exists("iconv")){
-        return @iconv("UTF-8", "Windows-1252" . $option, $string);
+        return @iconv("UTF-8", BACKEND_CHARSET . $option, $string);
     }else{
         return utf8_decode($string); // no euro support here
     }
 }
 
-function windows1252_to_utf8($string, $option = "")
+function backendcharset_to_utf8($string, $option = "")
 {
     if (function_exists("iconv")){
-        return @iconv("Windows-1252", "UTF-8" . $option, $string);
+        return @iconv(BACKEND_CHARSET, "UTF-8" . $option, $string);
     }else{
         return utf8_encode($string); // no euro support here
     }
 }
 
-function w2u($string) { return windows1252_to_utf8($string); }
-function u2w($string) { return utf8_to_windows1252($string); }
+function w2u($string) { return backendcharset_to_utf8($string); }
+function u2w($string) { return utf8_to_backendcharset($string); }
 
-function w2ui($string) { return windows1252_to_utf8($string, "//TRANSLIT"); }
-function u2wi($string) { return utf8_to_windows1252($string, "//TRANSLIT"); }
+function w2ui($string) { return backendcharset_to_utf8($string, "//TRANSLIT"); }
+function u2wi($string) { return utf8_to_backendcharset($string, "//TRANSLIT"); }
 
 /**
  * Truncate an UTF-8 encoded sting correctly
@@ -203,7 +203,7 @@ function eml_ReadMessage($msg) {
 	}
     }
     if (mb_detect_encoding($body) != "UTF-8") 
-	$body = iconv("Windows-1252", "UTF-8//TRANSLIT", $body );
+	$body = w2ui( $body );
     return array('body' => $body,'content' => $content);
 }
 
