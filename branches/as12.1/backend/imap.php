@@ -21,12 +21,14 @@ include_once('mimeDecode.php');
 require_once('z_RFC822.php');
 
 class BackendIMAP extends BackendDiff {
+
     /* Called to logon a user. These are the three authentication strings that you must
      * specify in ActiveSync on the PDA. Normally you would do some kind of password
      * check here. Alternatively, you could ignore the password here and have Apache
      * do authentication via mod_auth_*
      */
     function Logon($username, $domain, $password) {
+
         $this->_wasteID = false;
         $this->_sentID = false;
         $this->_server = "{" . IMAP_SERVER . ":" . IMAP_PORT . "/imap" . IMAP_OPTIONS . "}";
@@ -50,6 +52,8 @@ class BackendIMAP extends BackendDiff {
             debugLog("IMAP can't connect: " . imap_last_error());
             return false;
         }
+
+
     }
 
     /* Called before shutting down the request to close the IMAP connection
@@ -64,6 +68,7 @@ class BackendIMAP extends BackendDiff {
             @imap_close($this->_mbox);
             debugLog("IMAP connection closed");
         }
+	file_put_contents(STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user, serialize($this->_folders));
     }
 
     /* Called directly after the logon. This specifies the client's protocol version
@@ -79,6 +84,14 @@ class BackendIMAP extends BackendDiff {
         $this->_user = $user;
         $this->_devid = $devid;
         $this->_protocolversion = $protocolversion;
+
+	// FolderID Cache	
+	if (($this->_folders = file_get_contents(STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user)) !== false) {
+	    $this->_folders = unserialize($this->_folders);
+	}
+	if ($this->_folders === false) {
+	    $this->_folders = array();
+	}
 
         return true;
     }
@@ -393,12 +406,26 @@ class BackendIMAP extends BackendDiff {
      * are pretty simple really, having only a type, a name, a parent and a server ID.
      */
 
+    function _folderid()
+    {
+        return sprintf( '%04x%04x%04x%04x%04x%04x%04x%04x',
+                    mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+                    mt_rand( 0, 0x0fff ) | 0x4000,
+                    mt_rand( 0, 0x3fff ) | 0x8000,
+                    mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ) );
+    }
     function GetFolder($id) {
         $folder = new SyncFolder();
-        $folder->serverid = $id;
 
+//	$folder->serverid = $id;
+
+	if (($folder->serverid = array_search($id,$this->_folders)) === false) {
+	    $folder->serverid = $this->_folderid();
+	    $this->_folders[$folder->serverid] = $id;
+	} 
+	
         // explode hierarchy
-          $fhir = explode(".", $id);
+        $fhir = explode(".", $id);
 
         // compare on lowercase strings
         $lid = strtolower($id);
@@ -414,7 +441,7 @@ class BackendIMAP extends BackendDiff {
             $folder->displayname = "Drafts";
             $folder->type = SYNC_FOLDER_TYPE_DRAFTS;
         }
-        else if($lid == "trash") {
+        else if($lid == "trash" || $lid == "deleted items") {
             $folder->parentid = "0";
             $folder->displayname = "Trash";
             $folder->type = SYNC_FOLDER_TYPE_WASTEBASKET;
@@ -460,7 +487,7 @@ class BackendIMAP extends BackendDiff {
 
            //advanced debugging
            //debugLog("IMAP-GetFolder(id: '$id') -> " . print_r($folder, 1));
-
+	
         return $folder;
     }
 
@@ -478,7 +505,7 @@ class BackendIMAP extends BackendDiff {
 
         $stat = array();
         $stat["id"] = $id;
-        $stat["parent"] = $folder->parentid;
+        $stat["parent"] = $this->_folders[$folder->parentid];
         $stat["mod"] = $folder->displayname;
 
         return $stat;
@@ -498,7 +525,7 @@ class BackendIMAP extends BackendDiff {
         $this->imap_reopenFolder($folderid);
 
         // build name for new mailbox
-        $newname = $this->_server . str_replace(".", $this->_serverdelimiter, $folderid) . $this->_serverdelimiter . $displayname;
+        $newname = $this->_server . str_replace(".", $this->_serverdelimiter, $this->_folders['folderid']) . $this->_serverdelimiter . $displayname;
 
         $csts = false;
         // if $id is set => rename mailbox, otherwise create
@@ -511,7 +538,7 @@ class BackendIMAP extends BackendDiff {
             $csts = @imap_createmailbox($this->_mbox, $newname);
         }
         if ($csts) {
-            return $this->StatFolder($folderid . "." . $displayname);
+            return $this->StatFolder($this->_folders[$folderid] . "." . $displayname);
         }
         else
             return false;
@@ -806,7 +833,7 @@ class BackendIMAP extends BackendDiff {
         }
         else {
             // move message
-            $s1 = imap_mail_move($this->_mbox, $id, str_replace(".", $this->_serverdelimiter, $newfolderid), FT_UID);
+            $s1 = imap_mail_move($this->_mbox, $id, str_replace(".", $this->_serverdelimiter, $this->_folders[$newfolderid]), FT_UID);
 
             // delete message in from-folder
             $s2 = imap_expunge($this->_mbox);
@@ -842,7 +869,7 @@ class BackendIMAP extends BackendDiff {
         // courier-imap only cleares the status cache after checking
         @imap_check($this->_mbox);
 
-        $status = imap_status($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $folderid), SA_ALL);
+        $status = imap_status($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $this->_folders[$folderid]), SA_ALL);
         if (!$status) {
             debugLog("AlterPingChanges: could not stat folder $folderid : ". imap_last_error());
             return false;
@@ -915,10 +942,10 @@ class BackendIMAP extends BackendDiff {
     // remember what folder is currently open and only change if necessary
     function imap_reopenFolder($folderid, $force = false) {
         // to see changes, the folder has to be reopened!
-           if ($this->_mboxFolder != $folderid || $force) {
-               $s = @imap_reopen($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $folderid));
+           if ($this->_mboxFolder != $this->_folders[$folderid] || $force) {
+               $s = @imap_reopen($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $this->_folders[$folderid]));
                if (!$s) debugLog("failed to change folder: ". implode(", ", imap_errors()));
-            $this->_mboxFolder = $folderid;
+            $this->_mboxFolder = $this->_folders[$folderid];
         }
     }
 
