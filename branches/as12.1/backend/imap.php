@@ -68,7 +68,6 @@ class BackendIMAP extends BackendDiff {
             @imap_close($this->_mbox);
             debugLog("IMAP connection closed");
         }
-	file_put_contents(STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user, serialize($this->_folders));
     }
 
     /* Called directly after the logon. This specifies the client's protocol version
@@ -86,12 +85,22 @@ class BackendIMAP extends BackendDiff {
         $this->_protocolversion = $protocolversion;
 
 	// FolderID Cache	
-	if (($this->_folders = file_get_contents(STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user)) !== false) {
-	    $this->_folders = unserialize($this->_folders);
-	}
-	if ($this->_folders === false) {
+	$filename = STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user;
+	$this->_folders = false;
+	if (file_exists($filename)) {
+	    if (($this->_folders = file_get_contents(STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user)) !== false) {
+		$this->_folders = unserialize($this->_folders);
+	    } else {
+	        $this->_folders = array();
+		$this->_folders['0'] = ''; // init the root...
+		$this->_folders[0] = ''; // init the root...
+	    }
+	} else {
 	    $this->_folders = array();
+	    $this->_folders['0'] = ''; // init the root...
+    	    $this->_folders[0] = ''; // init the root...
 	}
+	
 
         return true;
     }
@@ -474,20 +483,24 @@ class BackendIMAP extends BackendDiff {
 
         // define the rest as other-folders
         else {
-               if (count($fhir) > 1) {
-                   $folder->displayname = w2u(imap_utf7_decode(array_pop($fhir)));
-                   $folder->parentid = implode(".", $fhir);
-               }
-               else {
+            if (count($fhir) > 1) {
+        	$folder->displayname = w2u(imap_utf7_decode(array_pop($fhir)));
+		if (($folder->parentid = array_search(implode(".", $fhir),$this->_folders)) === false) {
+		    $folder->parentid = $this->_folderid();
+		    $this->_folders[$folder->parentid] = implode(".", $fhir);
+		} 
+//                $folder->parentid = implode(".", $fhir);
+    	    } else {
                 $folder->displayname = w2u(imap_utf7_decode($id));
                 $folder->parentid = "0";
-               }
+            }
             $folder->type = SYNC_FOLDER_TYPE_USER_MAIL; // Type Other is not displayed on i.e. Nokia
         }
 
            //advanced debugging
            //debugLog("IMAP-GetFolder(id: '$id') -> " . print_r($folder, 1));
 	
+	file_put_contents(STATE_DIR . '/' . strtolower($this->_devid). '/imap_folders_'. $this->_user, serialize($this->_folders));
         return $folder;
     }
 
