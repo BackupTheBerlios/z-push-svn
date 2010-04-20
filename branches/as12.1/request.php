@@ -1009,14 +1009,14 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    debugLog("HandleSync got Found HeartbeatInterval and Wait in request. This violates the protocol spec. (STATUS = 4)");
 	    return true;		    
 	}
-	if ($SyncCache['wait'] > 59) {
-	    _HandleSyncError("14","59");
-	    debugLog("Wait larger than 59 Minutes. This violates the protocol spec. (STATUS = 14, LIMIT = 59)");
+	if ($SyncCache['wait'] > ((REAL_SCRIPT_TIMEOUT-600)/60)) {
+	    _HandleSyncError("14",((REAL_SCRIPT_TIMEOUT-600)/60));
+	    debugLog("Wait larger than ".((REAL_SCRIPT_TIMEOUT-600)/60)." Minutes. This violates the protocol spec. (STATUS = 14, LIMIT = ".((REAL_SCRIPT_TIMEOUT-600)/60).")");
 	    return true;		    
 	}
-	if ($SyncCache['hbinterval'] > 3540) {
-	    _HandleSyncError("14","3540");
-	    debugLog("HeartbeatInterval larger than 3540 Seconds. This violates the protocol spec. (STATUS = 14, LIMIT = 3540)");
+	if ($SyncCache['hbinterval'] > (REAL_SCRIPT_TIMEOUT-600)) {
+	    _HandleSyncError("14",(REAL_SCRIPT_TIMEOUT-600));
+	    debugLog("HeartbeatInterval larger than ".(REAL_SCRIPT_TIMEOUT-600)." Seconds. This violates the protocol spec. (STATUS = 14, LIMIT = ".(REAL_SCRIPT_TIMEOUT-600).")");
 	    return true;		    
 	}
 // Partial sync but with Folders and Options so we need to set collections
@@ -1692,10 +1692,28 @@ function HandleGetAttachment($backend, $protocolversion) {
     return true;
 }
 
+function _HandlePingError($errorcode, $limit = false) {
+    global $zpushdtd;
+    global $output;
+
+    $encoder = new WBXMLEncoder($output, $zpushdtd);
+    $encoder->StartWBXML();
+    $encoder->startTag(SYNC_PING_PING);
+    $encoder->startTag(SYNC_PING_STATUS);
+    $encoder->content($errorcode);
+    $encoder->endTag();
+    if ($limit !== false) {
+	$encoder->startTag(SYNC_PING_LIFETIME);
+	$encoder->content($limit);
+	$encoder->endTag();
+    }
+    $encoder->endTag();
+}
+
 function HandlePing($backend, $devid) {
     global $zpushdtd, $input, $output;
     global $user, $auth_pw;
-    $timeout = 5;
+    $timeout = 10;
 
     debugLog("Ping received");
 
@@ -1704,13 +1722,15 @@ function HandlePing($backend, $devid) {
 
     $collections = array();
     $lifetime = 0;
+    $pingfiletime = false;
 
     // Get previous defaults if they exist
-    $file = BASE_PATH . STATE_DIR . "/" . $devid . "/" . $devid;
+    $file = BASE_PATH . STATE_DIR . "/" . strtolower($devid) . "/". $devid;
     if (file_exists($file)) {
         $ping = unserialize(file_get_contents($file));
         $collections = $ping["collections"];
         $lifetime = $ping["lifetime"];
+	$pingfiletime = filemtime($file);
     }
 
     if($decoder->getElementStartTag(SYNC_PING_PING)) {
@@ -1775,9 +1795,27 @@ function HandlePing($backend, $devid) {
     $changes = array();
     $dataavailable = false;
 
+    if ($lifetime < 60) {
+	_HandlePingError("5","60");
+	debugLog("Lifetime lower than 60 Seconds. This violates the protocol spec. (STATUS = 5, LIMIT min = 60)");
+	return true;		    
+    }
+    if ($lifetime > (REAL_SCRIPT_TIMEOUT-600)) {
+	_HandlePingError("5",(REAL_SCRIPT_TIMEOUT-600));
+	debugLog("Lifetime larger than ".(REAL_SCRIPT_TIMEOUT-600)." Seconds. This violates the protocol spec. (STATUS = 5, LIMIT max = ".(REAL_SCRIPT_TIMEOUT-600).")");
+	return true;		    
+    }
+
     debugLog("Waiting for changes... (lifetime $lifetime)");
     // Wait for something to happen
     for($n=0;$n<$lifetime / $timeout; $n++ ) {
+	$file = BASE_PATH . STATE_DIR . "/" . strtolower($devid) . "/". $devid;
+	
+	if (filemtime($file) > $pingfiletime) {
+	    debugLog("Another ping started so this process exits now");
+	    return true;
+	}
+
         //check the remote wipe status
         if (PROVISIONING === true) {
 	    $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
@@ -1858,7 +1896,7 @@ function HandlePing($backend, $devid) {
     $encoder->endTag();
 
     // Save the ping request state for this device
-    file_put_contents(BASE_PATH . "/" . STATE_DIR . "/" . $devid ."/" . $devid , serialize(array("lifetime" => $lifetime, "collections" => $collections)));
+    file_put_contents(BASE_PATH . "/" . STATE_DIR . "/" . strtolower($devid). "/" . $devid, serialize(array("lifetime" => $lifetime, "collections" => $collections)));
 
     return true;
 }

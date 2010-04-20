@@ -23,18 +23,27 @@ include_once("debug.php");
 include_once("compat.php");
 include_once("version.php");
 
+// Define SCRIPT_TIMEOUT in case it is not defined in config.php or negative if you substract 600
+if (!defined("SCRIPT_TIMEOUT")) {
+    define('REAL_SCRIPT_TIMEOUT', 3540+600);
+} else {
+    if ((SCRIPT_TIMEOUT-600) < 660) 
+	define('REAL_SCRIPT_TIMEOUT', SCRIPT_TIMEOUT+660);
+    else 
+	define('REAL_SCRIPT_TIMEOUT', SCRIPT_TIMEOUT);
+}
+
 // Attempt to set maximum execution time
-ini_set('max_execution_time', SCRIPT_TIMEOUT);
-set_time_limit(SCRIPT_TIMEOUT);
+ini_set('max_execution_time', REAL_SCRIPT_TIMEOUT);
+set_time_limit(REAL_SCRIPT_TIMEOUT);
 
 debugLog("Start ------ THIS IS AN UNOFFICIAL DEVELOPER VERSION!");
 debugLog("Z-Push version: $zpush_version");
 debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
-// debugLog(print_r($_SERVER,true));
-// debugLog(print_r($_GET,true));
-// debugLog(print_r($_POST,true));
-// debugLog(print_r(apache_request_headers(),true));
- 
+//debugLog(print_r($_SERVER,true));
+//debugLog(print_r($_GET,true));
+//debugLog(print_r($_POST,true));
+//debugLog(print_r(apache_request_headers(),true));
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
 
