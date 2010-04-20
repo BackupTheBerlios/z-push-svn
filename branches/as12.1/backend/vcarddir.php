@@ -111,7 +111,7 @@ class BackendVCDir extends BackendDiff {
         return $message;
     }
 
-    function GetMessage($folderid, $id, $truncsize, $mimesupport = 0) {
+    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $mimesupport = 0) {
         debugLog('VCDir::GetMessage('.$folderid.', '.$id.', ..)');
         if($folderid != "root")
             return;
