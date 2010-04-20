@@ -44,6 +44,7 @@ define("SYNC_MIMETRUNCATION","MIMETruncation");
 define("SYNC_NEWMESSAGE","NewMessage");
 define("SYNC_PARTIAL","Partial");
 define("SYNC_WAIT","Wait");
+define("SYNC_LIMIT","Limit");
 define("SYNC_HEARTBEATINTERVAL","HeartbeatInterval");
 define("SYNC_CONVERSATIONMODE","ConversationMode");
 
@@ -165,7 +166,6 @@ define("SYNC_POOMMAIL_FLAG","POOMMAIL:Flag");
 define("SYNC_POOMMAIL_FLAGSTATUS","POOMMAIL:FlagStatus");
 define("SYNC_POOMMAIL_FLAGTYPE","POOMMAIL:FlagType");
 define("SYNC_POOMMAIL_COMPLETETIME","POOMMAIL:CompleteTime");
-// ADDED dw2412 V14.0 Support
 
 // AIRNOTIFY
 define("SYNC_AIRNOTIFY_NOTIFY","AirNotify:Notify");
@@ -504,7 +504,7 @@ define("SYNC_ITEMOPERATIONS_USERNAME", "ItemOperations:UserName");
 define("SYNC_ITEMOPERATIONS_PASSWORD", "ItemOperations:Password");
 // END ADDED dw2412 12.0 ItemOperations Support
 
-// START ADDED dw2412 12.0 PoomMail2 Support
+// START ADDED dw2412 14.0 PoomMail2 Support
 define("SYNC_POOMMAIL2_UMCALLERID","POOMMAIL2:UmCallerId");
 define("SYNC_POOMMAIL2_UMUSERNOTES","POOMMAIL2:UmUserNotes");
 define("SYNC_POOMMAIL2_UMATTDURATION","POOMMAIL2:UmAttDuration");

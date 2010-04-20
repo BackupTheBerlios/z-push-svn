@@ -197,7 +197,7 @@ class SyncMail extends Streamer {
     var $threadtopic;
     var $attachments = array();
     var $airsyncbaseattachments = array();
-    // var $poommailflag = array();
+    // var $poommailflag = 0;
     var $airsyncbasenativebodytype;
     //END ADDED dw2412 V12.0 Support
 
