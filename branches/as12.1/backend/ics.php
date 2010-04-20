@@ -1748,11 +1748,19 @@ class PHPContentsImportProxy extends MAPIMapping {
 	    $message->airsyncbasebody = new SyncAirSyncBaseBody();
 	    debugLog("airsyncbasebody!");
 	    
-	    if (isset($bodypreference[4]) && isset($mstream) && $mstreamstat['cb'] < $bodypreference[4]["TruncationSize"]) {
+	    if (isset($bodypreference[4]) && isset($mstream)) {
             	$mstreamcontent = mapi_stream_read($mstream, MAX_EMBEDDED_SIZE);
 		$message->airsyncbasebody->type = 4;
-            	$message->airsyncbasebody->data = $mstreamcontent;
-            	$message->airsyncbasebody->estimateddatasize = $mstreamstat["cb"];
+            	if (isset($bodypreference[4]["TruncationSize"])) {
+            	    $hdrend = strpos("\r\n\r\n",$mstreamcontent);
+            	    $message->airsyncbasebody->data = substr($mstreamcontent,0,$hdrend+$bodypreference[4]["TruncationSize"]);
+            	} else {
+		    $message->airsyncbasebody->data = $mstreamcontent;
+            	}
+            	if (strlen ($message->airsyncbasebody->data) < $mstreamstat["cb"]) {
+		    $message->airsyncbasebody->truncated = 1;
+            	}
+            	$message->airsyncbasebody->estimateddatasize = strlen($message->airsyncbasebody->data);
     	    } elseif (isset($bodypreference[3]) && 
     		isset($rtf) && strlen($rtf) < $bodypreference[3]["TruncationSize"]) {
 		// Send RTF if possible and below the maximum truncation size
