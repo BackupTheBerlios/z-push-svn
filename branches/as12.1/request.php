@@ -376,28 +376,27 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
     		    }
     		}
     	    }
-
             $encoder->startTag(SYNC_FOLDERHIERARCHY_COUNT);
-            $encoder->content($importer->count);
+    	    $encoder->content($importer->count);
             $encoder->endTag();
 
-            if(count($importer->changed) > 0) {
-                foreach($importer->changed as $folder) {
-            	    // send a modify flag if the folder is already known on the device
+	    if(count($importer->changed) > 0) {
+		foreach($importer->changed as $folder) {
             	    if (isset($folder->serverid) && in_array($folder->serverid, $seenfolders)){
-                        $encoder->startTag(SYNC_FOLDERHIERARCHY_UPDATE);
+                	$encoder->startTag(SYNC_FOLDERHIERARCHY_UPDATE);
             	    } else {
-                        $seenfolders[] = $folder->serverid;
-                        $encoder->startTag(SYNC_FOLDERHIERARCHY_ADD);
+                    	$seenfolders[] = $folder->serverid;
+                    	$encoder->startTag(SYNC_FOLDERHIERARCHY_ADD);
             	    }                  
 		    $statemachine->updateSyncCacheFolder($foldercache, $folder->serverid, $folder->parentid, $folder->displayname, $folder->type);
                     $folder->encode($encoder);
                     $encoder->endTag();
-                }
-            }
+		}
+	    }
 
             if(count($importer->deleted) > 0) {
                 foreach($importer->deleted as $folder) {
+                    if (($sid = array_search($folder, $seenfolders)) !== false) {
                     $encoder->startTag(SYNC_FOLDERHIERARCHY_REMOVE);
                         $encoder->startTag(SYNC_FOLDERHIERARCHY_SERVERENTRYID);
                             $encoder->content($folder);
@@ -405,11 +404,12 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
                     $encoder->endTag();
 
                     // remove folder from the folderflags array
-                    if (($sid = array_search($folder, $seenfolders)) !== false) {
                         unset($seenfolders[$sid]);
 			$statemachine->deleteSyncCacheFolder($foldercache,$folder);
                         $seenfolders = array_values($seenfolders);    
-                    }                 
+                    } else {
+                	debugLog("Don't send $folder because sid $sid (not in seenfolders)!");
+                    }
                 }
             }
         }
