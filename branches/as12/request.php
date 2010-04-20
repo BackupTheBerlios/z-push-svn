@@ -1547,6 +1547,8 @@ function HandleProvision($backend, $devid, $protocolversion) {
     if (!$phase2) {
         $policykey = $backend->generatePolicyKey();
         $backend->setPolicyKey($policykey, $devid);
+    } else {
+        $policykey = $backend->generatePolicyKey();
     }
 
     $encoder->startTag(SYNC_PROVISION_PROVISION);
