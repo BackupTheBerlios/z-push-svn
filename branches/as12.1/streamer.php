@@ -235,13 +235,11 @@ class Streamer {
                         $encoder->content(strtoupper(bin2hex($this->$map[STREAMER_VAR])));
                     } else if(isset($map[STREAMER_TYPE]) && $map[STREAMER_TYPE] == STREAMER_TYPE_MAPI_STREAM) {
                         $encoder->content($this->$map[STREAMER_VAR]);
-                    } else {
-                	if ($tag == SYNC_POOMMAIL2_CONVERSATIONINDEX ||
-                	    $tag == SYNC_POOMMAIL2_CONVERSATIONID) {
-                    	    $encoder->contentopaque($this->$map[STREAMER_VAR]);
-                	} else {
-                    	    $encoder->content($this->$map[STREAMER_VAR]);
-                    	}
+                    } else if ($tag == SYNC_POOMMAIL2_CONVERSATIONINDEX ||
+                	$tag == SYNC_POOMMAIL2_CONVERSATIONID) {
+                    	$encoder->contentopaque($this->$map[STREAMER_VAR]);
+            	    } else {
+                    	$encoder->content($this->$map[STREAMER_VAR]);
                     }
                     $encoder->endTag();
                 }
