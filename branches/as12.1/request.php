@@ -360,7 +360,7 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
 			$foldercache['folders'][$folder->serverid]['parentid'] == $folder->parentid &&
 			$foldercache['folders'][$folder->serverid]['displayname'] == $folder->displayname &&
 			$foldercache['folders'][$folder->serverid]['type'] == $folder->type) {
-                	debugLog("Ignoring ".$folder->serverid." from importer->changed because it is folder update request without changes in data!");
+                	debugLog("Ignoring ".$folder->serverid." from importer->changed because it is folder update requests!");
     			unset($importer->changed[$key]);
     			$importer->count--;
 		    }
@@ -823,20 +823,37 @@ function HandleSync($backend, $protocolversion, $devid) {
                 	switch($element[EN_TAG]) {
                     	    case SYNC_MODIFY:
                     		if(isset($appdata)) {
-                            	    if(isset($appdata->poommailflag) && is_object($appdata->poommailflag)) { // ADDED DW2412 AS12 Protocol Support
-	    				$importer->ImportMessageFlag($serverid, $appdata->poommailflag);
-                            	    };
                             	    if ($foldertype) {
-                            		if(isset($appdata->read)) // Currently, 'read' is only sent by the PDA when it is ONLY setting the read flag.
-                                	    $optionimporter[$foldertype]->ImportMessageReadFlag($serverid, $appdata->read);
-                            		else
+                            		if ($appdata->_setchange == true || 
+                            		    ($appdata->_setread == false &&
+                            		     $appdata->_setflag == false)) {
                                 	    $optionimporter[$foldertype]->ImportMessageChange($serverid, $appdata);
+                            		} else {
+                            		    if ($appdata->_setflag == true) {
+	    					$optionimporter[$foldertype]->ImportMessageFlag($serverid, $appdata->poommailflag);
+                            			$collection[$foldertype."flagids"][$serverid] = true;
+                            		    } 
+                            		    if ($appdata->_setread == true) {
+                                		$optionimporter[$foldertype]->ImportMessageReadFlag($serverid, $appdata->read);
+                            			$collection[$foldertype."readids"][$serverid] = true;
+					    }
+					}
                             	    } else {
-                            		if(isset($appdata->read)) // Currently, 'read' is only sent by the PDA when it is ONLY setting the read flag.
-                                	    $importer->ImportMessageReadFlag($serverid, $appdata->read);
-                            		else
+                            		if ($appdata->_setchange == true || 
+                            		    ($appdata->_setread == false &&
+                            		     $appdata->_setflag == false)) {
                                 	    $importer->ImportMessageChange($serverid, $appdata);
-				    };
+                            		} else {
+                            		    if ($appdata->_setflag == true) {
+	    					$importer->ImportMessageFlag($serverid, $appdata->poommailflag);
+                            			$collection["flagids"][$serverid] = true;
+                            		    }
+                            		    if ($appdata->_setread == true) {
+                                	        $importer->ImportMessageReadFlag($serverid, $appdata->read);
+                            			$collection["readids"][$serverid] = true;
+                            		    }
+                            		}
+				    }
                             	    $collection["importedchanges"] = true;
                         	}
                         	break;
@@ -1372,19 +1389,20 @@ function HandleSync($backend, $protocolversion, $devid) {
                     if ($onlyoptionbodypreference == false) {
 
                 	$filtertype = isset($collection["filtertype"]) ? $collection["filtertype"] : 0;
-//                	$exporter = $backend->GetExporter($collection["collectionid"]);
-//                	$exporter->Config($importer, $collection["class"], $filtertype, $collection["syncstate"], 0, $collection["truncation"], (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
-
 
                 	// Stream the changes to the PDA
-			$importer = new ImportContentsChangesStream($encoder, GetObjectClassFromFolderClass($collection["class"]), false);
+			$ids = array("readids" => (isset($collection["readids"]) ? $collection["readids"]: array()),
+				     "flagids" => (isset($collection["flagids"]) ? $collection["flagids"]: array()));
+			$importer = new ImportContentsChangesStream($encoder, GetObjectClassFromFolderClass($collection["class"]), false, $ids);
 
                 	$n = 0;
                 	while(1) {
                     	    $progress = $exporter->Synchronize();
                     	    if(!is_array($progress))
                         	break;
-                    	    $n++;
+                    	    if ($importer->_lastObjectStatus == 1) 
+                    		$n++;
+			    debugLog("_lastObjectStatus = ".$importer->_lastObjectStatus);
 
                     	    if ($n >= $collection["maxitems"]) {
                     		debugLog("Exported maxItems of messages: ". $collection["maxitems"] . " - more available");
@@ -1399,18 +1417,20 @@ function HandleSync($backend, $protocolversion, $devid) {
 			$collection['optionfoldertype'] == "SMS" &&
 			$n < $collection["maxitems"]) {
                 	$filtertype = isset($collection["filtertype"]) ? $collection["filtertype"] : 0;
-//            		$exporter = $backend->GetExporter($collection["collectionid"]);
-//			$exporter->Config($importer, $collection["optionfoldertype"], $filtertype, $state, 0, $collection["truncation"], (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 		    
                 	// Stream the changes to the PDA
-			$optionimporter[$collection['optionfoldertype']] = new ImportContentsChangesStream($encoder, GetObjectClassFromFolderClass($collection["class"]), GetObjectClassFromFolderClass($collection["optionfoldertype"]));
+			$ids = array("readids" => (isset($collection[$collection['optionfoldertype']."readids"]) ? $collection[$collection['optionfoldertype']."readids"]: array()),
+				     "flagids" => (isset($collection[$collection['optionfoldertype']."flagids"]) ? $collection[$collection['optionfoldertype']."flagids"]: array()));
+			$optionimporter[$collection['optionfoldertype']] = new ImportContentsChangesStream($encoder, GetObjectClassFromFolderClass($collection["class"]), GetObjectClassFromFolderClass($collection["optionfoldertype"]), $ids);
 
                 	$n = 0;
                 	while(1) {
                     	    $progress = $optionexporter[$collection['optionfoldertype']]->Synchronize();
                     	    if(!is_array($progress))
                         	break;
-                    	    $n++;
+                    	    if ($optionimporter[$collection['optionfoldertype']]->_lastObjectStatus == 1)
+                    		$n++;
+			    debugLog("_lastObjectStatus = ".$optionimporter[$collection['optionfoldertype']]->_lastObjectStatus);
 
                     	    if ($n >= $collection["maxitems"]) {
                     		debugLog("Exported maxItems of messages: ". $collection["maxitems"] . " - more available");
@@ -1959,6 +1979,7 @@ function HandleSendMail($backend, $protocolversion) {
         $encoder->endTag();
         $encoder->endTag();
     } else {
+        $rfc822 = readStream($input);
 	$result = $backend->SendMail($rfc822, $data, $protocolversion);
     };
 
@@ -2069,6 +2090,7 @@ function HandleSmartForward($backend, $protocolversion) {
 	    $data['folderid'] = $_GET["CollectionId"];
         else
 	    $data['folderid'] = false;
+        $rfc822 = readStream($input);
 	$result = $backend->SendMail($rfc822, $data, $protocolversion);
     };
     	

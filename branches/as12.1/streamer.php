@@ -35,10 +35,17 @@ class Streamer {
     var $content;
     var $attributes;
     var $flags;
+    var $_setread;
+    var $_setchange;
+    var $_setflag;
 
     function Streamer($mapping) {
         $this->_mapping = $mapping;
         $this->flags = false;
+	$this->_setflag = false;
+	$this->_setchange = false;
+	$this->_setread = false;
+	
     }
 
     // Decodes the WBXML from $input until we reach the same depth level of WBXML. This
@@ -47,6 +54,15 @@ class Streamer {
     function decode(&$decoder) {
         while(1) {
             $entity = $decoder->getElement();
+	    if (isset($entity[EN_TAG])) {
+		switch ($entity[EN_TAG]) {
+		    case "POOMMAIL:Read" : $this->_setread=true; break;
+		    case "POOMMAIL:Flag" : $this->_setflag=true; break;
+		    default		 : $this->_setflag=false; 
+					   $this->_setread=false; 
+					   $this->_setchange=true;
+	        };
+	    };
 
             if($entity[EN_TYPE] == EN_TYPE_STARTTAG) {
                 if(! ($entity[EN_FLAGS] & EN_FLAGS_CONTENT)) {
@@ -55,6 +71,9 @@ class Streamer {
                         $this->$map[STREAMER_VAR] = "";
                     } else if ($map[STREAMER_TYPE] == STREAMER_TYPE_DATE || $map[STREAMER_TYPE] == STREAMER_TYPE_DATE_DASHES ) {
                         $this->$map[STREAMER_VAR] = "";
+                    } else if ($map[STREAMER_TYPE] == "SyncPoommailFlag") { // added dw2412 to support empty flag = flag to delete
+			$this->poommailflag = new SyncPoommailFlag();
+		        $this->poommailflag->flagstatus="";
                     }
                     continue;
                 }
