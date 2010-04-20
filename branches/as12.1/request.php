@@ -2302,7 +2302,18 @@ function HandleFolderCreate($backend, $devid, $protocolversion) {
 
     // get the foldercache from synccache
     $foldercache = unserialize($statemachine->getSyncCache());
-        
+    if (!$delete && !$create) {
+	debugLog("Here1 folder create serverid: ".$serverid." type: ".$type." displayname: ".$displayname." parentid: ".$parentid);
+	if (!isset($serverid) || $serverid === false) return false;
+	if ($type === false && isset($foldercache['folders'][$serverid]['type'])) 
+	    $type = $foldercache['folders'][$serverid]['type'];
+	if ($displayname === false && isset($foldercache['folders'][$serverid]['displayname'])) 
+	    $displayname = $foldercache['folders'][$serverid]['displayname'];
+	if ($parentid === false && isset($foldercache['folders'][$serverid]['parentid'])) 
+	    $parentid = $foldercache['folders'][$serverid]['parentid'];
+	if ($type === false || $displayname === false || $parentid === false) return false;
+	debugLog("Here2 folder create serverid: ".$serverid." type: ".$type." displayname: ".$displayname." parentid: ".$parentid);
+    }
     // Configure importer with last state
     $importer = $backend->GetHierarchyImporter();
     $importer->Config($syncstate);
@@ -2804,7 +2815,10 @@ function HandleSearch($backend, $devid, $protocolversion) {
         return false;
 
     if($decoder->getElementStartTag(SYNC_SEARCH_OPTIONS)) {
-        while(1) {
+	$searchquerydeeptraversal = false;
+	$searchqueryrebuildresults = false;
+        $searchschema = false;
+	while(1) {
             if($decoder->getElementStartTag(SYNC_SEARCH_RANGE)) {
                 $searchrange = $decoder->getElementContent();
                 if(!$decoder->getElementEndTag())
