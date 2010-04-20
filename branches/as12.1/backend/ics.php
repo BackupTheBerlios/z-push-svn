@@ -3532,11 +3532,49 @@ class BackendICS {
 							  }; 
 							  break;
 		    case "search:freetext"		: $mapiquery["query"][1][] = 
-						               array(RES_OR,
-                        					    array(
-                            						array(RES_CONTENT, array(FUZZYLEVEL => FL_SUBSTRING | FL_IGNORECASE, ULPROPTAG => PR_BODY, VALUE => $value)),
-                            						array(RES_CONTENT, array(FUZZYLEVEL => FL_SUBSTRING | FL_IGNORECASE, ULPROPTAG => PR_SUBJECT, VALUE => $value)),
-                        						), // RES_OR
+								    array(
+									RES_OR, array (
+									    array (RES_AND, array(
+                        							    array(RES_EXIST, array(ULPROPTAG => PR_BODY)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_BODY, VALUE => u2w($value))),
+                            							    ), 
+                            						    ), // RES_AND
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_SUBJECT)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SUBJECT, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_DISPLAY_TO)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_DISPLAY_TO, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_DISPLAY_CC)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_DISPLAY_CC, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_SENDER_NAME)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SUBJECT, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_SENDER_EMAIL_ADDRESS)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENDER_EMAIL_ADDRESS, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_SENT_REPRESENTING_NAME)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENT_REPRESENTING_NAME, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+                            						    array (RES_AND, array(
+                            							    array(RES_EXIST, array(ULPROPTAG => PR_SENT_REPRESENTING_EMAIL_ADDRESS)),
+                            							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENT_REPRESENTING_EMAIL_ADDRESS, VALUE => u2w($value))),
+                        							    ), 
+	                						    ), // RES_AND 
+	                						), // RES_OR
                     						    );
 							  break;
 		    case "subquery"			: foreach($value as $subvalue) {
