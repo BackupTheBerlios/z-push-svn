@@ -698,7 +698,9 @@ class ImportContentsChangesICS extends MAPIMapping {
 
     // Import a change in 'read' flags .. This can never conflict
     function ImportMessageReadFlag($id, $flags) {
+	
         $readstate = array ( "sourcekey" => hex2bin($id), "flags" => $flags);
+    
         $ret = mapi_importcontentschanges_importperuserreadstatechange($this->importer, array ($readstate) );
         if($ret == false)
             debugLog("Unable to set read state: " . sprintf("%x", mapi_last_hresult()));
@@ -1729,7 +1731,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 	    if (isset($bodypreference[4]) && !isset($bodypreference[4]["TruncationSize"]))
 		$bodypreference[4]["TruncationSize"] = 1024*1024;
 	    if (isset($bodypreference[4]) && function_exists("mapi_inetmapi_imtoinet") && 
-		!defined(ICS_IMTOINET_SEGFAULT)) {
+		(!defined('ICS_IMTOINET_SEGFAULT') || ICS_IMTOINET_SEGFAULT === false)) {
         	$addrBook = mapi_openaddressbook($this->_session);
         	$mstream = mapi_inetmapi_imtoinet($this->_session, $addrBook, $mapimessage, array());
         	$mstreamstat = mapi_stream_stat($mstream);
@@ -1750,7 +1752,6 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
 		$message->airsyncbasebody->data = base64_encode($rtf);
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
-//		$message->airsyncbasebody->truncated = 0;
     	    } elseif (isset($bodypreference[2]) && 
     		$message->airsyncbasenativebodytype==2) {
 		// Send HTML if requested and native type was html
@@ -1760,8 +1761,6 @@ class PHPContentsImportProxy extends MAPIMapping {
     	    	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
         	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
-    		} else {
-//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->data = w2u($html);
 		$message->airsyncbasebody->estimateddatasize = strlen($html);
@@ -1773,8 +1772,6 @@ class PHPContentsImportProxy extends MAPIMapping {
     		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
         	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
-    		} else {
-//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -1827,6 +1824,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                 }
             }
         }
+
         return $message;
     }
 
@@ -2140,26 +2138,33 @@ class PHPContentsImportProxy extends MAPIMapping {
 	    if (!isset($bodypreference[1]["TruncationSize"])) {
 		$bodypreference[1]["TruncationSize"] = 1024*1024;
 	    }
-	    if (1==2 && isset($bodypreference[4]) && function_exists("mapi_inetmapi_imtoinet") && 
-		!defined(ICS_IMTOINET_SEGFAULT)) {
+	    if (isset($bodypreference[4]) && function_exists("mapi_inetmapi_imtoinet") &&
+		(!defined('ICS_IMTOINET_SEGFAULT') || ICS_IMTOINET_SEGFAULT === false)) {
         	$addrBook = mapi_openaddressbook($this->_session);
         	$mstream = mapi_inetmapi_imtoinet($this->_session, $addrBook, $mapimessage, array());
         	$mstreamstat = mapi_stream_stat($mstream);
 	    };
 	    $message->airsyncbasebody = new SyncAirSyncBaseBody();
 	    debugLog("airsyncbasebody!");
-	    if (isset($bodypreference[4]) && isset($mstream) && $mstreamstat['cb'] < $bodypreference[4]["TruncationSize"]) {
+	    if (isset($bodypreference[4]) && isset($mstream)) {
             	$mstreamcontent = mapi_stream_read($mstream, MAX_EMBEDDED_SIZE);
 		$message->airsyncbasebody->type = 4;
-            	$message->airsyncbasebody->data = $mstreamcontent;
-            	$message->airsyncbasebody->estimateddatasize = $mstreamstat["cb"];
+            	if (isset($bodypreference[4]["TruncationSize"])) {
+            	    $hdrend = strpos("\r\n\r\n",$mstreamcontent);
+            	    $message->airsyncbasebody->data = substr($mstreamcontent,0,$hdrend+$bodypreference[4]["TruncationSize"]);
+            	} else {
+		    $message->airsyncbasebody->data = $mstreamcontent;
+            	}
+            	if (strlen ($message->airsyncbasebody->data) < $mstreamstat["cb"]) {
+		    $message->airsyncbasebody->truncated = 1;
+            	}
+            	$message->airsyncbasebody->estimateddatasize = strlen($message->airsyncbasebody->data);
     	    } elseif (isset($bodypreference[3]) && 
-    		$message->airsyncbasenativebodytype==3) {
+    		$message->airsyncbasenativebodytype == 3) {
 		$message->airsyncbasebody->type = 3;
 		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
 		$message->airsyncbasebody->data = base64_encode($rtf);
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
-//		$message->airsyncbasebody->truncated = 0;
 		debugLog("RTFL Body!");
     	    } elseif (isset($bodypreference[2])) {
 		$message->airsyncbasebody->type = 2;
@@ -2180,8 +2185,6 @@ class PHPContentsImportProxy extends MAPIMapping {
     	    	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
         	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
-    		} else {
-//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->data = w2u($html);
 		$message->airsyncbasebody->estimateddatasize = strlen($html);
@@ -2193,8 +2196,6 @@ class PHPContentsImportProxy extends MAPIMapping {
     		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
         	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
-    		} else {
-//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -2536,6 +2537,18 @@ class PHPContentsImportProxy extends MAPIMapping {
             }
         }
 
+    	if (defined('LIMIT_RECIPIENTS')) {
+    	    if(count($to) > LIMIT_RECIPIENTS) {
+    	        debugLog("Recipient amount limitted. No to recipients added!");
+    		$to = array();
+    		$message->displayto = "";
+    	    }
+    	    if(count($cc) > LIMIT_RECIPIENTS) {
+    		debugLog("Recipient amount limitted. No cc recipients added!");
+    		$cc = array();
+    	    }
+    	}
+
         $message->to = implode(", ", $to);
         $message->cc = implode(", ", $cc);
 
@@ -2763,6 +2776,7 @@ class ExportChangesICS  {
 
         $folder = mapi_msgstore_openentry($this->_store, $entryid);
         if(!$folder) {
+	    debugLog("folderid: ".bin2hex($folderid)."Folderentryid: ".bin2hex($entryid));
             $this->exporter = false;
             debugLog("ExportChangesICS->Constructor: can not open folder");
             return;
@@ -3878,7 +3892,7 @@ class BackendICS {
                         //check if it is a recurring item
                         $tnefrecurr = GetPropIDFromString($this->_defaultstore, "PT_BOOLEAN:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x5");
                         if (isset($mapiprops[$tnefrecurr])) {
-                            $this -> _handleRecurringItem($mapimessage, $mapiprops);
+                            $this->_handleRecurringItem($mapimessage, $mapiprops);
                         }
 			debugLog(print_r($mapiprops,true));
                         mapi_setprops($mapimessage, $mapiprops);
