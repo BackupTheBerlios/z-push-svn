@@ -468,16 +468,17 @@ function HandleSync($backend, $protocolversion, $devid) {
     $shortsyncreq = false;
     $dataimported = false;
     $dataavailable = false;
+    $maxcacheage = 960; // 15 Minutes + 1 to store it long enough for Device being connected to ActiveSync PC.
     if(!$decoder->getElementStartTag(SYNC_SYNCHRONIZE)) {
 	// short request is allowed in >= 12.1 but we enforce a full sync request in case cache is older than
 	// 10 minutes
 	if ($protocolversion >= 12.1) {
 	    if (!($SyncCache = unserialize($statemachine->getSyncCache())) ||
 		!isset($SyncCache['collections']) ||
-		$SyncCache['lastuntil']+600 <= time()) {
+		$SyncCache['lastuntil']+$maxcacheage <= time()) {
     		_HandleSyncError("13");
 		debugLog("Empty Sync request and no or too old SyncCache. ".
-		"(SyncCache[lastuntil]+600=".($SyncCache['lastuntil']+600).", ".
+		"(SyncCache[lastuntil]+".$maxcacheage."=".($SyncCache['lastuntil']+$maxcacheage).", ".
 		"Time now".(time()).", ".
 		"SyncCache[collections]=".(isset($SyncCache['collections']) ? "Yes" : "No" ).", ".
 		"SyncCache array=".(is_array($SyncCache) ? "Yes" : "No" ).") ".
@@ -492,8 +493,10 @@ function HandleSync($backend, $protocolversion, $devid) {
 		foreach ($SyncCache['collections'] as $key=>$value) {
 		    $collection = $value;
 		    $collection['collectionid'] = $key;
-		    $collection['syncstate'] = $statemachine->getSyncState($collection['synckey']);
-		    array_push($collections,$collection);
+		    if ($collection['synckey']) {
+			$collection['syncstate'] = $statemachine->getSyncState($collection['synckey']);
+			array_push($collections,$collection);
+		    }
 		}
 	    }
 	} else {
@@ -511,6 +514,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 	if (!isset($SyncCache)) $SyncCache = unserialize($statemachine->getSyncCache());
 	// Just to update the timestamp...
 	$SyncCache['timestamp'] = time();
+	$SyncCache['lastuntil'] = time();
 	$statemachine->setSyncCache(serialize($SyncCache));
     
 	if($decoder->getElementStartTag(SYNC_FOLDERS)) {
@@ -937,9 +941,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		}
 	    
 	    };
-	    if (isset($values['synckey']) && $values['synckey'] != '0') $collections[$key]["getchanges"] = true;
 	    if ($protocolversion >= 12.0) {
-//	    	if (!isset($values["BodyPreference"]) && $values['synckey'] != '0' && $values['class'] == 'Email') {
 		if (!isset($values["BodyPreference"]) && $values['synckey'] != '0') {
 		    if (isset($SyncCache['collections'][$values["collectionid"]]['BodyPreference'])) {
 			$collections[$key]["BodyPreference"] = $SyncCache['collections'][$values["collectionid"]]['BodyPreference'];
@@ -950,15 +952,12 @@ function HandleSync($backend, $protocolversion, $devid) {
 		    }
 		}
 	    }
-    	    if (!isset($values["filtertype"])  && $values['synckey'] != '0'&& ($values['class'] == 'Email' || $values['class'] == 'Calendar' || $values['class'] == 'Tasks')) {
+    	    if (!isset($values["filtertype"]) && $values['synckey'] != '0' && ($values['class'] == 'Email' || $values['class'] == 'Calendar' || $values['class'] == 'Tasks')) {
 		if (isset($SyncCache['collections'][$values["collectionid"]]['filtertype'])) {
 		    $collections[$key]["filtertype"] = $SyncCache['collections'][$values["collectionid"]]['filtertype'];
 		} else {
 		    $collections[$key]["filtertype"] = 0;
-/*		_HandleSyncError("12");
-		debugLog("(".$SyncCache['folders'][$values["collectionid"]]['displayname'].") No filtertype even in cache, sending status 12 to recover from this");
-	        return true;		    
-*/	  	}
+		}
 	    }
 	    if (!isset($values["maxitems"])) 
 		$collections[$key]["maxitems"] = (isset($SyncCache['collections'][$values["collectionid"]]['maxitems']) ? 
@@ -974,11 +973,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		isset($SyncCache['collections'][$values["collectionid"]]['synckey']) && 
 		$SyncCache['collections'][$values["collectionid"]]['synckey'] != '0') {
 		debugLog("ERROR Synckey 0 and Cache has synckey... Invalidation disabled, check of maybe existing dups!");
-/*	    	_HandleSyncError("12");
-		debugLog("ERROR Synckey 0 and Cache has synckey... Invalidate!");
-		return true;		    
-*/	    }
-
+	    }
 	}
 	if (!isset($SyncCache['hierarchy']['synckey'])) {
 	    _HandleSyncError("12");
@@ -1026,7 +1021,11 @@ function HandleSync($backend, $protocolversion, $devid) {
 
 	    $TempSyncCache = unserialize($statemachine->getSyncCache());
 
+	    $foundsynckey = false;
 	    foreach ($collections as $key=>$value) {
+		if (isset($value['synckey'])) {
+		    $foundsynckey = true;
+		}
 		if (isset($TempSyncCache['collections'][$value['collectionid']])) {
 		    debugLog("Received collection info updating ".$TempSyncCache['folders'][$value['collectionid']]['displayname']);
 		    $collections[$key]['class'] = $TempSyncCache['collections'][$value['collectionid']]['class'];
@@ -1035,17 +1034,13 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    }
 
 	    foreach ($TempSyncCache['collections'] as $key=>$value) {
-		if (isset($value['synckey']) && $value['synckey'] != '0') {
+		if (isset($value['synckey'])) {
 	    	    $collection = $value;
 	    	    $collection['collectionid'] = $key;
-	    	    if (isset($collection["synckey"]) && 
-			$collection["synckey"] != '0') 
-			$collection["getchanges"] = true;
-    		    if (isset($default_maxitems)) 
-    			$collection["maxitems"] = $default_maxitems;
+    		    if (isset($default_maxitems)) 	$collection["maxitems"] = $default_maxitems;
 		    $collection['syncstate'] = $statemachine->getSyncState($collection["synckey"]);
 		    if ($collection['syncstate'] < 0) {
-			_HandleSyncError("12");
+		        _HandleSyncError("3");
 			debugLog("GetSyncState ERROR (Syncstate: ".abs($collection['syncstate']).")");
 			return true;		    
 		    }
@@ -1054,7 +1049,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 		}
 	    }
 	    unset($TempSyncCache);
-	};
+	}
+	
 	// Update the synckeys in SyncCache
 	foreach($SyncCache['collections'] as $key=>$value) {
 	    if (isset($SyncCache['collections'][$key]['synckey'])) {
@@ -1062,10 +1058,15 @@ function HandleSync($backend, $protocolversion, $devid) {
 	        unset($SyncCache['collections'][$key]['synckey']);
 	    }
 	}
+	
 	foreach($collections as $key=>$value) {
 	    if (isset($value['synckey'])) {
 	        debugLog("Adding SyncCache[synckey] from collection ".$value['collectionid']);
 	        $SyncCache['collections'][$value['collectionid']]['synckey'] = $value['synckey'];
+	    }
+	    if (strlen($value['syncstate']) == 0 || bin2hex(substr($value['syncstate'],4,4)) == "00000000") {
+		if (isset($value['BodyPreference']))
+		    $collections[$key]['getchanges'] = true;
 	    }
 	}
 	// End Update the synckeys in SyncCache
@@ -1088,6 +1089,9 @@ function HandleSync($backend, $protocolversion, $devid) {
 	else if ($SyncCache['hbinterval'] !== false) $until = time()+($SyncCache['hbinterval']);
 	debugLog("Looking for changes for ".($until - time())." seconds");
 	$SyncCache['lastuntil'] = $until;
+	// Reading current state of the hierarchy state for determining changes during heartbeat/wait
+        $hierarchystate = $statemachine->getSyncState($SyncCache['hierarchy']['synckey']);
+
 	while (time()<$until) {
 	    // we try to find changes as long as time is lower than wait time 
 
@@ -1123,18 +1127,22 @@ function HandleSync($backend, $protocolversion, $devid) {
 		
 		if ($onlyoptionbodypreference == false) {
         	    $exporter = $backend->GetExporter($collection["collectionid"]);
-//        	    $ret = $exporter->Config($waitimporter, $collection["class"], false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
         	    $ret = $exporter->Config($waitimporter, $collection["class"], $filtertype, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
         	    // stop ping if exporter can not be configured (e.g. after Zarafa-server restart)
         	    if ($ret === false ) {
+            		debugLog("Sync Wait/Heartbeat error: Exporter can not be configured. Waiting 30 seconds before sync is retried.");
+			debugLog($collection["collectionid"]);
+            		sleep(30);
         	    }
 
         	    $changecount = $exporter->GetChangeCount();
 
-        	    if($changecount > 0) {
+        	    if($changecount > 0 ||
+        	       (strlen($state) == 0 || bin2hex(substr($state,4,4)) == "00000000")) {
             		debugLog("Found change in folder ".$SyncCache['folders'][$collection["collectionid"]]['displayname']);
             		$dataavailable = true;
+			$collections[$i]["getchanges"] = true;
         	    }
 
         	    // Discard any data
@@ -1147,18 +1155,22 @@ function HandleSync($backend, $protocolversion, $devid) {
         	    $state = $collection[$collection["optionfoldertype"]."syncstate"];
         	    $filtertype = (isset($collection["optionfoldertype"]["filtertype"]) ? $collection["optionfoldertype"]["filtertype"] : 0);
         	    $waitimporter = false;
-//        	    $ret = $exporter->Config($waitimporter, $collection["optionfoldertype"], false, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
         	    $ret = $exporter->Config($waitimporter, $collection["optionfoldertype"], $filtertype, $state, BACKEND_DISCARD_DATA, 0, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
         	    // stop ping if exporter can not be configured (e.g. after Zarafa-server restart)
         	    if ($ret === false ) {
+            		debugLog("Sync Wait/Heartbeat error: Exporter can not be configured. Waiting 30 seconds before sync is retried.");
+			debugLog($collection["collectionid"]);
+            		sleep(30);
         	    }
 
         	    $changecount = $exporter->GetChangeCount();
 
-        	    if($changecount > 0) {
+        	    if($changecount > 0 ||
+        	       (strlen($state) == 0 || bin2hex(substr($state,4,4)) == "00000000")) {
             		debugLog("Option: Found change in folder ".$SyncCache['folders'][$collection["collectionid"]]['displayname']);
             		$dataavailable = true;
+			$collections[$i]["getchanges"] = true;
         	    }
 
         	    // Discard any data
@@ -1175,10 +1187,9 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    // Check for folder Updates
 	    $hierarchychanged = false;
 	    $exporter = $backend->GetExporter();
-	    $state = $statemachine->getSyncState($SyncCache['hierarchy']['synckey']);
-	    if ($state >= 0) {
+	    if ($hierarchystate >= 0) {
 		$waitimporter = false;
-		$exporter->Config($waitimporter, false, false, $state, BACKEND_DISCARD_DATA, 0, false);
+		$exporter->Config($waitimporter, false, false, $hierarchystate, BACKEND_DISCARD_DATA, 0, false);
 		if ($exporter->GetChangeCount() > 0) {
 		    $hierarchychanged = true;
 		}
@@ -1186,12 +1197,12 @@ function HandleSync($backend, $protocolversion, $devid) {
     		while(is_array($exporter->Synchronize()));
 
 		if ($hierarchychanged) {
-            	    debugLog("HandleSync found hierarchy changes during Wait/HeartbeatInterval... (STATUS = 12)");
+            	    debugLog("HandleSync found hierarchy changes during Wait/Heartbeat Interval... Sending status 12 to get changes (STATUS = 12)");
 		    _HandleSyncError("12");
 		    return true;		    
 		}
 	    } else {
-            	debugLog("Error in Syncstateg Wait/HeartbeatInterval... (STATUS = 12)");
+            	debugLog("Error in Syncstate during Wait/Heartbeat Interval... Sending status 12 to enforce hierarchy sync (STATUS = 12)");
 		_HandleSyncError("12");
 		return true;		    
 	    }
@@ -1221,11 +1232,6 @@ function HandleSync($backend, $protocolversion, $devid) {
     
     $encoder->startTag(SYNC_SYNCHRONIZE);
     {
-
-/*        $encoder->startTag(SYNC_STATUS);
-        $encoder->content("1");
-        $encoder->endTag();
-*/
         $encoder->startTag(SYNC_FOLDERS);
         {
             foreach($collections as $collection) {
@@ -1334,10 +1340,11 @@ function HandleSync($backend, $protocolversion, $devid) {
                     $encoder->endTag();
                 }
 
-                if(isset($collection["getchanges"])) {
+                if (isset($collection["getchanges"])) {
                     // Use the state from the importer, as changes may have already happened
 
                     $filtertype = isset($collection["filtertype"]) ? $collection["filtertype"] : false;
+                    debugLog("FilterType for getchanges ".$filtertype);
                     $onlyoptionbodypreference = $protocolversion >= 14.0 && (!isset($collection["BodyPreference"][1]) && !isset($collection["BodyPreference"][2]) && !isset($collection["BodyPreference"][3]) && !isset($collection["BodyPreference"][4]));
 
                     if ($onlyoptionbodypreference === false) {
@@ -1477,7 +1484,6 @@ function HandleSync($backend, $protocolversion, $devid) {
         $encoder->endTag();
     }
     $encoder->endTag();
-//    debugLog(print_r($SyncCache,true));
     $statemachine->setSyncCache(serialize($SyncCache));
 
     return true;
@@ -1496,8 +1502,8 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
     $statemachine = new StateMachine($devid);
 
     $SyncCache = unserialize($statemachine->getSyncCache());
-
-//  Check the validity of the sync cache. If state is errornous set the syncstatus to 2 as retval for client
+    
+    // Check the validity of the sync cache. If state is errornous set the syncstatus to 2 as retval for client
     $syncstatus=1;
 
     if(!$decoder->getElementStartTag(SYNC_GETITEMESTIMATE_GETITEMESTIMATE))
