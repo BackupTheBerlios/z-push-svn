@@ -739,7 +739,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 	    }
 
 	    // dw2412 in case the flag should be removed... just do it compatible with o2k7	    	    
-	    if ((isset($flag->flagstatus) && $flag->flagstatus == 0) || !isset($flag->flagstatus)) {
+	    if ((isset($flag->flagstatus) && ($flag->flagstatus == 0 || $flag->flagstatus == "")) || !isset($flag->flagstatus)) {
 		$delflags[] = $this->_getPropIDFromString($emailflag["flagstatus"]);
 		$delflags[] = $this->_getPropIDFromString($emailflag["flagicon"]);
 		$delflags[] = $this->_getPropIDFromString("PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x8104");
