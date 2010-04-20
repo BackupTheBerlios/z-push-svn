@@ -1628,8 +1628,16 @@ class PHPContentsImportProxy extends MAPIMapping {
     }
 
     function ImportMessageDeletion ($flags, $sourcekeys) {
+	debugLog("Import Message Deletion for ".count($sourcekeys));
+	$i=0;
         foreach($sourcekeys as $sourcekey) {
             $this->importer->ImportMessageDeletion(bin2hex($sourcekey));
+    	    if ($i<250) {
+    		$i++;
+    	    } else {
+    		debugLog("Import Message Deletion no 250. Aborting now!");
+    		break;
+    	    } 
         }
     }
 
