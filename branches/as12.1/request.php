@@ -2583,6 +2583,8 @@ function HandleProvision($backend, $devid, $protocolversion) {
     if (!$phase2) {
         $policykey = $backend->generatePolicyKey();
         $backend->setPolicyKey($policykey, $devid);
+    } else {
+        $policykey = $backend->generatePolicyKey();
     }
 
     $encoder->startTag(SYNC_PROVISION_PROVISION);
@@ -2647,7 +2649,7 @@ function HandleProvision($backend, $devid, $protocolversion) {
 		    $encoder->startTag('Provision:MaxDevicePasswordFailedAttempts');$encoder->content('5');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxAttachmentSize');$encoder->content('5000000');$encoder->endTag();
 		    $encoder->startTag('Provision:AllowSimpleDevicePassword');$encoder->content('1');$encoder->endTag();
-		    $encoder->startTag('Provision:DevicePasswordExpiration');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:DevicePasswordExpiration');$encoder->content('');$encoder->endTag();
 		    $encoder->startTag('Provision:DevicePasswordHistory');$encoder->content('0');$encoder->endTag();
 		    if ($protocolversion >= 12.1) {
 			$encoder->startTag('Provision:AllowStorageCard');$encoder->content('1');$encoder->endTag();
@@ -2661,7 +2663,7 @@ function HandleProvision($backend, $devid, $protocolversion) {
 			$encoder->startTag('Provision:AllowPOPIMAPEmail');$encoder->content('1');$encoder->endTag();
 			$encoder->startTag('Provision:AllowBluetooth');$encoder->content('2');$encoder->endTag();
 			$encoder->startTag('Provision:AllowIrDA');$encoder->content('1');$encoder->endTag();
-			$encoder->startTag('Provision:RequireManualSyncWhenRoaming');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:RequireManualSyncWhenRoaming');$encoder->content('0');$encoder->endTag(); // Set to one in case you'd like to save money...
 			$encoder->startTag('Provision:AllowDesktopSync');$encoder->content('1');$encoder->endTag();
 			$encoder->startTag('Provision:MaxCalendarAgeFilter');$encoder->content('0');$encoder->endTag();
 			$encoder->startTag('Provision:AllowHTMLEmail');$encoder->content('1');$encoder->endTag();
