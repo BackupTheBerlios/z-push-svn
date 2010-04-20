@@ -232,6 +232,7 @@ if($backend->Logon($auth_user, $auth_domain, $auth_pw) == false  && !$policykey)
 }
 
 // check policy header 
+           
 if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] != 'OPTIONS' && $cmd != 'Ping' && $cmd != 'Provision' && 
     $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS &&
     (LOOSE_PROVISIONING === false ||
@@ -276,7 +277,8 @@ switch($_SERVER["REQUEST_METHOD"]) {
 	// write the new Protocol Version string if update send
 	include_once ('statemachine.php');
 	$protstate = new StateMachine($devid);
-	if ($protstate->getProtocolState() != "2.0,2.1,2.5,12.0,12.1,14.0") {
+	$protsupp = $protstate->getProtocolState();
+	if ($protsupp !== false && $protsupp != "2.0,2.1,2.5,12.0,12.1,14.0") {
     	    header("X-MS-RP: 2.0,2.1,2.5,12.0,12.1,14.0");
 	    debugLog("Sending X-MS-RP to update Protocol Version on Device");
     	    $protstate->setProtocolState("2.0,2.1,2.5,12.0,12.1,14.0");
@@ -316,7 +318,6 @@ switch($_SERVER["REQUEST_METHOD"]) {
         print("</BODY>\n");
         break;
 }
-
 
 $len = ob_get_length();
 $data = ob_get_contents();

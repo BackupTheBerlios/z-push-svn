@@ -193,12 +193,14 @@ class StateMachine {
     }
     
     function getProtocolState() {
-        if(file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . "/prot_".$this->_devid))
+	if ($this->_devid == "") return false;
+        if (file_exists(BASE_PATH . STATE_DIR . "/". $this->_devid . "/prot_".$this->_devid))
             return file_get_contents(BASE_PATH . STATE_DIR . "/". $this->_devid . "/prot_".$this->_devid);
-        else return false;
+        else return "";
     }
     
     function setProtocolState($protstate) {
+	if ($this->_devid == "") return false;
         return file_put_contents(BASE_PATH . STATE_DIR . "/". $this->_devid . "/prot_".$this->_devid,$protstate);
     }
     
