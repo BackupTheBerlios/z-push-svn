@@ -451,7 +451,7 @@ class BackendIMAP extends BackendDiff {
             $folder->parentid = "0";
             $folder->displayname = "Drafts";
             $folder->type = SYNC_FOLDER_TYPE_DRAFTS;
-        }
+        } 
         else if($lid == "trash" || $lid == "deleted items") {
             $folder->parentid = "0";
             $folder->displayname = "Trash";
@@ -463,6 +463,12 @@ class BackendIMAP extends BackendDiff {
             $folder->displayname = "Sent";
             $folder->type = SYNC_FOLDER_TYPE_SENTMAIL;
             $this->_sentID = $id;
+        }
+        // Nokia MfE 2.01 Built in Client (on i.e. E75-1) needs outbox. Otherwise no sync occurs!
+        else if($lid == "outbox") {
+            $folder->parentid = "0"; // Root
+            $folder->displayname = "Outbox";
+            $folder->type = SYNC_FOLDER_TYPE_OUTBOX;
         }
         // courier-imap outputs
         else if($lid == "inbox.drafts") {
@@ -481,6 +487,12 @@ class BackendIMAP extends BackendDiff {
             $folder->displayname = "Sent";
             $folder->type = SYNC_FOLDER_TYPE_SENTMAIL;
             $this->_sentID = $id;
+        }
+        // Nokia MfE 2.01 Built in Client (on i.e. E75-1) needs outbox. Otherwise no sync occurs!
+        else if($lid == "inbox.outbox") { 
+            $folder->parentid = "0"; // Root
+            $folder->displayname = "Outbox";
+            $folder->type = SYNC_FOLDER_TYPE_OUTBOX;
         }
 
         // define the rest as other-folders
@@ -1057,7 +1069,7 @@ class BackendIMAP extends BackendDiff {
 	    // $this->settings["outofoffice"]["subject"] = windows1252_to_utf8(isset($props[PR_EC_OUTOFOFFICE_SUBJECT]) ? $props[PR_EC_OUTOFOFFICE_SUBJECT] : "");
 	    } else {
 		$response["oof"]["status"] 	= 0;
-	    }
+ 	    }
 	}
 	return $response;
     }
