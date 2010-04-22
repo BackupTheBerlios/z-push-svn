@@ -11,5 +11,5 @@
 * Consult LICENSE file for details
 ************************************************/
 
-$zpush_version = "SVN 1.3";
+$zpush_version = "1.3 355";
 ?>
