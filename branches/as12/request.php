@@ -704,7 +704,7 @@ function HandleSync($backend, $protocolversion, $devid) {
                     $exporter = $backend->GetExporter($collection["collectionid"]);
 
                     $filtertype = isset($collection["filtertype"]) ? $collection["filtertype"] : false;
-                    $exporter->Config($importer, $collection["class"], $filtertype, $collection["syncstate"], 0, $collection["truncation"], $collection["BodyPreference"]);
+                    $exporter->Config($importer, $collection["class"], $filtertype, $collection["syncstate"], 0, $collection["truncation"], (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
 
                     $changecount = $exporter->GetChangeCount();
             	}
