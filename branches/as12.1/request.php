@@ -3333,7 +3333,7 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
 
     $request = array();
     while (($reqtype = ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_FETCH)       		?   SYNC_ITEMOPERATIONS_FETCH      	  	:
-		       ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENT) 	?   SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENTS	:
+		       ($decoder->getElementStartTag(SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENT) 	?   SYNC_ITEMOPERATIONS_EMPTYFOLDERCONTENT	:
 		       -1))) != -1) {
 	if ($reqtype == SYNC_ITEMOPERATIONS_FETCH) {
 	    $thisio["type"] = "fetch";
