@@ -1,4 +1,46 @@
 <?php
+/*
+    This class contains code from rtfclass.php that was written by Markus Fischer and placed by him under
+    GPLv2 License.
+
+    =======================================NOTES FROM ORIGINAL AUTHOR====================================
+		Rich Text Format - Parsing Class
+		================================
+
+		(c) 2000 Markus Fischer
+		<mfischer@josefine.ben.tuwien.ac.at>
+		   http://josefine.ben.tuwien.ac.at/~mfischer/
+
+		Latest versions of this class can always be found at
+			http://josefine.ben.tuwien.ac.at/~mfischer/developing/php/rtf/rtfclass.phps
+		Testing suite is available at
+			http://josefine.ben.tuwien.ac.at/~mfischer/developing/php/rtf/
+
+		License: GPLv2
+
+		Specification:
+			http://msdn.microsoft.com/library/default.asp?URL=/library/specs/rtfspec.htm
+
+		General Notes:
+		==============
+		Unknown or unspupported control symbols are silently gnored
+
+		Group stacking is still not supported :(
+			group stack logic implemented; however not really used yet
+    =====================================================================================================
+
+    It was modified by me (Andreas Brodowski) to allow compressed RTF being uncompressed by code I ported from
+    Java to PHP and adapted according the needs of Z-Push.
+    
+    Currently it is being used to detect empty RTF Streams from Nokia Phones in MfE Clients
+    
+    It needs to be used by other backend writers that needs to have notes in calendar, appointment or tasks 
+    objects to be written to their databases since devices send them usually in RTF Format... With Zarafa
+    you can write them directly to DB and Zarafa is doing the conversion job. Other Groupware systems usually
+    don't have this possibility...
+     
+*/
+
 
 class rtf {
     var $LZRTF_HDR_DATA = "{\\rtf1\\ansi\\mac\\deff0\\deftab720{\\fonttbl;}{\\f0\\fnil \\froman \\fswiss \\fmodern \\fscript \\fdecor MS Sans SerifSymbolArialTimes New RomanCourier{\\colortbl\\red0\\green0\\blue0\n\r\\par \\pard\\plain\\f0\\fs20\\b\\i\\u\\tab\\tx";
