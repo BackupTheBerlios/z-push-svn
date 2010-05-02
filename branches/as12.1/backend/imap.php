@@ -595,6 +595,29 @@ class BackendIMAP extends BackendDiff {
         return true;
     }
 
+    function ItemOperationsGetAttachmentData($attname) {
+        debugLog("ItemOperationsGetAttachmentDate: (attname: '$attname')");
+
+        list($folderid, $id, $part) = explode(":", $attname);
+
+        $this->imap_reopenFolder($folderid);
+        $mail = @imap_fetchheader($this->_mbox, $id, FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
+
+        $mobj = new Mail_mimeDecode($mail);
+        $message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));
+
+        $attachment = new SyncAirSyncBaseFileAttachment();
+        if (isset($message->parts[$part]->body)) {
+            $attachment->_data = $message->parts[$part]->body;
+	    $attachment->contenttype = trim($message->parts[$part]->headers['content-type']);
+	};
+
+        // unset mimedecoder & mail
+        unset($mobj);
+        unset($mail);
+        return $attachment;
+    }
+
     /* StatMessage should return message stats, analogous to the folder stats (StatFolder). Entries are:
      * 'id'     => Server unique identifier for the message. Again, try to keep this short (under 20 chars)
      * 'flags'     => simply '0' for unread, '1' for read
@@ -687,42 +710,44 @@ class BackendIMAP extends BackendDiff {
 		$output->airsyncbasebody = new SyncAirSyncBaseBody();
 		debugLog("airsyncbasebody!");
 		$this->getBodyRecursive($message, "html", $body);
-		if ($body != "") 
+	    	if ($body != "") 
 		    $output->airsyncbasenativebodytype=2;
 		else 
 		    $output->airsyncbasenativebodytype=1;
 		if (isset($bodypreference[2])) {
+		    debugLog("HTML Body");
 		    // Send HTML if requested and native type was html
 		    $output->airsyncbasebody->type = 2;
 		    if ($output->airsyncbasenativebodytype==2) {
-			$html = $body;
+		        $html = $body;
 		    } else {
-			$html = '<html>'.
-			    '<head>'.
-			    '<meta name="Generator" content="Z-Push">'.
-			    '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'.
-			    '</head>'.
-			    '<body>'.
-			    str_replace("\n","<BR>",str_replace("\r","<BR>", str_replace("\r\n","<BR>",$body))).
-			    '</body>'.
-			    '</html>';
+		        $html = '<html>'.
+				'<head>'.
+				'<meta name="Generator" content="Z-Push">'.
+				'<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'.
+				'</head>'.
+				'<body>'.
+				str_replace("\n","<BR>",str_replace("\r","<BR>", str_replace("\r\n","<BR>",$body))).
+				'</body>'.
+				'</html>';
 		    }
     		    if(isset($bodypreference[2]["TruncationSize"]) &&
-    	    		strlen($html) > $bodypreference[2]["TruncationSize"]) {
-        		$html = substr($html,0,$bodypreference[2]["TruncationSize"]);
-			$output->airsyncbasebody->truncated = 1;
+    	    	        strlen($html) > $bodypreference[2]["TruncationSize"]) {
+        	        $html = substr($html,0,$bodypreference[2]["TruncationSize"]);
+		        $output->airsyncbasebody->truncated = 1;
 		    }
 		    $output->airsyncbasebody->data = w2u($html);
 		    $output->airsyncbasebody->estimateddatasize = strlen($html);
     		} else {
 		    // Send Plaintext as Fallback or if original body is plaintext
+		    debugLog("Plaintext Body");
 		    $body = $this->getBody($message);
 	
 		    $output->airsyncbasebody->type = 1;
     		    if(isset($bodypreference[1]["TruncationSize"]) &&
     			strlen($body) > $bodypreference[1]["TruncationSize"]) {
         		$body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
-			$output->airsyncbasebody->truncated = 1;
+		    	$output->airsyncbasebody->truncated = 1;
     	    	    }
 		    $output->airsyncbasebody->estimateddatasize = strlen($body);
     		    $output->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -731,18 +756,18 @@ class BackendIMAP extends BackendDiff {
 		// dw2412 but only in case the body is not rtf!
     		if ($output->airsyncbasebody->type != 3 && (!isset($output->airsyncbasebody->data) || strlen($output->airsyncbasebody->data) == 0))
         	    $output->airsyncbasebody->data = " ";
-            }
+	    }
 	    // end AS12 Stuff
             $output->datereceived = isset($message->headers["date"]) ? strtotime($message->headers["date"]) : null;
             $output->displayto = isset($message->headers["to"]) ? $message->headers["to"] : null;
             $output->importance = isset($message->headers["x-priority"]) ? preg_replace("/\D+/", "", $message->headers["x-priority"]) : null;
             $output->messageclass = "IPM.Note";
-            $output->subject = isset($message->headers["subject"]) ? $message->headers["subject"] : "";
+            $output->subject = isset($message->headers["subject"]) ? trim($message->headers["subject"]) : "";
             $output->read = $stat["flags"];
-            $output->to = isset($message->headers["to"]) ? $message->headers["to"] : null;
-            $output->cc = isset($message->headers["cc"]) ? $message->headers["cc"] : null;
-            $output->from = isset($message->headers["from"]) ? $message->headers["from"] : null;
-            $output->reply_to = isset($message->headers["reply-to"]) ? $message->headers["reply-to"] : null;
+            $output->to = isset($message->headers["to"]) ? trim($message->headers["to"]) : null;
+            $output->cc = isset($message->headers["cc"]) ? trim($message->headers["cc"]) : null;
+            $output->from = isset($message->headers["from"]) ? trim($message->headers["from"]) : null;
+            $output->reply_to = isset($message->headers["reply-to"]) ? trim($message->headers["reply-to"]) : null;
 
 	    // start AS12 Stuff
 	    $output->poommailflag = new SyncPoommailFlag();
@@ -772,7 +797,17 @@ class BackendIMAP extends BackendDiff {
                         $attachment->displayname = $attname;
                         $attachment->attname = $folderid . ":" . $id . ":" . $n;
                         $attachment->attmethod = 1;
-                        $attachment->attoid = isset($part->headers['content-id']) ? $part->headers['content-id'] : "";
+                        $attachment->attoid = isset($part->headers['content-id']) ? trim($part->headers['content-id']) : "";
+
+			if ($part->disposition == "inline") {
+			    $attachment->isinline=true;
+			    $attachment->attmethod=6;
+			    $attachment->contentid= isset($part->headers['content-id']) ? trim(substr($part->headers['content-id'],2,strlen($part->headers['content-id'])-3)) : "";
+			    debugLog("'".$part->headers['content-id']."'  ".$attachment->contentid);
+			    $attachment->contenttype = trim($part->headers['content-type']);
+			    debugLog("'".$part->headers['content-type']."'  ".$attachment->contentid);
+		        }
+
                         array_push($output->attachments, $attachment);
                     }
                     $n++;
