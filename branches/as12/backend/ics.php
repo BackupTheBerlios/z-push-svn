@@ -881,6 +881,11 @@ class ImportContentsChangesICS extends MAPIMapping {
 	// END ADDED dw2412 Take care about notes
         $this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
 
+        //we also have to set the responsestatus and not only meetingstatus, so we use another mapi tag
+        if (isset($appointment->meetingstatus)) 
+            mapi_setprops($mapimessage, array(
+                $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8218") =>  $appointment->meetingstatus));
+
         //sensitivity is not enough to mark an appointment as private, so we use another mapi tag
         if (isset($appointment->sensitivity) && $appointment->sensitivity == 0) $private = false;
         else  $private = true;
@@ -2011,9 +2016,9 @@ class PHPContentsImportProxy extends MAPIMapping {
             $fromname = "";
 
         if($fromname)
-            $from = "\"" . w2u($fromname) . "\" <" . $fromaddr . ">";
+            $from = "\"" . w2u($fromname) . "\" <" . w2u($fromaddr) . ">";
         else
-            $from = "\"" . $fromaddr . "\" <" . $fromaddr . ">"; //changed dw2412 to get rid at HTC Mail (Android) from error message... Not nice but effective...
+            $from = "\"" . w2u($fromaddr) . "\" <" . w2u($fromaddr) . ">"; //changed dw2412 to get rid at HTC Mail (Android) from error message... Not nice but effective...
 
         $message->from = $from;
 
