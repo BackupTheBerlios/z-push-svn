@@ -709,11 +709,14 @@ class BackendIMAP extends BackendDiff {
 		    $bodypreference[4]["TruncationSize"] = 1024*1024;
 		$output->airsyncbasebody = new SyncAirSyncBaseBody();
 		debugLog("airsyncbasebody!");
+		$body="";
 		$this->getBodyRecursive($message, "html", $body);
-	    	if ($body != "") 
+	    	if ($body != "") {
 		    $output->airsyncbasenativebodytype=2;
-		else 
+		} else {
+		    $this->getBodyRecursive($message, "plain", $body);
 		    $output->airsyncbasenativebodytype=1;
+		}
 		if (isset($bodypreference[2])) {
 		    debugLog("HTML Body");
 		    // Send HTML if requested and native type was html
