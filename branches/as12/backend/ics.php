@@ -853,6 +853,10 @@ class ImportContentsChangesICS extends MAPIMapping {
             $localend = $localstart + 24 * 60 * 60;
         }
 
+        // is the transmitted UID OL compatible?
+        // if not, encapsulate the transmitted uid
+        $appointment->uid = getOLUidFromICalUid($appointment->uid);
+        
         mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Appointment"));
 
 	// START ADDED dw2412 Take care about notes
@@ -1712,7 +1716,9 @@ class PHPContentsImportProxy extends MAPIMapping {
 
         if(!isset($message->uid))
             $message->uid = $messageprops[PR_SOURCE_KEY];
-
+        else 
+            $message->uid = getICalUidFromOLUid($message->uid);
+            
         $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
         $recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216");
         $timezonetag = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8233");
@@ -2531,7 +2537,7 @@ class ExportChangesICS  {
     }
 
     function GetState() {
-        if(!isset($this->statestream))
+        if(!isset($this->statestream) || $this->exporter === false)
             return false;
 
         if(mapi_exportchanges_updatestate($this->exporter, $this->statestream) != true) {
@@ -2553,12 +2559,18 @@ class ExportChangesICS  {
         return $state;
     }
 
-    function GetChangeCount() {
-        return mapi_exportchanges_getchangecount($this->exporter);
+     function GetChangeCount() {
+        if ($this->exporter)
+            return mapi_exportchanges_getchangecount($this->exporter);
+        else
+            return 0;
     }
 
     function Synchronize() {
-        return mapi_exportchanges_synchronize($this->exporter);
+        if ($this->exporter) {
+            return mapi_exportchanges_synchronize($this->exporter);
+        }else
+           return false;
     }
 
     // ----------------------------------------------------------------------------------------------
