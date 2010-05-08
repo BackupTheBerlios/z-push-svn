@@ -2392,7 +2392,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 
 	// Just send Appointments, too
 	// Request
-        if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting.") === 0) {
+        if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting") === 0) {
             $message->meetingrequest = new SyncMeetingRequest();
             $this->_getPropsFromMAPI($message->meetingrequest, $mapimessage, $this->_meetingrequestmapping);
 
