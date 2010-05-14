@@ -158,11 +158,11 @@ class WBXMLDecoder {
         if($element[EN_TYPE] == EN_TYPE_CONTENT) {
             return $element[EN_CONTENT];
         } 
-        // also allow empty tags
-        else if($element[EN_TYPE] == EN_TYPE_ENDTAG) {
-            $this->ungetElement($element);
-            return "";
-        }
+//        // also allow empty tags
+//        else if($element[EN_TYPE] == EN_TYPE_ENDTAG) {
+//            $this->ungetElement($element);
+//            return "";
+//        }
         else {
             debug("Unmatched content:");
             debug(print_r($element, true));
