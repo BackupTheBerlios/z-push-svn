@@ -894,13 +894,14 @@ class ImportContentsChangesICS extends MAPIMapping {
         if (isset($appointment->sensitivity) && $appointment->sensitivity == 0) $private = false;
         else  $private = true;
 
-        // Set commonstart/commonend to start/end and remindertime to start, duration and private
+        // Set commonstart/commonend to start/end and remindertime to start, duration, private and cleanGlobalObjectId
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516") =>  $appointment->starttime,
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517") =>  $appointment->endtime,
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8502") =>  $appointment->starttime,
             $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8213") =>     $duration,
             $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8506") =>  $private,
+            $this->_getPropIDFromString("PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x23") =>     $appointment->uid,
             ));
 
         // Set named prop 8510, unknown property, but enables deleting a single occurrence of a recurring
@@ -1715,7 +1716,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         $messageprops = mapi_getprops($mapimessage, array ( PR_SOURCE_KEY ));
 
         if(!isset($message->uid))
-            $message->uid = $messageprops[PR_SOURCE_KEY];
+            $message->uid = bin2hex($messageprops[PR_SOURCE_KEY]);
         else 
             $message->uid = getICalUidFromOLUid($message->uid);
             
@@ -2726,6 +2727,7 @@ class BackendICS {
 
         if($this->_session === false) {
             debugLog("logon failed for user $user");
+            $this->_defaultstore = false;
             return false;
         }
 
@@ -2887,8 +2889,13 @@ class BackendICS {
 
 
     function getPolicyKey ($user, $pass, $devid) {
+        if($this->_session === false) {
+            debugLog("logon failed for user $user");
+            return false;
+        }
+            	
         //user is logged in or can login, get the policy key and device id
-        if ($this->_defaultstore !== false || $this->Logon($user, "", $pass)) {
+        if ($this->_defaultstore !== false) {
             $devicesprops = mapi_getprops($this->_defaultstore, array(0x6880101E, 0x6881101E));
             if (isset($devicesprops[0x6881101E]) && is_array($devicesprops[0x6881101E])) {
                 $ak = array_search($devid, $devicesprops[0x6881101E]);
@@ -2926,7 +2933,7 @@ class BackendICS {
         $defaultstore = $this->_openDefaultMessageStore($this->_session);
 
         //user is logged in or can login, get the remote wipe status
-        if ($defaultstore !== false || $this->Logon($user, "", $pass)) {
+        if ($defaultstore !== false) {
             $devicesprops = mapi_getprops($defaultstore, array(0x68841003, 0x6881101E));
             if (isset($devicesprops[0x6881101E]) && is_array($devicesprops[0x6881101E])) {
                 $ak = array_search($devid, $devicesprops[0x6881101E]);
@@ -2946,7 +2953,7 @@ class BackendICS {
 
 
     function setDeviceRWStatus($user, $pass, $devid, $status) {
-
+        global $policykey;
         if($this->_session === false) {
             debugLog("Set rw status: logon failed for user $user");
             return false;
@@ -2956,14 +2963,17 @@ class BackendICS {
         $defaultstore = $this->_openDefaultMessageStore($this->_session);
 
         //user is logged in or can login, get the remote wipe status
-        if ($defaultstore !== false || $this->Logon($user, "", $pass)) {
-            $devicesprops = mapi_getprops($defaultstore, array(0x68841003, 0x6881101E, 0x6887101E));
+        if ($defaultstore !== false) {
+            $devicesprops = mapi_getprops($defaultstore, array(0x68841003, 0x6881101E, 0x6887101E, 0x6885101E, 0x6886101E));
             if (isset($devicesprops[0x6881101E]) && is_array($devicesprops[0x6881101E])) {
                 $ak = array_search($devid, $devicesprops[0x6881101E]);
                 if ($ak !== false) {
                     //set new status remote wipe status
                     $devicesprops[0x68841003][$ak] = $status;
-                    if ($status == SYNC_PROVISION_RWSTATUS_WIPED) $devicesprops[0x6887101E][$ak] = time();
+                    if ($status == SYNC_PROVISION_RWSTATUS_WIPED) {
+                        $devicesprops[0x6887101E][$ak] = time();
+                        debugLog("RemoteWipe ".(($policykey == 0)?'sent':'executed').": Device '". $devid ."' of '". $user ."' requested by '". $devicesprops[0x6886101E][$ak] ."' at ". strftime("%Y-%m-%d %H:%M", $devicesprops[0x6885101E][$ak]));
+                    }
                     mapi_setprops($defaultstore, array(0x68841003 => $devicesprops[0x68841003], 0x6887101E =>$devicesprops[0x6887101E]));
                     return true;
                 }
@@ -3365,7 +3375,7 @@ class BackendICS {
             $mapifolder = mapi_msgstore_openentry($this->_defaultstore, $row[PR_ENTRYID]);
             $folder = $himp->_getFolder($mapifolder);
 
-            if ($folder->parentid != $rootfoldersourcekey)
+            if (isset($folder->parentid) && $folder->parentid != $rootfoldersourcekey)
                 $folders[] = $folder;
         }
 
