@@ -586,10 +586,29 @@ class ImportContentsChangesICS extends MAPIMapping {
     }
 
     function GetState() {
-        mapi_stream_seek($this->statestream, 0, STREAM_SEEK_SET);
-        $data = mapi_stream_read($this->statestream, 4096);
+    	if(!isset($this->statestream))
+            return false;
 
-        return $data;
+        if (function_exists("mapi_importcontentschanges_updatestate")) {
+        	debugLog("using mapi_importcontentschanges_updatestate");
+	        if(mapi_importcontentschanges_updatestate($this->importer, $this->statestream) != true) {
+	            debugLog("Unable to update state: " . sprintf("%X", mapi_last_hresult()));
+	            return false;
+	        }
+        }
+
+        mapi_stream_seek($this->statestream, 0, STREAM_SEEK_SET);
+
+        $state = "";
+        while(true) {
+            $data = mapi_stream_read($this->statestream, 4096);
+            if(strlen($data))
+                $state .= $data;
+            else
+                break;
+        }
+
+        return $state;
     }
 
     // ----------------------------------------------------------------------------------------------------------
@@ -652,21 +671,31 @@ class ImportContentsChangesICS extends MAPIMapping {
             $localend = $localstart + 24 * 60 * 60;
         }
 
+        // is the transmitted UID OL compatible?
+        // if not, encapsulate the transmitted uid
+        $appointment->uid = getOLUidFromICalUid($appointment->uid);
+        
         mapi_setprops($mapimessage, array(PR_MESSAGE_CLASS => "IPM.Appointment"));
 
         $this->_setPropsInMAPI($mapimessage, $appointment, $this->_appointmentmapping);
+
+        //we also have to set the responsestatus and not only meetingstatus, so we use another mapi tag
+        if (isset($appointment->meetingstatus)) 
+            mapi_setprops($mapimessage, array(
+                $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8218") =>  $appointment->meetingstatus));
 
         //sensitivity is not enough to mark an appointment as private, so we use another mapi tag
         if (isset($appointment->sensitivity) && $appointment->sensitivity == 0) $private = false;
         else  $private = true;
 
-        // Set commonstart/commonend to start/end and remindertime to start, duration and private
+        // Set commonstart/commonend to start/end and remindertime to start, duration, private and cleanGlobalObjectId
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516") =>  $appointment->starttime,
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517") =>  $appointment->endtime,
             $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8502") =>  $appointment->starttime,
             $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8213") =>     $duration,
             $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8506") =>  $private,
+            $this->_getPropIDFromString("PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x23") =>     $appointment->uid,
             ));
 
         // Set named prop 8510, unknown property, but enables deleting a single occurrence of a recurring
@@ -822,7 +851,7 @@ class ImportContentsChangesICS extends MAPIMapping {
             foreach($appointment->attendees as $attendee) {
                 $recip = array();
                 $recip[PR_DISPLAY_NAME] = u2w($attendee->name);
-                $recip[PR_EMAIL_ADDRESS] = $attendee->email;
+                $recip[PR_EMAIL_ADDRESS] = u2w($attendee->email);
                 $recip[PR_ADDRTYPE] = "SMTP";
                 $recip[PR_RECIPIENT_TYPE] = MAPI_TO;
                 $recip[PR_ENTRYID] = mapi_createoneoff($recip[PR_DISPLAY_NAME], $recip[PR_ADDRTYPE], $recip[PR_EMAIL_ADDRESS]);
@@ -844,8 +873,13 @@ class ImportContentsChangesICS extends MAPIMapping {
         $this->_setPropsInMAPI($mapimessage, $contact, $this->_contactmapping);
 
         // Set display name and subject to a combined value of firstname and lastname
-        $cname = "".u2w($contact->firstname . " " . $contact->lastname);
-
+        $cname = (isset($contact->prefix))?u2w($contact->prefix)." ":"";
+        $cname .= u2w($contact->firstname);
+        $cname .= (isset($contact->middlename))?" ". u2w($contact->middlename):"";
+        $cname .= " ". u2w($contact->lastname);
+        $cname .= (isset($contact->suffix))?" ". u2w($contact->suffix):"";
+        $cname = trim($cname);
+         
         //set contact specific mapi properties
         $props = array();
         $nremails = array();
@@ -1257,8 +1291,10 @@ class PHPContentsImportProxy extends MAPIMapping {
         $messageprops = mapi_getprops($mapimessage, array ( PR_SOURCE_KEY ));
 
         if(!isset($message->uid))
-            $message->uid = $messageprops[PR_SOURCE_KEY];
-
+            $message->uid = bin2hex($messageprops[PR_SOURCE_KEY]);
+        else 
+            $message->uid = getICalUidFromOLUid($message->uid);
+            
         $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
         $recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216");
         $timezonetag = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8233");
@@ -1403,7 +1439,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         $messageprops = mapi_getprops($mapimessage, array($meetingstatustag, PR_SENT_REPRESENTING_ENTRYID, PR_SENT_REPRESENTING_NAME));
 
         if(isset($messageprops[$meetingstatustag]) && $messageprops[$meetingstatustag] > 0 && isset($messageprops[PR_SENT_REPRESENTING_ENTRYID]) && isset($messageprops[PR_SENT_REPRESENTING_NAME])) {
-            $message->organizeremail = $this->_getSMTPAddressFromEntryID($messageprops[PR_SENT_REPRESENTING_ENTRYID]);
+            $message->organizeremail = w2u($this->_getSMTPAddressFromEntryID($messageprops[PR_SENT_REPRESENTING_ENTRYID]));
             $message->organizername = w2u($messageprops[PR_SENT_REPRESENTING_NAME]);
         }
 
@@ -1419,16 +1455,16 @@ class PHPContentsImportProxy extends MAPIMapping {
             $attendee->name = w2u($row[PR_DISPLAY_NAME]);
             //smtp address is always a proper email address
             if(isset($row[PR_SMTP_ADDRESS]))
-                $attendee->email = $row[PR_SMTP_ADDRESS];
+                $attendee->email = w2u($row[PR_SMTP_ADDRESS]);
             elseif (isset($row[PR_ADDRTYPE]) && isset($row[PR_EMAIL_ADDRESS])) {
                 //if address type is SMTP, it's also a proper email address
-                if (PR_ADDRTYPE == "SMTP")
-                    $attendee->email = $row[PR_EMAIL_ADDRESS];
+                if ($row[PR_ADDRTYPE] == "SMTP")
+                    $attendee->email = w2u($row[PR_EMAIL_ADDRESS]);
                 //if address type is ZARAFA, the PR_EMAIL_ADDRESS contains username
-                elseif (PR_ADDRTYPE == "ZARAFA") {
+                elseif ($row[PR_ADDRTYPE] == "ZARAFA") {
                     $userinfo = mapi_zarafa_getuser_by_name($this->_store, $row[PR_EMAIL_ADDRESS]);
                     if (is_array($userinfo) && isset($userinfo["emailaddress"]))
-                        $attendee->email = $userinfo["emailaddress"];
+                        $attendee->email = w2u($userinfo["emailaddress"]);
                 }
             }
             // Some attendees have no email or name (eg resources), and if you
@@ -1483,15 +1519,15 @@ class PHPContentsImportProxy extends MAPIMapping {
             $fromname = "";
 
         if($fromname)
-            $from = "\"" . w2u($fromname) . "\" <" . $fromaddr . ">";
+            $from = "\"" . w2u($fromname) . "\" <" . w2u($fromaddr) . ">";
         else
             //START CHANGED dw2412 HTC shows "error" if sender name is unknown
-            $from = "\"" . $fromaddr . "\" <" . $fromaddr . ">";
+            $from = "\"" . w2u($fromaddr) . "\" <" . w2u($fromaddr) . ">";
             //END CHANGED dw2412 HTC shows "error" if sender name is unknown
 
         $message->from = $from;
 
-        if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting.Request") === 0) {
+        if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting") === 0) {
             $message->meetingrequest = new SyncMeetingRequest();
             $this->_getPropsFromMAPI($message->meetingrequest, $mapimessage, $this->_meetingrequestmapping);
 
@@ -1596,13 +1632,13 @@ class PHPContentsImportProxy extends MAPIMapping {
             $name = isset($row[PR_DISPLAY_NAME]) ? $row[PR_DISPLAY_NAME] : "";
 
             if($name == "" || $name == $address)
-                $fulladdr = $address;
+                $fulladdr = w2u($address);
             else {
                 if (substr($name, 0, 1) != '"' && substr($name, -1) != '"') {
-                    $fulladdr = "\"" . w2u($name) ."\" <" . $address . ">";
+                    $fulladdr = "\"" . w2u($name) ."\" <" . w2u($address) . ">";
                 }
                 else {
-                    $fulladdr = w2u($name) ."<" . $address . ">";
+                    $fulladdr = w2u($name) ."<" . w2u($address) . ">";
                 }
             }
 
@@ -1646,6 +1682,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                 return 1024;
             case SYNC_TRUNCATION_5K:
                 return 5*1024;
+            case SYNC_TRUNCATION_SEVEN:
             case SYNC_TRUNCATION_ALL:
                 return 1024*1024; // We'll limit to 1MB anyway
             default:
@@ -1827,11 +1864,13 @@ class ExportChangesICS  {
             $mapiimporter = mapi_wrap_importcontentschanges($phpimportproxy);
             $exporterflags |= SYNC_NORMAL | SYNC_READ_STATE;
 
-            // Initial sync, we don't want deleted items. On subsequent syncs, we do want to receive delete
-            // events.
-            if(strlen($syncstate) == 0)
-                $exporterflags |= SYNC_NO_SOFT_DELETIONS;
-
+            // Initial sync, we don't want deleted items. If the initial sync is chunked 
+            // we check the change ID of the syncstate (0 at initial sync) 
+            // On subsequent syncs, we do want to receive delete events.
+            if(strlen($syncstate) == 0 || bin2hex(substr($syncstate,4,4)) == "00000000") {
+                debugLog("synching inital data");
+                $exporterflags |= SYNC_NO_SOFT_DELETIONS | SYNC_NO_DELETIONS;
+            }
         } else {
             $phpimportproxy = new PHPHierarchyImportProxy($this->_store, $importer);
             $mapiimporter = mapi_wrap_importhierarchychanges($phpimportproxy);
@@ -1888,7 +1927,7 @@ class ExportChangesICS  {
     }
 
     function GetState() {
-        if(!isset($this->statestream))
+        if(!isset($this->statestream) || $this->exporter === false)
             return false;
 
         if(mapi_exportchanges_updatestate($this->exporter, $this->statestream) != true) {
@@ -1910,12 +1949,18 @@ class ExportChangesICS  {
         return $state;
     }
 
-    function GetChangeCount() {
-        return mapi_exportchanges_getchangecount($this->exporter);
+     function GetChangeCount() {
+        if ($this->exporter)
+            return mapi_exportchanges_getchangecount($this->exporter);
+        else
+            return 0;
     }
 
     function Synchronize() {
-        return mapi_exportchanges_synchronize($this->exporter);
+        if ($this->exporter) {
+            return mapi_exportchanges_synchronize($this->exporter);
+        }else
+           return false;
     }
 
     // ----------------------------------------------------------------------------------------------
@@ -2071,6 +2116,7 @@ class BackendICS {
 
         if($this->_session === false) {
             debugLog("logon failed for user $user");
+            $this->_defaultstore = false;
             return false;
         }
 
@@ -2164,6 +2210,7 @@ class BackendICS {
                 if ($ak !== false) {
                     //update policykey
                     $devicesprops[0x6880101E][$ak] = $policykey;
+                    $devicesprops[0x6883101E][] = $useragent;                    
                 }
                 else {
                     //Unknown device. Store its information.
@@ -2204,8 +2251,13 @@ class BackendICS {
 
 
     function getPolicyKey ($user, $pass, $devid) {
+        if($this->_session === false) {
+            debugLog("logon failed for user $user");
+            return false;
+        }
+            	
         //user is logged in or can login, get the policy key and device id
-        if ($this->_defaultstore !== false || $this->Logon($user, "", $pass)) {
+        if ($this->_defaultstore !== false) {
             $devicesprops = mapi_getprops($this->_defaultstore, array(0x6880101E, 0x6881101E));
             if (isset($devicesprops[0x6881101E]) && is_array($devicesprops[0x6881101E])) {
                 $ak = array_search($devid, $devicesprops[0x6881101E]);
@@ -2243,7 +2295,7 @@ class BackendICS {
         $defaultstore = $this->_openDefaultMessageStore($this->_session);
 
         //user is logged in or can login, get the remote wipe status
-        if ($defaultstore !== false || $this->Logon($user, "", $pass)) {
+        if ($defaultstore !== false) {
             $devicesprops = mapi_getprops($defaultstore, array(0x68841003, 0x6881101E));
             if (isset($devicesprops[0x6881101E]) && is_array($devicesprops[0x6881101E])) {
                 $ak = array_search($devid, $devicesprops[0x6881101E]);
@@ -2263,7 +2315,7 @@ class BackendICS {
 
 
     function setDeviceRWStatus($user, $pass, $devid, $status) {
-
+        global $policykey;
         if($this->_session === false) {
             debugLog("Set rw status: logon failed for user $user");
             return false;
@@ -2273,14 +2325,17 @@ class BackendICS {
         $defaultstore = $this->_openDefaultMessageStore($this->_session);
 
         //user is logged in or can login, get the remote wipe status
-        if ($defaultstore !== false || $this->Logon($user, "", $pass)) {
-            $devicesprops = mapi_getprops($defaultstore, array(0x68841003, 0x6881101E, 0x6887101E));
+        if ($defaultstore !== false) {
+            $devicesprops = mapi_getprops($defaultstore, array(0x68841003, 0x6881101E, 0x6887101E, 0x6885101E, 0x6886101E));
             if (isset($devicesprops[0x6881101E]) && is_array($devicesprops[0x6881101E])) {
                 $ak = array_search($devid, $devicesprops[0x6881101E]);
                 if ($ak !== false) {
                     //set new status remote wipe status
                     $devicesprops[0x68841003][$ak] = $status;
-                    if ($status == SYNC_PROVISION_RWSTATUS_WIPED) $devicesprops[0x6887101E][$ak] = time();
+                    if ($status == SYNC_PROVISION_RWSTATUS_WIPED) {
+                        $devicesprops[0x6887101E][$ak] = time();
+                        debugLog("RemoteWipe ".(($policykey == 0)?'sent':'executed').": Device '". $devid ."' of '". $user ."' requested by '". $devicesprops[0x6886101E][$ak] ."' at ". strftime("%Y-%m-%d %H:%M", $devicesprops[0x6885101E][$ak]));
+                    }
                     mapi_setprops($defaultstore, array(0x68841003 => $devicesprops[0x68841003], 0x6887101E =>$devicesprops[0x6887101E]));
                     return true;
                 }
@@ -2390,7 +2445,7 @@ class BackendICS {
             $mapifolder = mapi_msgstore_openentry($this->_defaultstore, $row[PR_ENTRYID]);
             $folder = $himp->_getFolder($mapifolder);
 
-            if ($folder->parentid != $rootfoldersourcekey)
+            if (isset($folder->parentid) && $folder->parentid != $rootfoldersourcekey)
                 $folders[] = $folder;
         }
 
@@ -2457,12 +2512,13 @@ class BackendICS {
 
         $toaddr = $ccaddr = $bccaddr = array();
 
+        $Mail_RFC822 = new Mail_RFC822();
         if(isset($message->headers["to"]))
-            $toaddr = Mail_RFC822::parseAddressList($message->headers["to"]);
+            $toaddr = $Mail_RFC822->parseAddressList($message->headers["to"]);
         if(isset($message->headers["cc"]))
-            $ccaddr = Mail_RFC822::parseAddressList($message->headers["cc"]);
+            $ccaddr = $Mail_RFC822->parseAddressList($message->headers["cc"]);
         if(isset($message->headers["bcc"]))
-            $bccaddr = Mail_RFC822::parseAddressList($message->headers["bcc"]);
+            $bccaddr = $Mail_RFC822->parseAddressList($message->headers["bcc"]);
 
         // Add recipients
         $recips = array();
@@ -2537,10 +2593,14 @@ class BackendICS {
                         return true;
                     }
 
-                    if (is_array($mapiprops) && !empty($mapiprops)) {
+                    if (!checkMapiExtVersion("6.30") && is_array($mapiprops) && !empty($mapiprops)) {
                         mapi_setprops($mapimessage, $mapiprops);
                     }
-                    else debugLog("ICAL: Mapi props array was empty");
+                    else {
+                        // store ics as attachment
+                        $this->_storeAttachment($mapimessage, $part);
+                        debugLog("Sending ICS file as attachment");
+                    }
                 }
                 // any other type, store as attachment
                 else
@@ -2756,8 +2816,8 @@ class BackendICS {
 
     function MeetingResponse($requestid, $folderid, $response, &$calendarid) {
         // Use standard meeting response code to process meeting request
-        $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid), hex2bin($requestid));
-        $mapimessage = mapi_msgstore_openentry($this->_defaultstore, $entryid);
+        $reqentryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid), hex2bin($requestid));
+        $mapimessage = mapi_msgstore_openentry($this->_defaultstore, $reqentryid);
 
         if(!$mapimessage) {
             debugLog("Unable to open request message for response");
@@ -2781,10 +2841,10 @@ class BackendICS {
         switch($response) {
             case 1:     // accept
             default:
-                $entryid = $meetingrequest->doAccept(false, false, $meetingrequest->isInCalendar());
+                $entryid = $meetingrequest->doAccept(false, false, false, false, false, false, true); // last true is the $userAction
                 break;
             case 2:        // tentative
-                $meetingrequest->doAccept(true, false, $meetingrequest->isInCalendar());
+                $entryid = $meetingrequest->doAccept(true, false, false, false, false, false, true); // last true is the $userAction
                 break;
             case 3:        // decline
                 $meetingrequest->doDecline(false);
@@ -2796,9 +2856,13 @@ class BackendICS {
         // We have to return the ID of the new calendar item, so do that here
         $newitem = mapi_msgstore_openentry($this->_defaultstore, $entryid);
         $newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
-
         $calendarid = bin2hex($newprops[PR_SOURCE_KEY]);
-
+        
+        // delete meeting request from Inbox
+        $folderentryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid));
+        $folder = mapi_msgstore_openentry($this->_defaultstore, $folderentryid);
+        mapi_folder_deletemessages($folder, array($reqentryid), 0);
+        
         return true;
     }
 
@@ -2860,6 +2924,7 @@ class BackendICS {
         // attachment
         $attach = mapi_message_createattach($mapimessage);
 
+        $filename = "";
         // Filename is present in both Content-Type: name=.. and in Content-Disposition: filename=
         if(isset($part->ctype_parameters["name"]))
             $filename = $part->ctype_parameters["name"];
@@ -2867,6 +2932,12 @@ class BackendICS {
             $filename = $part->d_parameters["filename"];
         else if (isset($part->d_parameters["filename"])) // sending appointment with nokia & android only filename is set
             $filename = $part->d_parameters["filename"];
+        // filenames with more than 63 chars as splitted several strings
+        else if (isset($part->d_parameters["filename*0"])) {
+        	for ($i=0; $i< count($part->d_parameters); $i++) 
+        	   if (isset($part->d_parameters["filename*".$i]))
+        	       $filename .= $part->d_parameters["filename*".$i];
+        }
         else
             $filename = "untitled";
 
