@@ -80,6 +80,24 @@ class BackendIMAP extends BackendDiff {
         $this->_devid = $devid;
         $this->_protocolversion = $protocolversion;
 
+	// FolderID Cache	
+	$filename = STATE_DIR . '/imap_folders_'. $this->_user;
+	$this->_folders = false;
+	if (file_exists($filename)) {
+	    if (($this->_folders = file_get_contents(STATE_DIR . '/imap_folders_'. $this->_user)) !== false) {
+		$this->_folders = unserialize($this->_folders);
+	    } else {
+	        $this->_folders = array();
+		$this->_folders['0'] = ''; // init the root...
+		$this->_folders[0] = ''; // init the root...
+	    }
+	} else {
+	    $this->_folders = array();
+	    $this->_folders['0'] = ''; // init the root...
+    	    $this->_folders[0] = ''; // init the root...
+	}
+	
+
         return true;
     }
 
@@ -365,16 +383,29 @@ class BackendIMAP extends BackendDiff {
                 $box["id"] = imap_utf7_decode(substr($val->name, strlen($this->_server)));
 
                 // always use "." as folder delimiter
-                $box["id"] = imap_utf7_encode(str_replace($val->delimiter, ".", $box["id"]));
+                $box["id"] = imap_utf7_encode(str_replace($val->delimiter, ".",$box["id"]));
+
+		// put real imap id in cache and create unique folderid instead
+		if (($fid = array_search($box["id"],$this->_folders)) === false) {
+		    $fid = $this->_folderid();
+		    $this->_folders[$fid] = $box["id"];
+		} 
+            	$box["id"] = $fid;
 
                 // explode hierarchies
-                $fhir = explode(".", $box["id"]);
+                $fhir = $this->_folders[$box["id"]];
+
                 if (count($fhir) > 1) {
-                    $box["mod"] = imap_utf7_encode(array_pop($fhir)); // mod is last part of path
-                    $box["parent"] = imap_utf7_encode(implode(".", $fhir)); // parent is all previous parts of path
+		    $folder = $this->GetFolder($box["id"]);
+                    $box["mod"] = $folder->displayname; // mod is last part of path
+		    if (($box["parent"] = array_search(imap_utf7_encode(implode(".", $fhir)),$this->_folders)) === false) {
+			$box["parent"] = $this->_folderid();
+			$this->_folders[$box["parent"]] = imap_utf7_encode(implode(".", $fhir));
+		    } 
                 }
                 else {
-                    $box["mod"] = imap_utf7_encode($box["id"]);
+		    $folder = $this->GetFolder($box["id"]);
+                    $box["mod"] = $folder->displayname; // mod is last part of path
                     $box["parent"] = "0";
                 }
 
@@ -392,12 +423,24 @@ class BackendIMAP extends BackendDiff {
      * are pretty simple really, having only a type, a name, a parent and a server ID.
      */
 
+    function _folderid()
+    {
+        return sprintf( '%04x%04x%04x%04x%04x%04x%04x%04x',
+                    mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+                    mt_rand( 0, 0x0fff ) | 0x4000,
+                    mt_rand( 0, 0x3fff ) | 0x8000,
+                    mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ) );
+    }
     function GetFolder($id) {
         $folder = new SyncFolder();
-        $folder->serverid = $id;
+
+	$folder->serverid = $id;
+
+	// get real imap id from cache
+	$id = $this->_folders[$id];
 
         // explode hierarchy
-          $fhir = explode(".", $id);
+        $fhir = explode(".", $id);
 
         // compare on lowercase strings
         $lid = strtolower($id);
@@ -412,8 +455,8 @@ class BackendIMAP extends BackendDiff {
             $folder->parentid = "0";
             $folder->displayname = "Drafts";
             $folder->type = SYNC_FOLDER_TYPE_DRAFTS;
-        }
-        else if($lid == "trash") {
+        } 
+        else if($lid == "trash" || $lid == "deleted items") {
             $folder->parentid = "0";
             $folder->displayname = "Trash";
             $folder->type = SYNC_FOLDER_TYPE_WASTEBASKET;
@@ -424,6 +467,12 @@ class BackendIMAP extends BackendDiff {
             $folder->displayname = "Sent";
             $folder->type = SYNC_FOLDER_TYPE_SENTMAIL;
             $this->_sentID = $id;
+        }
+        // Nokia MfE 2.01 Built in Client (on i.e. E75-1) needs outbox. Otherwise no sync occurs!
+        else if($lid == "outbox") {
+            $folder->parentid = "0"; // Root
+            $folder->displayname = "Outbox";
+            $folder->type = SYNC_FOLDER_TYPE_OUTBOX;
         }
         // courier-imap outputs
         else if($lid == "inbox.drafts") {
@@ -443,23 +492,32 @@ class BackendIMAP extends BackendDiff {
             $folder->type = SYNC_FOLDER_TYPE_SENTMAIL;
             $this->_sentID = $id;
         }
+        // Nokia MfE 2.01 Built in Client (on i.e. E75-1) needs outbox. Otherwise no sync occurs!
+        else if($lid == "inbox.outbox") { 
+            $folder->parentid = "0"; // Root
+            $folder->displayname = "Outbox";
+            $folder->type = SYNC_FOLDER_TYPE_OUTBOX;
+        }
 
         // define the rest as other-folders
         else {
-               if (count($fhir) > 1) {
-                   $folder->displayname = windows1252_to_utf8(imap_utf7_decode(array_pop($fhir)));
-                   $folder->parentid = implode(".", $fhir);
-               }
-               else {
-                $folder->displayname = windows1252_to_utf8(imap_utf7_decode($id));
+            if (count($fhir) > 1) {
+        	$folder->displayname = w2u(imap_utf7_decode(array_pop($fhir)));
+		if (($folder->parentid = array_search(implode(".", $fhir),$this->_folders)) === false) {
+		    $folder->parentid = $this->_folderid();
+		    $this->_folders[$folder->parentid] = implode(".", $fhir);
+		} 
+    	    } else {
+                $folder->displayname = w2u(imap_utf7_decode($id));
                 $folder->parentid = "0";
-               }
-            $folder->type = SYNC_FOLDER_TYPE_OTHER;
+            }
+            $folder->type = SYNC_FOLDER_TYPE_USER_MAIL; // Type Other is not displayed on i.e. Nokia
         }
 
            //advanced debugging
            //debugLog("IMAP-GetFolder(id: '$id') -> " . print_r($folder, 1));
-
+	
+	file_put_contents(STATE_DIR . '/imap_folders_'. $this->_user, serialize($this->_folders));
         return $folder;
     }
 
@@ -477,7 +535,7 @@ class BackendIMAP extends BackendDiff {
 
         $stat = array();
         $stat["id"] = $id;
-        $stat["parent"] = $folder->parentid;
+        $stat["parent"] = $this->_folders[$folder->parentid];
         $stat["mod"] = $folder->displayname;
 
         return $stat;
@@ -497,7 +555,7 @@ class BackendIMAP extends BackendDiff {
         $this->imap_reopenFolder($folderid);
 
         // build name for new mailbox
-        $newname = $this->_server . str_replace(".", $this->_serverdelimiter, $folderid) . $this->_serverdelimiter . $displayname;
+        $newname = $this->_server . str_replace(".", $this->_serverdelimiter, $this->_folders['folderid']) . $this->_serverdelimiter . $displayname;
 
         $csts = false;
         // if $id is set => rename mailbox, otherwise create
@@ -510,7 +568,7 @@ class BackendIMAP extends BackendDiff {
             $csts = @imap_createmailbox($this->_mbox, $newname);
         }
         if ($csts) {
-            return $this->StatFolder($folderid . "." . $displayname);
+            return $this->StatFolder($this->_folders[$folderid] . "." . $displayname);
         }
         else
             return false;
@@ -738,7 +796,7 @@ class BackendIMAP extends BackendDiff {
         }
         else {
             // move message
-            $s1 = imap_mail_move($this->_mbox, $id, str_replace(".", $this->_serverdelimiter, $newfolderid), FT_UID);
+            $s1 = imap_mail_move($this->_mbox, $id, str_replace(".", $this->_serverdelimiter, $this->_folders[$newfolderid]), FT_UID);
 
             // delete message in from-folder
             $s2 = imap_expunge($this->_mbox);
@@ -774,7 +832,7 @@ class BackendIMAP extends BackendDiff {
         // courier-imap only cleares the status cache after checking
         @imap_check($this->_mbox);
 
-        $status = imap_status($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $folderid), SA_ALL);
+        $status = imap_status($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $this->_folders[$folderid]), SA_ALL);
         if (!$status) {
             debugLog("AlterPingChanges: could not stat folder $folderid : ". imap_last_error());
             return false;
@@ -847,10 +905,10 @@ class BackendIMAP extends BackendDiff {
     // remember what folder is currently open and only change if necessary
     function imap_reopenFolder($folderid, $force = false) {
         // to see changes, the folder has to be reopened!
-           if ($this->_mboxFolder != $folderid || $force) {
-               $s = @imap_reopen($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $folderid));
+           if ($this->_mboxFolder != $this->_folders[$folderid] || $force) {
+               $s = @imap_reopen($this->_mbox, $this->_server . str_replace(".", $this->_serverdelimiter, $this->_folders[$folderid]));
                if (!$s) debugLog("failed to change folder: ". implode(", ", imap_errors()));
-            $this->_mboxFolder = $folderid;
+            $this->_mboxFolder = $this->_folders[$folderid];
         }
     }
 
