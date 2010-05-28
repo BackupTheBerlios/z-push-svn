@@ -11,5 +11,5 @@
 * Consult LICENSE file for details
 ************************************************/
 
-$zpush_version = "1.4 beta1";
+$zpush_version = "1.4 RC";
 ?>
