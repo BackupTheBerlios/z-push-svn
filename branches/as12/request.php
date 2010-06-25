@@ -1609,7 +1609,7 @@ function HandleProvision($backend, $devid, $protocolversion) {
 		    $encoder->startTag('Provision:DeviceEncryptionEnabled');$encoder->content('0');$encoder->endTag();
 		    $encoder->startTag('Provision:AttachmentsEnabled');$encoder->content('1');$encoder->endTag();
 		    $encoder->startTag('Provision:MinDevicePasswordLength');$encoder->content('1');$encoder->endTag();
-		    $encoder->startTag('Provision:MaxInactivityTimeDeviceLock');$encoder->content('0');$encoder->endTag();
+		    $encoder->startTag('Provision:MaxInactivityTimeDeviceLock');$encoder->content('9999');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxDevicePasswordFailedAttempts');$encoder->content('5');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxAttachmentSize');$encoder->content('5000000');$encoder->endTag();
 		    $encoder->startTag('Provision:AllowSimpleDevicePassword');$encoder->content('1');$encoder->endTag();
