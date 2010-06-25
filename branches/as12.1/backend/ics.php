@@ -610,10 +610,11 @@ class MAPIMapping {
 // objects and convert them into MAPI objects, and then send them to the ICS importer to do the actual
 // writing of the object.
 class ImportContentsChangesICS extends MAPIMapping {
-    function ImportContentsChangesICS($session, $store, $folderid) {
+    function ImportContentsChangesICS($session, $store, $folderid, $bodypreference=false) {
         $this->_session = $session;
         $this->_store = $store;
         $this->_folderid = $folderid;
+	$this->_bodypreference = $bodypreference;
 
         $entryid = mapi_msgstore_entryidfromsourcekey($store, $folderid);
         if(!$entryid) {
@@ -648,7 +649,7 @@ class ImportContentsChangesICS extends MAPIMapping {
         // configure an exporter so we can detect conflicts
         $exporter = new ExportChangesICS($this->_session, $this->_store, $this->_folderid);
         $memImporter = new ImportContentsChangesMem();
-        $exporter->Config(&$memImporter, false, false, $state, 0, 0);
+        $exporter->Config(&$memImporter, false, false, $state, 0, 0, $this->_bodypreference);
         while(is_array($exporter->Synchronize()));
         $this->_memChanges = $memImporter;
         
@@ -1696,9 +1697,9 @@ class PHPContentsImportProxy extends MAPIMapping {
         // Gets the Sync object from a MAPI object according to its message class
 
         $props = mapi_getprops($mapimessage, array(PR_MESSAGE_CLASS));
-        if(isset($props[PR_MESSAGE_CLASS]))
+        if(isset($props[PR_MESSAGE_CLASS])) 
             $messageclass = $props[PR_MESSAGE_CLASS];
-        else
+	else
             $messageclass = "IPM";
 
         // CHANGED dw2412 Support Protocol Version 12 (added bodypreference to the _get functions)
@@ -1806,6 +1807,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
 		$message->airsyncbasebody->data = base64_encode($rtf);
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
+//		$message->airsyncbasebody->truncated = 0;
     	    } elseif (isset($bodypreference[2]) && 
     		$message->airsyncbasenativebodytype==2) {
 		// Send HTML if requested and native type was html
@@ -1815,6 +1817,8 @@ class PHPContentsImportProxy extends MAPIMapping {
     	    	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
         	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->data = w2u($html);
 		$message->airsyncbasebody->estimateddatasize = strlen($html);
@@ -1826,6 +1830,8 @@ class PHPContentsImportProxy extends MAPIMapping {
     		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
         	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -2229,6 +2235,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
 		$message->airsyncbasebody->data = base64_encode($rtf);
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
+//		$message->airsyncbasebody->truncated = 0;
 		debugLog("RTFL Body!");
     	    } elseif (isset($bodypreference[2])) {
 		$message->airsyncbasebody->type = 2;
@@ -2249,6 +2256,8 @@ class PHPContentsImportProxy extends MAPIMapping {
     	    	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
         	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->data = w2u($html);
 		$message->airsyncbasebody->estimateddatasize = strlen($html);
@@ -2260,6 +2269,8 @@ class PHPContentsImportProxy extends MAPIMapping {
     		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
         	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
 		    $message->airsyncbasebody->truncated = 1;
+    		} else {
+//		    $message->airsyncbasebody->truncated = 0;
     		}
 		$message->airsyncbasebody->estimateddatasize = strlen($body);
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -2548,6 +2559,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                     $stat = mapi_stream_stat($stream);
 
                     $attach->attsize = $stat["cb"];
+		    $attach->attmethod=1;
 		    // START CHANGED dw2412 EML Attachment
                     if(isset($attachprops[PR_ATTACH_LONG_FILENAME])) 
                 	$attach->displayname = w2u($attachprops[PR_ATTACH_LONG_FILENAME]);
@@ -2563,7 +2575,10 @@ class PHPContentsImportProxy extends MAPIMapping {
         		$n++;
         	    }
 
-        	    if ($row[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) $attach->displayname .=  w2u(".eml");
+        	    if ($row[PR_ATTACH_METHOD] == ATTACH_EMBEDDED_MSG) {
+        		$attach->displayname .= w2u(".eml");
+        		$attach->attmethod=5;
+        	    }
 		    // END CHANGED dw2412 EML Attachment
 
 		    // in case the attachment has got a content id it is an inline one...
@@ -3891,9 +3906,9 @@ class BackendICS {
         return new ImportHierarchyChangesICS($this->_defaultstore);
     }
 
-    function GetContentsImporter($folderid) {
+    function GetContentsImporter($folderid, $bodypreference = false) {
         $this->_importedFolders[] = $folderid;
-        return new ImportContentsChangesICS($this->_session, $this->_defaultstore, hex2bin($folderid));
+        return new ImportContentsChangesICS($this->_session, $this->_defaultstore, hex2bin($folderid), $bodypreference);
     }
 
     function GetExporter($folderid = false) {

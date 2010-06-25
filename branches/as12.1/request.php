@@ -746,11 +746,11 @@ function HandleSync($backend, $protocolversion, $devid) {
         	if($decoder->getElementStartTag(SYNC_PERFORM)) {
     
             	    // Configure importer with last state
-            	    $importer = $backend->GetContentsImporter($collection["collectionid"]);
-            	    $importer->Config($collection["syncstate"], $collection["conflict"]);
+            	    $importer[$collection["collectionid"]] = $backend->GetContentsImporter($collection["collectionid"], $collection["BodyPreference"]);
+            	    $importer[$collection["collectionid"]]->Config($collection["syncstate"], $collection["conflict"]);
 		    if (isset($collection["optionfoldertype"])) {
-            		$optionimporter[$collection["optionfoldertype"]] = $backend->GetContentsImporter($collection["collectionid"]);
-            		$optionimporter[$collection["optionfoldertype"]]->Config($collection[$collection["optionfoldertype"]."syncstate"], $collection["conflict"]);
+            		$optionimporter[$collection["collectionid"]][$collection["optionfoldertype"]] = $backend->GetContentsImporter($collection["collectionid"], $collection["BodyPreference"]);
+            		$optionimporter[$collection["collectionid"]][$collection["optionfoldertype"]]->Config($collection[$collection["optionfoldertype"]."syncstate"], $collection["conflict"]);
 	    	    }
 		
             	    $nchanges = 0;
