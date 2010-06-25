@@ -113,19 +113,28 @@ class BackendIMAP extends BackendDiff {
      * the new message as any other new message in a folder.
      */
     function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {
+	// file_put_contents(BASE_PATH."/mail.dmp/".$this->_folderid(), $rfc822);
         if ($protocolversion < 14.0) 
-    	    debugLog("IMAP-SendMail: " . $rfc822 . "task: ".$smartdata['task']." itemid: ".(isset($smartdata['itemid']) ? $smartdata['itemid'] : "")." parent: ".(isset($smartdata['folderid']) ? $smartdata['folderid'] : ""));
+    	    debugLog("IMAP-SendMail: " . (isset($rfc822) ? $rfc822 : ""). "task: ".(isset($smartdata['task']) ? $smartdata['task'] : "")." itemid: ".(isset($smartdata['itemid']) ? $smartdata['itemid'] : "")." parent: ".(isset($smartdata['folderid']) ? $smartdata['folderid'] : ""));
 
-        $mobj = new Mail_mimeDecode($rfc822);
-        $message = $mobj->decode(array('decode_headers' => false, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $rfc822, 'crlf' => "\n", 'charset' => 'utf-8'));
+        $mimeParams = array('decode_headers' => false,
+                            'decode_bodies' => true,
+                            'include_bodies' => true,
+                            'input' => $rfc822,
+                            'crlf' => "\r\n",
+                            'charset' => 'utf-8');
+        $mobj = new Mail_mimeDecode($mimeParams['input'], $mimeParams['crlf']);
+        $message = $mobj->decode($mimeParams, $mimeParams['crlf']);
 
+        $Mail_RFC822 = new Mail_RFC822();
         $toaddr = $ccaddr = $bccaddr = "";
         if(isset($message->headers["to"]))
-            $toaddr = $this->parseAddr(Mail_RFC822::parseAddressList($message->headers["to"]));
+            $toaddr = $this->parseAddr($Mail_RFC822->parseAddressList($message->headers["to"]));
         if(isset($message->headers["cc"]))
-            $ccaddr = $this->parseAddr(Mail_RFC822::parseAddressList($message->headers["cc"]));
+            $ccaddr = $this->parseAddr($Mail_RFC822->parseAddressList($message->headers["cc"]));
         if(isset($message->headers["bcc"]))
-            $bccaddr = $this->parseAddr(Mail_RFC822::parseAddressList($message->headers["bcc"]));
+            $bccaddr = $this->parseAddr($Mail_RFC822->parseAddressList($message->headers["bcc"]));
+
 
         // save some headers when forwarding mails (content type & transfer-encoding)
         $headers = "";
@@ -141,9 +150,10 @@ class BackendIMAP extends BackendDiff {
         $body_base64 = false;
         $org_charset = "";
         foreach($message->headers as $k => $v) {
-            if ($k == "subject" || $k == "to" || $k == "cc" || $k == "bcc")
+            if ($k == "subject" || $k == "to" || $k == "cc" || $k == "bcc" || $k == "sender")
                 continue;
 
+	    debugLog("Header Sentmail: " . $k.  " = ".trim($v));
             if ($k == "content-type") {
                 // save the original content-type header for the body part when forwarding
                 if ($smartdata['task'] == 'forward' && $smartdata['itemid']) {
@@ -168,7 +178,7 @@ class BackendIMAP extends BackendDiff {
             }
 
             // if the message is a multipart message, then we should use the sent body
-            if ($smartdata['task'] == 'reply' && $k == "content-type" && preg_match("/multipart/i", $v)) {
+            if (($smartdata['task'] == 'new' || $smartdata['task'] == 'reply') && $k == "content-type" && preg_match("/multipart/i", $v)) {
                 $use_orgbody = true;
             }
 
@@ -178,6 +188,7 @@ class BackendIMAP extends BackendDiff {
                 if      (IMAP_DEFAULTFROM == 'username') $v = $this->_username;
                 else if (IMAP_DEFAULTFROM == 'domain')   $v = $this->_domain;
                 else $v = $this->_username . IMAP_DEFAULTFROM;
+        	$imap_sender = $v;
             }
 
             // check if "Return-Path"-header is set
@@ -192,7 +203,7 @@ class BackendIMAP extends BackendDiff {
 
             // all other headers stay
             if ($headers) $headers .= "\n";
-            $headers .= ucfirst($k) . ": ". $v;
+            $headers .= ucfirst($k) . ": ". trim($v);
         }
 
         // set "From" header if not set on the device
@@ -215,16 +226,20 @@ class BackendIMAP extends BackendDiff {
 
         // if this is a multipart message with a boundary, we must use the original body
         if ($use_orgbody) {
+    	    debugLog("IMAP-Sendmail: use_orgbody = true");
             list(,$body) = $mobj->_splitBodyHeader($rfc822);
         }
-        else
-            $body = $this->getBody($message);
+        else {
+    	    debugLog("IMAP-Sendmail: use_orgbody = false");
+    	    $body = $this->getBody($message);
+	}
+	$body = str_replace("\r","",$body);
 
         // reply
         if ($smartdata['task'] == 'reply' && isset($smartdata['itemid']) && isset($smartdata['folderid']) && $smartdata['itemid'] && $smartdata['folderid']) {
             $this->imap_reopenFolder($smartdata['folderid']);
             // receive entire mail (header + body) to decode body correctly
-            $origmail = @imap_fetchheader($this->_mbox, $smartdata['itemid'], FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $smartdata['itemid'], FT_PEEK | FT_UID);
+            $origmail = @imap_fetchheader($this->_mbox, $smartdata['itemid'], FT_UID) . @imap_body($this->_mbox, $smartdata['itemid'], FT_PEEK | FT_UID);
             $mobj2 = new Mail_mimeDecode($origmail);
             // receive only body
             $body .= $this->getBody($mobj2->decode(array('decode_headers' => false, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $origmail, 'crlf' => "\n", 'charset' => 'utf-8')));
@@ -235,14 +250,18 @@ class BackendIMAP extends BackendDiff {
 
         // encode the body to base64 if it was sent originally in base64 by the pda
         // the encoded body is included in the forward
-        if ($body_base64) $body = base64_encode($body);
-
+        if ($body_base64 && !$use_orgbody) { 
+    	    debugLog("IMAP-Sendmail: body_base64 = true and user_orgbody = false");
+    	    $body = base64_encode($body);
+	} else {
+    	    debugLog("IMAP-Sendmail: body_base64 = false or user_orgbody = false");
+	}
 
         // forward
         if ($smartdata['task'] == 'forward' && isset($smartdata['itemid']) && isset($smartdata['folderid']) && $smartdata['itemid'] && $smartdata['folderid']) {
             $this->imap_reopenFolder($smartdata['folderid']);
             // receive entire mail (header + body)
-            $origmail = @imap_fetchheader($this->_mbox, $smartdata['itemid'], FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $smartdata['itemid'], FT_PEEK | FT_UID);
+            $origmail = @imap_fetchheader($this->_mbox, $smartdata['itemid'], FT_UID) . @imap_body($this->_mbox, $smartdata['itemid'], FT_PEEK | FT_UID);
 
             // build a new mime message, forward entire old mail as file
             list($aheader, $body) = $this->mail_attach("forwarded_message.eml",strlen($origmail),$origmail, $body, $forward_h_ct, $forward_h_cte);
@@ -581,7 +600,7 @@ class BackendIMAP extends BackendDiff {
         list($folderid, $id, $part) = explode(":", $attname);
 
         $this->imap_reopenFolder($folderid);
-        $mail = @imap_fetchheader($this->_mbox, $id, FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
+        $mail = @imap_fetchheader($this->_mbox, $id, FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
 
         $mobj = new Mail_mimeDecode($mail);
         $message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));
@@ -601,7 +620,7 @@ class BackendIMAP extends BackendDiff {
         list($folderid, $id, $part) = explode(":", $attname);
 
         $this->imap_reopenFolder($folderid);
-        $mail = @imap_fetchheader($this->_mbox, $id, FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
+        $mail = @imap_fetchheader($this->_mbox, $id, FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
 
         $mobj = new Mail_mimeDecode($mail);
         $message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));
@@ -676,7 +695,7 @@ class BackendIMAP extends BackendDiff {
 
         if ($stat) {
             $this->imap_reopenFolder($folderid);
-            $mail = @imap_fetchheader($this->_mbox, $id, FT_PREFETCHTEXT | FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
+            $mail = @imap_fetchheader($this->_mbox, $id, FT_UID) . @imap_body($this->_mbox, $id, FT_PEEK | FT_UID);
 
             $mobj = new Mail_mimeDecode($mail);
             $message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));

@@ -215,7 +215,7 @@ class MAPIMapping {
     var $_meetingrequestmapping = array (
                             "responserequested" => PR_RESPONSE_REQUESTED,
                             // timezone
-                            "alldayevent" => "PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x825",
+                            "alldayevent" => "PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8215",
                             "busystatus" => "PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8205",
                             "rtf" => PR_RTF_COMPRESSED,
                             "dtstamp" => PR_LAST_MODIFICATION_TIME,
@@ -643,6 +643,15 @@ class ImportContentsChangesICS extends MAPIMapping {
         $this->statestream = $stream;
 
         mapi_importcontentschanges_config($this->importer, $stream, $flags);
+        $this->_flags = $flags;
+
+        // configure an exporter so we can detect conflicts
+        $exporter = new ExportChangesICS($this->_session, $this->_store, $this->_folderid);
+        $memImporter = new ImportContentsChangesMem();
+        $exporter->Config(&$memImporter, false, false, $state, 0, 0);
+        while(is_array($exporter->Synchronize()));
+        $this->_memChanges = $memImporter;
+        
     }
 
     function ImportMessageChange($id, $message) {
@@ -655,8 +664,23 @@ class ImportContentsChangesICS extends MAPIMapping {
         $props[PR_PARENT_SOURCE_KEY] = $parentsourcekey;
 
         // set the PR_SOURCE_KEY if available or mark it as new message
-        if($id)
+        if($id) {
             $props[PR_SOURCE_KEY] = $sourcekey;
+
+            // check for conflicts
+            if($this->_memChanges->isChanged($id)) {
+                if ($this->_flags == SYNC_CONFLICT_OVERWRITE_PIM) {
+                    debugLog("Conflict detected. Data from PIM will be dropped! Server overwrites PIM.");
+                    return false;
+                }
+                else
+                   debugLog("Conflict detected. Data from Server will be dropped! PIM overwrites server.");
+            }
+            if($this->_memChanges->isDeleted($id)) {
+                debugLog("Conflict detected. Data from PIM will be dropped! Object was deleted on server.");
+                return false;
+            }            
+        }
         else
             $flags = SYNC_NEW_MESSAGE;
 
@@ -692,6 +716,10 @@ class ImportContentsChangesICS extends MAPIMapping {
 
     // Import a deletion. This may conflict if the local object has been modified.
     function ImportMessageDeletion($objid) {
+        // check for conflicts
+        if($this->_memChanges->isChanged($objid)) {
+           debugLog("Conflict detected. Data from Server will be dropped! PIM deleted object.");
+        }
         // do a 'soft' delete so people can un-delete if necessary
         mapi_importcontentschanges_importmessagedeletion($this->importer, 1, array(hex2bin($objid)));
     }
@@ -1902,146 +1930,6 @@ class PHPContentsImportProxy extends MAPIMapping {
             $message->uid = bin2hex($messageprops[PR_SOURCE_KEY]);
         else 
             $message->uid = getICalUidFromOLUid($message->uid);
-            
-        $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
-        $recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216");
-        $timezonetag = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8233");
-
-        // Now, get and convert the recurrence and timezone information
-        $recurprops = mapi_getprops($mapimessage, array($isrecurringtag, $recurringstate, $timezonetag));
-
-        if(isset($recurprops[$timezonetag])) {
-            $tz = $this->_getTZFromMAPIBlob($recurprops[$timezonetag]);
-        } else {
-            $tz = $this->_getGMTTZ();
-        }
-
-        if(isset($recurprops[$isrecurringtag]) && $recurprops[$isrecurringtag]) {
-            // Process recurrence
-            $recurrence = new Recurrence($this->_store, $recurprops);
-            
-            $message->recurrence = new SyncRecurrence;
-
-            switch($recurrence->recur["type"]) {
-                case 10: // daily
-                    switch($recurrence->recur["subtype"]) {
-                        default:
-                            $message->recurrence->type = 0;
-                            break;
-                        case 1:
-                            $message->recurrence->type = 0;
-                            $message->recurrence->dayofweek = 62; // mon-fri
-                            break;
-                    }
-                    break;
-                case 11: // weekly
-                    $message->recurrence->type = 1;
-                    break;
-                case 12: // monthly
-                    switch($recurrence->recur["subtype"]) {
-                        default:
-                            $message->recurrence->type = 2;
-                            break;
-                        case 3:
-                            $message->recurrence->type = 3;
-                            break;
-                    }
-                    break;
-                case 13: // yearly
-                    switch($recurrence->recur["subtype"]) {
-                        default:
-                            $message->recurrence->type = 4;
-                            break;
-                        case 2:
-                            $message->recurrence->type = 5;
-                            break;
-                        case 3:
-                            $message->recurrence->type = 6;
-                    }
-            }
-
-            // Termination
-            switch($recurrence->recur["term"]) {
-                case 0x21:
-                    $message->recurrence->until = $recurrence->recur["end"]; break;
-                case 0x22:
-                    $message->recurrence->occurrences = $recurrence->recur["numoccur"]; break;
-                case 0x23:
-                    // never ends
-                    break;
-            }
-
-            // Correct 'alldayevent' because outlook fails to set it on recurring items of 24 hours or longer
-            if($recurrence->recur["endocc"] - $recurrence->recur["startocc"] >= 1440)
-                $message->alldayevent = true;
-
-            // Interval is different according to the type/subtype
-            switch($recurrence->recur["type"]) {
-                case 10:
-                    if($recurrence->recur["subtype"] == 0)
-                        $message->recurrence->interval = (int)($recurrence->recur["everyn"] / 1440);  // minutes
-                    break;
-                case 11:
-                case 12: $message->recurrence->interval = $recurrence->recur["everyn"]; break; // months / weeks
-                case 13: $message->recurrence->interval = (int)($recurrence->recur["everyn"] / 12); break; // months
-            }
-
-            if(isset($recurrence->recur["weekdays"]))
-                $message->recurrence->dayofweek = $recurrence->recur["weekdays"]; // bitmask of days (1 == sunday, 128 == saturday
-            if(isset($recurrence->recur["nday"]))
-                $message->recurrence->weekofmonth = $recurrence->recur["nday"]; // N'th {DAY} of {X} (0-5)
-            if(isset($recurrence->recur["month"]))
-                $message->recurrence->monthofyear = (int)($recurrence->recur["month"] / (60 * 24 * 29)) + 1; // works ok due to rounding. see also $monthminutes below (1-12)
-            if(isset($recurrence->recur["monthday"]))
-                $message->recurrence->dayofmonth = $recurrence->recur["monthday"]; // day of month (1-31)
-
-            // All changed exceptions are appointments within the 'exceptions' array. They contain the same items as a normal appointment
-            foreach($recurrence->recur["changed_occurences"] as $change) {
-                $exception = new SyncAppointment();
-
-                // start, end, basedate, subject, remind_before, reminderset, location, busystatus, alldayevent, label
-
-                if(isset($change["start"]))
-                    $exception->starttime = $this->_getGMTTimeByTZ($change["start"], $tz);
-                if(isset($change["end"]))
-                    $exception->endtime = $this->_getGMTTimeByTZ($change["end"], $tz);
-		//dw2412 This needs to be just a localtime starting from midnight, Not in GMT! Has to match the time of the main series
-                if(isset($change["basedate"]))
-                    $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($change["basedate"]) + $recurrence->recur["startocc"] * 60;
-                if(isset($change["subject"]))
-                    $exception->subject = w2u($change["subject"]);
-                if(isset($change["reminder_before"]) && $change["reminder_before"])
-                    $exception->reminder = $change["remind_before"];
-                if(isset($change["location"]))
-                    $exception->location = w2u($change["location"]);
-                if(isset($change["busystatus"]))
-                    $exception->busystatus = $change["busystatus"];
-                if(isset($change["alldayevent"]))
-                    $exception->alldayevent = $change["alldayevent"];
-
-                if(!isset($message->exceptions))
-                    $message->exceptions = array();
-
-                array_push($message->exceptions, $exception);
-            }
-
-            // Deleted appointments contain only the original date (basedate) and a 'deleted' tag
-            foreach($recurrence->recur["deleted_occurences"] as $deleted) {
-                $exception = new SyncAppointment();
-		//dw2412 This needs to be Just a localtime starting from midnight. Not in GMT! Has to match the time of the main series!
-                $exception->exceptionstarttime = $this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60;
-                $exception->deleted = "1";
-
-                if(!isset($message->exceptions))
-                    $message->exceptions = array();
-
-                array_push($message->exceptions, $exception);
-            }
-        }
-
-        if($tz) {
-    	    $message->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
-        }
 
         // Get organizer information if it is a meetingrequest
         $meetingstatustag = $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8217");
@@ -2050,6 +1938,27 @@ class PHPContentsImportProxy extends MAPIMapping {
         if(isset($messageprops[$meetingstatustag]) && $messageprops[$meetingstatustag] > 0 && isset($messageprops[PR_SENT_REPRESENTING_ENTRYID]) && isset($messageprops[PR_SENT_REPRESENTING_NAME])) {
             $message->organizeremail = w2u($this->_getSMTPAddressFromEntryID($messageprops[PR_SENT_REPRESENTING_ENTRYID]));
             $message->organizername = w2u($messageprops[PR_SENT_REPRESENTING_NAME]);
+        }            
+            
+        $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
+        $recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216");
+        $timezonetag = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8233");
+
+        // Now, get and convert the recurrence and timezone information
+        $recurprops = mapi_getprops($mapimessage, array($isrecurringtag, $recurringstate, $timezonetag));
+
+        if(isset($recurprops[$timezonetag])) 
+            $tz = $this->_getTZFromMAPIBlob($recurprops[$timezonetag]);
+        else
+            $tz = $this->_getGMTTZ();
+
+	$message->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
+
+        if(isset($recurprops[$isrecurringtag]) && $recurprops[$isrecurringtag]) {
+            // Process recurrence
+            $message->recurrence = new SyncRecurrence();
+	    $this->_getRecurrence($mapimessage, $recurprops, $message, $message->recurrence, $tz);
+
         }
 
         // Do attendees
@@ -2090,6 +1999,133 @@ class PHPContentsImportProxy extends MAPIMapping {
         return $message;
     }
 
+    // Get an SyncXXXRecurrence
+    function _getRecurrence($mapimessage, $recurprops, &$syncMessage, &$syncRecurrence, $tz) {
+        $recurrence = new Recurrence($this->_store, $recurprops);
+
+        switch($recurrence->recur["type"]) {
+            case 10: // daily
+                switch($recurrence->recur["subtype"]) {
+                    default:
+                    $syncRecurrence->type = 0;
+                        break;
+                    case 1:
+                    $syncRecurrence->type = 0;
+                    $syncRecurrence->dayofweek = 62; // mon-fri
+                        break;
+                }
+                break;
+            case 11: // weekly
+                    $syncRecurrence->type = 1;
+                break;
+            case 12: // monthly
+                switch($recurrence->recur["subtype"]) {
+                    default:
+                    $syncRecurrence->type = 2;
+                        break;
+                    case 3:
+                    $syncRecurrence->type = 3;
+                        break;
+                }
+                break;
+            case 13: // yearly
+                switch($recurrence->recur["subtype"]) {
+                    default:
+                    $syncRecurrence->type = 4;
+                        break;
+                    case 2:
+                    $syncRecurrence->type = 5;
+                        break;
+                    case 3:
+                    $syncRecurrence->type = 6;
+                }
+        }
+        // Termination
+        switch($recurrence->recur["term"]) {
+           case 0x21:
+            $syncRecurrence->until = $recurrence->recur["end"]; break;
+            case 0x22:
+            $syncRecurrence->occurrences = $recurrence->recur["numoccur"]; break;
+            case 0x23:
+                // never ends
+                break;
+        }
+
+        // Correct 'alldayevent' because outlook fails to set it on recurring items of 24 hours or longer
+        if($recurrence->recur["endocc"] - $recurrence->recur["startocc"] >= 1440)
+            $syncMessage->alldayevent = true;
+
+        // Interval is different according to the type/subtype
+        switch($recurrence->recur["type"]) {
+            case 10:
+                if($recurrence->recur["subtype"] == 0)
+                $syncRecurrence->interval = (int)($recurrence->recur["everyn"] / 1440);  // minutes
+                break;
+            case 11:
+            case 12: $syncRecurrence->interval = $recurrence->recur["everyn"]; break; // months / weeks
+            case 13: $syncRecurrence->interval = (int)($recurrence->recur["everyn"] / 12); break; // months
+        }
+
+        if(isset($recurrence->recur["weekdays"]))
+        $syncRecurrence->dayofweek = $recurrence->recur["weekdays"]; // bitmask of days (1 == sunday, 128 == saturday
+        if(isset($recurrence->recur["nday"]))
+        $syncRecurrence->weekofmonth = $recurrence->recur["nday"]; // N'th {DAY} of {X} (0-5)
+        if(isset($recurrence->recur["month"]))
+        $syncRecurrence->monthofyear = (int)($recurrence->recur["month"] / (60 * 24 * 29)) + 1; // works ok due to rounding. see also $monthminutes below (1-12)
+        if(isset($recurrence->recur["monthday"]))
+        $syncRecurrence->dayofmonth = $recurrence->recur["monthday"]; // day of month (1-31)
+
+        // All changed exceptions are appointments within the 'exceptions' array. They contain the same items as a normal appointment
+        foreach($recurrence->recur["changed_occurences"] as $change) {
+            $exception = new SyncAppointment();
+
+            // start, end, basedate, subject, remind_before, reminderset, location, busystatus, alldayevent, label
+            if(isset($change["start"]))
+                $exception->starttime = $this->_getGMTTimeByTZ($change["start"], $tz);
+            if(isset($change["end"]))
+                $exception->endtime = $this->_getGMTTimeByTZ($change["end"], $tz);
+            if(isset($change["basedate"]))
+                $exception->exceptionstarttime = $this->_getGMTTimeByTZ($this->_getDayStartOfTimestamp($change["basedate"]) + $recurrence->recur["startocc"] * 60, $tz);
+            if(isset($change["subject"]))
+                $exception->subject = w2u($change["subject"]);
+            if(isset($change["reminder_before"]) && $change["reminder_before"])
+                $exception->reminder = $change["remind_before"];
+            if(isset($change["location"]))
+                $exception->location = w2u($change["location"]);
+            if(isset($change["busystatus"]))
+                $exception->busystatus = $change["busystatus"];
+            if(isset($change["alldayevent"]))
+                $exception->alldayevent = $change["alldayevent"];
+
+            // set some data from the original appointment
+            if (isset($syncMessage->uid))
+                $exception->uid = $syncMessage->uid;
+            if (isset($syncMessage->organizername))
+                $exception->organizername = $syncMessage->organizername;
+            if (isset($syncMessage->organizeremail))
+                $exception->organizeremail = $syncMessage->organizeremail;
+
+            if(!isset($syncMessage->exceptions))
+                $syncMessage->exceptions = array();
+
+            array_push($syncMessage->exceptions, $exception);
+        }
+
+        // Deleted appointments contain only the original date (basedate) and a 'deleted' tag
+        foreach($recurrence->recur["deleted_occurences"] as $deleted) {
+            $exception = new SyncAppointment();
+
+            $exception->exceptionstarttime = $this->_getGMTTimeByTZ($this->_getDayStartOfTimestamp($deleted) + $recurrence->recur["startocc"] * 60, $tz);
+            $exception->deleted = "1";
+
+            if(!isset($syncMessage->exceptions))
+                $syncMessage->exceptions = array();
+
+            array_push($syncMessage->exceptions, $exception);
+        }         
+    }
+
+    
     // Get an SyncEmail object
     // CHANGED dw2412 Support Protocol Version 12 (added bodypreference)
     function _getEmail($mapimessage, $truncsize, $bodypreference, $mimesupport = 0) {
@@ -2391,40 +2427,77 @@ class PHPContentsImportProxy extends MAPIMapping {
 	} 
 	// END ADDED dw2412 conversation index
 
-	// Just send Appointments, too
-	// Request
+	// process Meeting Requests 
         if(isset($message->messageclass) && strpos($message->messageclass, "IPM.Schedule.Meeting") === 0) {
             $message->meetingrequest = new SyncMeetingRequest();
             $this->_getPropsFromMAPI($message->meetingrequest, $mapimessage, $this->_meetingrequestmapping);
 
             $goidtag = $this->_getPropIdFromString("PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x3");
             $timezonetag = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8233");
-
-            // Organizer is the sender
-            $message->meetingrequest->organizer = $message->from;
+	    $recReplTime = $this->_getPropIDFromString("PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8228");
+	    $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
+	    $recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216"); 
+	    $appSeqNr = $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8201");
+	    $lidIsException = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0xA");
+	    $recurStartTime = $this->_getPropIDFromString("PT_LONG:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0xE");
+	    
+	    $props = mapi_getprops($mapimessage, array($goidtag, $timezonetag, $recReplTime, $isrecurringtag, $recurringstate, $appSeqNr, $lidIsException, $recurStartTime));
 
             // Get the GOID
-            $props = mapi_getprops($mapimessage, array($goidtag));
             if(isset($props[$goidtag]))
                 $message->meetingrequest->globalobjid = base64_encode($props[$goidtag]);
 
+	    // Set Timezone 
+            if(isset($props[$timezonetag])) 
+		$tz = $this->_getTZFromMAPIBlob($props[$timezonetag]); 
+	    else 
+		$tz = $this->_getGMTTZ(); 
+
+            $message->meetingrequest->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
+            // send basedate if exception 
+            if(isset($props[$recReplTime]) || (isset($props[$lidIsException]) && $props[$lidIsException] == true)) {
+             	if (isset($props[$recReplTime])){
+            	    $basedate = $props[$recReplTime]; 
+        	    $message->meetingrequest->recurrenceid = $this->_getGMTTimeByTZ($basedate, $this->_getGMTTZ());
+        	} 
+            	else { 
+            	    if (!isset($props[$goidtag]) || !isset($props[$recurStartTime]) || !isset($props[$timezonetag]))
+                	debugLog("Missing property to set correct basedate for exception"); 
+        	    else { 
+                	$basedate = extractBaseDate($props[$goidtag], $props[$recurStartTime]); 
+                	$message->meetingrequest->recurrenceid = $this->_getGMTTimeByTZ($basedate, $tz); 
+        	    }   
+    		} 
+    	    } 
+
+            // Organizer is the sender 
+            $message->meetingrequest->organizer = $message->from; 
+  
+            // Process recurrence 
+    	    if(isset($props[$isrecurringtag]) && $props[$isrecurringtag]) { 
+        	$myrec = new SyncMeetingRequestRecurrence(); 
+                // get recurrence -> put $message->meetingrequest as message so the 'alldayevent' is set correctly
+                $this->_getRecurrence($mapimessage, $props, $message->meetingrequest, $myrec, $tz); 
+                $message->meetingrequest->recurrences = array($myrec); 
+    	    } 
+  
             // Force the 'alldayevent' in the object at all times. (non-existent == 0)
             if(!isset($message->meetingrequest->alldayevent) || $message->meetingrequest->alldayevent == "")
                 $message->meetingrequest->alldayevent = 0;
 
-            // Set Timezone
-            if(isset($recurprops[$timezonetag])) {
-                $tz = $this->_getTZFromMAPIBlob($recurprops[$timezonetag]);
-            } else {
-                $tz = $this->_getGMTTZ();
-            }
-
-            if($tz) {
-                $message->meetingrequest->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
-            }
-
-            // 'Instance' is always 0 (?)
+            // Instancetype 
+            // 0 = single appointment 
+            // 1 = master recurring appointment 
+            // 2 = single instance of recurring appointment  
+            // 3 = exception of recurring appointment 
             $message->meetingrequest->instancetype = 0;
+            if (isset($props[$isrecurringtag]) && $props[$isrecurringtag] == 1) 
+        	$message->meetingrequest->instancetype = 1; 
+            else if ((!isset($props[$isrecurringtag]) || $props[$isrecurringtag] == 0)&& isset($message->meetingrequest->recurrenceid))
+                if (isset($props[$appSeqNr]) && $props[$appSeqNr] == 0 ) 
+            	    $message->meetingrequest->instancetype = 2; 
+                else 
+            	    $message->meetingrequest->instancetype = 3; 
 
             // Disable reminder if it is off
             $reminderset = $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503");
@@ -2806,7 +2879,7 @@ class ExportChangesICS  {
         if(!$folder) {
 	    debugLog("folderid: ".bin2hex($folderid)."Folderentryid: ".bin2hex($entryid));
             $this->exporter = false;
-            debugLog("ExportChangesICS->Constructor: can not open folder");
+            debugLog("ExportChangesICS->Constructor: can not open folder:".bin2hex($folderid));
             return;
         }
 
@@ -2875,7 +2948,7 @@ class ExportChangesICS  {
             case "Tasks":
                 $restriction = false;
                 break;
-        }
+        };
 
         if($this->_folderid) {
             $includeprops = false;
@@ -3250,6 +3323,7 @@ class BackendICS {
                 if ($ak !== false) {
                     //update policykey
                     $devicesprops[0x6880101E][$ak] = $policykey;
+                    $devicesprops[0x6883101E][$ak] = $useragent;
                 }
                 else {
                     //Unknown device. Store its information.
@@ -3859,10 +3933,9 @@ class BackendICS {
         $mimeParams = array('decode_headers' => false,
                             'decode_bodies' => true,
                             'include_bodies' => true,
-                            'input' => $rfc822,
-                            'crlf' => "\r\n",
-                            'charset' => 'utf-8');
-        $mimeObject = new Mail_mimeDecode($mimeParams['input'], $mimeParams['crlf']);
+					        'charset' => 'utf-8');
+        
+        $mimeObject = new Mail_mimeDecode($rfc822);
         $message = $mimeObject->decode($mimeParams);
 
         // Open the outbox and create the message there
@@ -3881,7 +3954,7 @@ class BackendICS {
         $mapimessage = mapi_folder_createmessage($outbox);
 
         mapi_setprops($mapimessage, array(
-            PR_SUBJECT => u2w($mimeObject->_decodeHeader(($message->headers["subject"] ? $message->headers["subject"] : ""))),
+    	    PR_SUBJECT => u2w($mimeObject->_decodeHeader(isset($message->headers["subject"])?$message->headers["subject"]:"")),
             PR_SENTMAIL_ENTRYID => $storeprops[PR_IPM_SENTMAIL_ENTRYID],
             PR_MESSAGE_CLASS => "IPM.Note",
             PR_MESSAGE_DELIVERY_TIME => time()
@@ -4353,9 +4426,34 @@ class BackendICS {
         // F/B will be updated on logoff
 
         // We have to return the ID of the new calendar item, so do that here
-        $newitem = mapi_msgstore_openentry($this->_defaultstore, $entryid);
-        $newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
-        $calendarid = bin2hex($newprops[PR_SOURCE_KEY]);
+        if (isset($entryid)) { 
+            $newitem = mapi_msgstore_openentry($this->_defaultstore, $entryid);
+            $newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
+            $calendarid = bin2hex($newprops[PR_SOURCE_KEY]);
+        }
+ 
+        // on recurring items, the MeetingRequest class responds with a wrong entryid
+        if ($requestid == $calendarid) {
+            debugLog("returned calender id is the same as the requestid - re-searching");
+            $goidprop = GetPropIDFromString($this->_defaultstore, "PT_BINARY:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0x3");
+
+            $messageprops = mapi_getprops($mapimessage, Array($goidprop, PR_OWNER_APPT_ID));
+                $goid = $messageprops[$goidprop];
+                if(isset($messageprops[PR_OWNER_APPT_ID]))
+                    $apptid = $messageprops[PR_OWNER_APPT_ID];
+                else
+                    $apptid = false;
+
+                $items = $meetingrequest->findCalendarItems($goid, $apptid);
+
+                if (is_array($items)) {
+                   $newitem = mapi_msgstore_openentry($this->_defaultstore, $items[0]);
+                   $newprops = mapi_getprops($newitem, array(PR_SOURCE_KEY));
+                   $calendarid = bin2hex($newprops[PR_SOURCE_KEY]);
+                   debugLog("found other calendar entryid");
+                }
+        }
+        
         
         // delete meeting request from Inbox
         $folderentryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($folderid));
