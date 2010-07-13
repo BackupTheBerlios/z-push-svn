@@ -3,7 +3,7 @@
 /***********************************************
 * File      :   utils.php
 * Project   :   Z-Push
-* Descr     :   
+* Descr     :
 *
 * Created   :   03.04.2008
 *
@@ -12,32 +12,32 @@
 * Consult LICENSE file for details
 ************************************************/
 
-// saves information about folder data for a specific device    
+// saves information about folder data for a specific device
 function _saveFolderData($devid, $folders) {
     if (!is_array($folders) || empty ($folders))
         return false;
 
     $unique_folders = array ();
 
-    foreach ($folders as $folder) {    
+    foreach ($folders as $folder) {
         if (!isset($folder->type))
             continue;
-    	
+
         // don't save folder-ids for emails
         if ($folder->type == SYNC_FOLDER_TYPE_INBOX)
             continue;
 
-        // no folder from that type    or the default folder        
+        // no folder from that type    or the default folder
         if (!array_key_exists($folder->type, $unique_folders) || $folder->parentid == 0) {
             $unique_folders[$folder->type] = $folder->serverid;
         }
     }
-    
-    // Treo does initial sync for calendar and contacts too, so we need to fake 
+
+    // Treo does initial sync for calendar and contacts too, so we need to fake
     // these folders if they are not supported by the backend
-    if (!array_key_exists(SYNC_FOLDER_TYPE_APPOINTMENT, $unique_folders))     
+    if (!array_key_exists(SYNC_FOLDER_TYPE_APPOINTMENT, $unique_folders))
         $unique_folders[SYNC_FOLDER_TYPE_APPOINTMENT] = SYNC_FOLDER_TYPE_DUMMY;
-    if (!array_key_exists(SYNC_FOLDER_TYPE_CONTACT, $unique_folders))         
+    if (!array_key_exists(SYNC_FOLDER_TYPE_CONTACT, $unique_folders))
         $unique_folders[SYNC_FOLDER_TYPE_CONTACT] = SYNC_FOLDER_TYPE_DUMMY;
 
     if (!file_put_contents(BASE_PATH.STATE_DIR."/compat-$devid", serialize($unique_folders))) {
@@ -45,7 +45,7 @@ function _saveFolderData($devid, $folders) {
     }
 }
 
-// returns information about folder data for a specific device    
+// returns information about folder data for a specific device
 function _getFolderID($devid, $class) {
     $filename = BASE_PATH.STATE_DIR."/compat-$devid";
 
@@ -66,16 +66,8 @@ function _getFolderID($devid, $class) {
  * Function which converts a hex entryid to a binary entryid.
  * @param string @data the hexadecimal string
  */
-function hex2bin($data)
-{
-    $len = strlen($data);
-    $newdata = "";
-
-    for($i = 0;$i < $len;$i += 2)
-    {
-        $newdata .= pack("C", hexdec(substr($data, $i, 2)));
-    } 
-    return $newdata;
+function hex2bin($data) {
+    return pack("H*", $data);
 }
 
 function utf8_to_windows1252($string, $option = "")
@@ -104,21 +96,21 @@ function u2wi($string) { return utf8_to_windows1252($string, "//TRANSLIT"); }
 
 /**
  * Truncate an UTF-8 encoded sting correctly
- * 
- * If it's not possible to truncate properly, an empty string is returned 
+ *
+ * If it's not possible to truncate properly, an empty string is returned
  *
  * @param string $string - the string
  * @param string $length - position where string should be cut
  * @return string truncated string
- */ 
+ */
 function utf8_truncate($string, $length) {
-    if (strlen($string) <= $length) 
+    if (strlen($string) <= $length)
         return $string;
-    
+
     while($length >= 0) {
         if ((ord($string[$length]) < 0x80) || (ord($string[$length]) >= 0xC0))
             return substr($string, 0, $length);
-        
+
         $length--;
     }
     return "";
@@ -137,17 +129,17 @@ function utf8_truncate($string, $length) {
  */
 function buildAddressString($street, $zip, $city, $state, $country) {
     $out = "";
-    
+
     if (isset($country) && $street != "") $out = $country;
-    
+
     $zcs = "";
     if (isset($zip) && $zip != "") $zcs = $zip;
     if (isset($city) && $city != "") $zcs .= (($zcs)?" ":"") . $city;
     if (isset($state) && $state != "") $zcs .= (($zcs)?" ":"") . $state;
     if ($zcs) $out = $zcs . "\r\n" . $out;
-    
+
     if (isset($street) && $street != "") $out = $street . (($out)?"\r\n\r\n". $out: "") ;
-    
+
     return ($out)?$out:null;
 }
 
@@ -161,9 +153,9 @@ function checkMapiExtVersion($version = "") {
     // compare build number if requested
     if (preg_match('/^\d+$/',$version) && strlen > 3) {
         $vs = preg_split('/-/', phpversion("mapi"));
-        return ($version <= $vs[1]); 
+        return ($version <= $vs[1]);
     }
-    
+
     if (extension_loaded("mapi")){
         if (version_compare(phpversion("mapi"), $version) == -1){
             return false;
@@ -171,24 +163,27 @@ function checkMapiExtVersion($version = "") {
     }
     else
         return false;
-        
+
     return true;
 }
 
 /**
- * Parses and returns an ecoded vCal-Uid from an 
+ * Parses and returns an ecoded vCal-Uid from an
  * OL compatible GlobalObjectID
  *
  * @param string $olUid - an OL compatible GlobalObjectID
  * @return string the vCal-Uid if available in the olUid, else the original olUid as HEX
  */
 function getICalUidFromOLUid($olUid){
-    $icalUid = strtoupper(bin2hex($olUid));
-    if(($pos = stripos($olUid,"vCal-Uid"))) {
-    	$length = unpack("V", substr($olUid, $pos-4,4));
-    	$icalUid = substr($olUid, $pos+12, $length[1] -14);
+    //check if "vCal-Uid" is somewhere in outlookid case-insensitive
+    $icalUid = stristr($olUid, "vCal-Uid");
+    if ($icalUid !== false) {
+        //get the length of the ical id - go back 4 position from where "vCal-Uid" was found
+        $begin = unpack("V", substr($olUid, strlen($icalUid) * (-1) - 4, 4));
+        //remove "vCal-Uid" and packed "1" and use the ical id length
+        return substr($icalUid, 12, ($begin[1] - 13));
     }
-    return $icalUid;
+    return strtoupper(bin2hex($olUid));
 }
 
 /**
@@ -210,14 +205,14 @@ function getOLUidFromICalUid($icalUid) {
 	}
 	else
 	   return hex2bin($icalUid);
-} 
+}
 
 /**
- * Extracts the basedate of the GlobalObjectID and the RecurStartTime 
+ * Extracts the basedate of the GlobalObjectID and the RecurStartTime
  *
  * @param string $goid - OL compatible GlobalObjectID
- * @param long $recurStartTime - RecurStartTime 
- * @return long basedate 
+ * @param long $recurStartTime - RecurStartTime
+ * @return long basedate
  *
  */
 function extractBaseDate($goid, $recurStartTime) {
