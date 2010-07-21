@@ -66,7 +66,8 @@ class ImportHierarchyChangesMem extends ImportHierarchyChanges {
     	// Frequently these changes are not relevant for the mobiles, 
     	// as something changes but the relevant displayname and parentid 
     	// stay the same. These changes will be dropped and not sent
-    	if (array_key_exists($folder->serverid, $this->foldercache) &&
+    	if (is_array($this->foldercache) &&
+    	    array_key_exists($folder->serverid, $this->foldercache) &&
     	    $this->foldercache[$folder->serverid]->displayname == $folder->displayname &&
             $this->foldercache[$folder->serverid]->parentid == $folder->parentid &&
             $this->foldercache[$folder->serverid]->type == $folder->type

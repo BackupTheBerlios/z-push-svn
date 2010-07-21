@@ -571,11 +571,10 @@ class MAPIMapping {
 // objects and convert them into MAPI objects, and then send them to the ICS importer to do the actual
 // writing of the object.
 class ImportContentsChangesICS extends MAPIMapping {
-    function ImportContentsChangesICS($session, $store, $folderid, $bodypreference=false) {
+    function ImportContentsChangesICS($session, $store, $folderid) {
         $this->_session = $session;
         $this->_store = $store;
         $this->_folderid = $folderid;
-	$this->_bodypreference = $bodypreference;
 
         $entryid = mapi_msgstore_entryidfromsourcekey($store, $folderid);
         if(!$entryid) {
@@ -595,7 +594,7 @@ class ImportContentsChangesICS extends MAPIMapping {
         $this->importer = mapi_openproperty($folder, PR_COLLECTOR, IID_IExchangeImportContentsChanges, 0 , 0);
     }
 
-    function Config($state, $flags = 0) {
+    function Config($state, $flags = 0, $mclass = false, $restrict = false, $bodypreference = false) {
         $stream = mapi_stream_create();
         if(strlen($state) == 0) {
             $state = hex2bin("0000000000000000");
@@ -607,10 +606,15 @@ class ImportContentsChangesICS extends MAPIMapping {
         mapi_importcontentschanges_config($this->importer, $stream, $flags);
         $this->_flags = $flags;
 
+//	debugLog("ImportContentsChangesICS->Config: ".($this->_folderid ? "Have Folder" : "No Folder"). " mclass: ". $mclass. " state: ". bin2hex($state) . " restriction " . $restrict);
         // configure an exporter so we can detect conflicts
         $exporter = new ExportChangesICS($this->_session, $this->_store, $this->_folderid);
         $memImporter = new ImportContentsChangesMem();
-        $exporter->Config(&$memImporter, false, false, $state, 0, 0, $this->_bodypreference);
+	if (substr(phpversion("mapi"),0,4) >= "6.40") {
+    	    $exporter->Config(&$memImporter, $mclass, $restrict, $state, 0, 0, $bodypreference);
+	} else {
+    	    $exporter->Config(&$memImporter, false, false, $state, 0, 0, $bodypreference);
+	}
         while(is_array($exporter->Synchronize()));
         $this->_memChanges = $memImporter;
         
@@ -3425,9 +3429,9 @@ class BackendICS {
         return new ImportHierarchyChangesICS($this->_defaultstore);
     }
 
-    function GetContentsImporter($folderid, $bodypreference = false) {
+    function GetContentsImporter($folderid) {
         $this->_importedFolders[] = $folderid;
-        return new ImportContentsChangesICS($this->_session, $this->_defaultstore, hex2bin($folderid), $bodypreference);
+        return new ImportContentsChangesICS($this->_session, $this->_defaultstore, hex2bin($folderid));
     }
 
     function GetExporter($folderid = false) {

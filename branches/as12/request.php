@@ -222,7 +222,8 @@ function HandleFolderSync($backend, $protocolversion) {
     }
 
 
-    if (!$sfolderstate) {
+    if (!$sfolderstate ||
+	$sfolderstate == "") {
         $foldercache = array();
         if ($sfolderstate === false) 
             debugLog("Error: FolderChacheState for state 's". $synckey ."' not found. Reinitializing...");
@@ -561,8 +562,11 @@ function HandleSync($backend, $protocolversion, $devid) {
         if($decoder->getElementStartTag(SYNC_PERFORM)) {
 
             // Configure importer with last state
-            $importer = $backend->GetContentsImporter($collection["collectionid"],(isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false));
-            $importer->Config($collection["syncstate"], $collection["conflict"]);
+            $importer = $backend->GetContentsImporter($collection["collectionid"]);
+	    $filtertype = (isset($collection["filtertype"]) ? $collection["filtertype"] : 0);
+	    $mclass = (isset($collection["class"]) ? $collection["class"] : false);
+	    $bodypreference = (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false);
+            $importer->Config($collection["syncstate"], $collection["conflict"], $mclass, $filtertype, $bodypreference);
 
             $nchanges = 0;
             while(1) {

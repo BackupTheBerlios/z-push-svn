@@ -44,6 +44,13 @@
     // true - allow older devices, but enforce policies on devices which support it  
     define('LOOSE_PROVISIONING', true); 
 
+    // Default conflict preference
+    // Some devices allow to set if the server or PIM (mobile)
+    // should win in case of a synchronization conflict
+    //   SYNC_CONFLICT_OVERWRITE_SERVER - Server is overwritten, PIM wins
+    //   SYNC_CONFLICT_OVERWRITE_PIM    - PIM is overwritten, Server wins (default)
+    define('SYNC_CONFLICT_DEFAULT', SYNC_CONFLICT_OVERWRITE_PIM);
+
     // Palm Pre AS2.5 PoomTasks:RTF Fix
     define('ENABLE_PALM_PRE_AS25_CONTACT_FIX',true);
 
