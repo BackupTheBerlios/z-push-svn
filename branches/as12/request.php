@@ -1614,18 +1614,21 @@ function HandleProvision($backend, $devid, $protocolversion) {
 */
                 } else if ($policytype == 'MS-EAS-Provisioning-WBXML') {
 		    $encoder->startTag('Provision:EASProvisionDoc');
-		    $encoder->startTag('Provision:DevicePasswordEnabled');$encoder->content('0');$encoder->endTag();
-		    $encoder->startTag('Provision:AlphanumericDevicePasswordRequired');$encoder->content('0');$encoder->endTag();
-		    $encoder->startTag('Provision:PasswordRecoveryEnabled');$encoder->content('1');$encoder->endTag();
+		    $devicepasswordenable = 0;
+		    $encoder->startTag('Provision:DevicePasswordEnabled');$encoder->content($devicepasswordenable);$encoder->endTag();
+		    if ($devicepasswordenable == 1) {
+			$encoder->startTag('Provision:AlphanumericDevicePasswordRequired');$encoder->content('0');$encoder->endTag();
+			$encoder->startTag('Provision:PasswordRecoveryEnabled');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:MinDevicePasswordLength');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:MaxDevicePasswordFailedAttempts');$encoder->content('5');$encoder->endTag();
+			$encoder->startTag('Provision:AllowSimpleDevicePassword');$encoder->content('1');$encoder->endTag();
+			$encoder->startTag('Provision:DevicePasswordExpiration',false,true); // was 0
+			$encoder->startTag('Provision:DevicePasswordHistory');$encoder->content('0');$encoder->endTag();
+		    }
 		    $encoder->startTag('Provision:DeviceEncryptionEnabled');$encoder->content('0');$encoder->endTag();
 		    $encoder->startTag('Provision:AttachmentsEnabled');$encoder->content('1');$encoder->endTag();
-		    $encoder->startTag('Provision:MinDevicePasswordLength');$encoder->content('1');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxInactivityTimeDeviceLock');$encoder->content('9999');$encoder->endTag();
-		    $encoder->startTag('Provision:MaxDevicePasswordFailedAttempts');$encoder->content('5');$encoder->endTag();
 		    $encoder->startTag('Provision:MaxAttachmentSize');$encoder->content('5000000');$encoder->endTag();
-		    $encoder->startTag('Provision:AllowSimpleDevicePassword');$encoder->content('1');$encoder->endTag();
-		    $encoder->startTag('Provision:DevicePasswordExpiration');$encoder->content('0');$encoder->endTag();
-		    $encoder->startTag('Provision:DevicePasswordHistory');$encoder->content('0');$encoder->endTag();
 		    if ($protocolversion >= 12.1) {
 			$encoder->startTag('Provision:AllowStorageCard');$encoder->content('1');$encoder->endTag();
 			$encoder->startTag('Provision:AllowCamera');$encoder->content('1');$encoder->endTag();
