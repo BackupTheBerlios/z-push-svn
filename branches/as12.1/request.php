@@ -1940,6 +1940,7 @@ function HandleSendMail($backend, $protocolversion) {
 	$decoder = new WBXMLDecoder($input, $zpushdtd);
 	$encoder = new WBXMLEncoder($output, $zpushdtd);
 
+	$mime=false;
         if(!$decoder->getElementStartTag(SYNC_COMPOSEMAIL_SENDMAIL))
 	    $result = 102;
 	while (($tag = 	($decoder->getElementStartTag(SYNC_COMPOSEMAIL_SAVEINSENTITEMS) 	? SYNC_COMPOSEMAIL_SAVEINSENTITEMS :
@@ -1958,11 +1959,19 @@ function HandleSendMail($backend, $protocolversion) {
     			    break;
 		case SYNC_COMPOSEMAIL_MIME :
 			    $mime = $decoder->getElementContent();
-    			    if(!$decoder->getElementEndTag())
-				$result = 102;
+                    	    $element = $decoder->getElement(); // Could be a start tag (iOS4)... Otherwise fetch the endtag
+                            if($element[EN_TYPE] != EN_TYPE_STARTTAG) {
+                                $decoder->ungetElement($element);
+                                if(!$decoder->getElementEndTag())
+				    $result = 102;
+			    } else {
+                                $decoder->ungetElement($element);
+			    }
     			    break;
 	    }
 	}
+	if ($mime === false) 
+    	    $result = 102;
 	if (!isset($data['clientid'])) 
 	    $result = 103;
 
@@ -1998,6 +2007,7 @@ function HandleSmartForward($backend, $protocolversion) {
 	$decoder = new WBXMLDecoder($input, $zpushdtd);
 	$encoder = new WBXMLEncoder($output, $zpushdtd);
 
+	$mime = false;
         if(!$decoder->getElementStartTag(SYNC_COMPOSEMAIL_SMARTFORWARD))
 	    $result = 102;
 	while (($tag = 	($decoder->getElementStartTag(SYNC_COMPOSEMAIL_SAVEINSENTITEMS) 	? SYNC_COMPOSEMAIL_SAVEINSENTITEMS :
@@ -2018,8 +2028,14 @@ function HandleSmartForward($backend, $protocolversion) {
     			    break;
 		case SYNC_COMPOSEMAIL_MIME :
 			    $mime = $decoder->getElementContent();
-    			    if(!$decoder->getElementEndTag())
-				$result = 102;
+                    	    $element = $decoder->getElement(); // Could be a start tag (iOS4)... Otherwise fetch the endtag
+                            if($element[EN_TYPE] != EN_TYPE_STARTTAG) {
+                                $decoder->ungetElement($element);
+                                if(!$decoder->getElementEndTag())
+				    $result = 102;
+			    } else {
+                                $decoder->ungetElement($element);
+			    }
     			    break;
 		case SYNC_COMPOSEMAIL_SOURCE :
 			    while (($tag = 	($decoder->getElementStartTag(SYNC_COMPOSEMAIL_FOLDERID) 	? SYNC_COMPOSEMAIL_FOLDERID :
@@ -2065,6 +2081,8 @@ function HandleSmartForward($backend, $protocolversion) {
 			    break;
 	    }
 	}
+	if ($mime === false) 
+    	    $result = 102;
 	if (!isset($data['clientid'])) 
 	    $result = 103;
 
@@ -2090,6 +2108,7 @@ function HandleSmartForward($backend, $protocolversion) {
 	    $data['folderid'] = $_GET["CollectionId"];
         else
 	    $data['folderid'] = false;
+
         $rfc822 = readStream($input);
 	$result = $backend->SendMail($rfc822, $data, $protocolversion);
     };
@@ -2106,11 +2125,13 @@ function HandleSmartReply($backend, $protocolversion) {
     // In some way there could be a header in XML and not only in _GET...
 
     $data['task'] = 'reply';    
+    $data['replacemime'] = false;
     $result = 1;
     if($protocolversion >= 14.0) {
 	$decoder = new WBXMLDecoder($input, $zpushdtd);
 	$encoder = new WBXMLEncoder($output, $zpushdtd);
 
+	$mime = false;
         if(!$decoder->getElementStartTag(SYNC_COMPOSEMAIL_SMARTREPLY))
 	    $result = 102;
 	while (($tag = 	($decoder->getElementStartTag(SYNC_COMPOSEMAIL_SAVEINSENTITEMS) 	? SYNC_COMPOSEMAIL_SAVEINSENTITEMS :
@@ -2131,8 +2152,14 @@ function HandleSmartReply($backend, $protocolversion) {
     			    break;
 		case SYNC_COMPOSEMAIL_MIME :
 			    $mime = $decoder->getElementContent();
-    			    if(!$decoder->getElementEndTag())
-				$result = 102;
+                    	    $element = $decoder->getElement(); // Could be a start tag (iOS4)... Otherwise fetch the endtag
+                            if($element[EN_TYPE] != EN_TYPE_STARTTAG) {
+                                $decoder->ungetElement($element);
+                                if(!$decoder->getElementEndTag())
+				    $result = 102;
+			    } else {
+                                $decoder->ungetElement($element);
+			    }
     			    break;
 		case SYNC_COMPOSEMAIL_SOURCE :
 			    while (($tag = 	($decoder->getElementStartTag(SYNC_COMPOSEMAIL_FOLDERID) 	? SYNC_COMPOSEMAIL_FOLDERID :
@@ -2172,12 +2199,15 @@ function HandleSmartReply($backend, $protocolversion) {
     				$result = 102;
 			    break;
 		case SYNC_COMPOSEMAIL_REPLACEMIME :
-			    $data['replacemime'] = $decoder->getElementContent();
-    			    if(!$decoder->getElementEndTag())
-    				$result = 102;
+			    $data['replacemime'] = true;
+//    			    if(!$decoder->getElementEndTag())
+//    				$result = 102;
 			    break;
 	    }
 	}
+	if ($mime === false) 
+    	    $result = 102;
+
 	if (!isset($data['clientid'])) 
 	    $result = 103;
 
