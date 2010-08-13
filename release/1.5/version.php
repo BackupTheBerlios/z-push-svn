@@ -41,5 +41,5 @@
 * Consult LICENSE file for details
 ************************************************/
 
-$zpush_version = "SVN checkout";
+$zpush_version = "1.5 beta1 (453)";
 ?>
