@@ -1353,6 +1353,8 @@ function HandleProvision($backend, $devid, $protocolversion) {
     global $output, $input;
 
     $status = SYNC_PROVISION_STATUS_SUCCESS;
+    $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
+    $rwstatusWiped = false;
 
     $phase2 = true;
 
@@ -1374,8 +1376,10 @@ function HandleProvision($backend, $devid, $protocolversion) {
 
         if(!$decoder->getElementEndTag())
             return false;
-    }
 
+        $phase2 = false;
+        $rwstatusWiped = true;
+    }
     else {
 
         if(!$decoder->getElementStartTag(SYNC_PROVISION_POLICIES))
@@ -1430,6 +1434,8 @@ function HandleProvision($backend, $devid, $protocolversion) {
 
             if(!$decoder->getElementEndTag())
                 return false;
+
+            $rwstatusWiped = true;
         }
     }
     if(!$decoder->getElementEndTag()) //provision
@@ -1438,10 +1444,23 @@ function HandleProvision($backend, $devid, $protocolversion) {
     $encoder->StartWBXML();
 
     //set the new final policy key in the backend
-    if (!$phase2) {
-        $policykey = $backend->generatePolicyKey();
-        $backend->setPolicyKey($policykey, $devid);
+    // START ADDED dw2412 Android provisioning fix
+    //in case the send one does not match the one already in backend. If it matches, we
+    //just return the already defined key. (This helps at least the RoadSync 5.0 Client to sync)
+    if ($backend->CheckPolicy($policykey,$devid) == SYNC_PROVISION_STATUS_SUCCESS) {
+        debugLog("Policykey is OK! Will not generate a new one!");
     }
+    else {
+        if (!$phase2) {
+            $policykey = $backend->generatePolicyKey();
+            $backend->setPolicyKey($policykey, $devid);
+        }
+        else {
+            // just create a temporary key (i.e. iPhone OS4 Beta does not like policykey 0 in response)
+            $policykey = $backend->generatePolicyKey();
+        }
+    }
+    // END ADDED dw2412 Android provisioning fix
 
     $encoder->startTag(SYNC_PROVISION_PROVISION);
     {
@@ -1452,9 +1471,11 @@ function HandleProvision($backend, $devid, $protocolversion) {
         $encoder->startTag(SYNC_PROVISION_POLICIES);
             $encoder->startTag(SYNC_PROVISION_POLICY);
 
-            $encoder->startTag(SYNC_PROVISION_POLICYTYPE);
-                   $encoder->content($policytype);
-            $encoder->endTag();
+            if(isset($policytype)) {
+                $encoder->startTag(SYNC_PROVISION_POLICYTYPE);
+                    $encoder->content($policytype);
+                $encoder->endTag();
+            }
 
             $encoder->startTag(SYNC_PROVISION_STATUS);
                 $encoder->content($status);
@@ -1479,14 +1500,12 @@ function HandleProvision($backend, $devid, $protocolversion) {
             $encoder->endTag();//policy
         $encoder->endTag(); //policies
     }
-    $rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
 
 
     //wipe data if status is pending or wiped
     if ($rwstatus == SYNC_PROVISION_RWSTATUS_PENDING || $rwstatus == SYNC_PROVISION_RWSTATUS_WIPED) {
         $encoder->startTag(SYNC_PROVISION_REMOTEWIPE, false, true);
-        $backend->setDeviceRWStatus($user, $auth_pw, $devid, SYNC_PROVISION_RWSTATUS_WIPED);
-        //$rwstatus = SYNC_PROVISION_RWSTATUS_WIPED;
+        $backend->setDeviceRWStatus($user, $auth_pw, $devid, ($rwstatusWiped)?SYNC_PROVISION_RWSTATUS_WIPED:SYNC_PROVISION_RWSTATUS_PENDING);
     }
 
     $encoder->endTag();//provision

@@ -27,25 +27,25 @@ include_once("version.php");
 ini_set('max_execution_time', SCRIPT_TIMEOUT);
 set_time_limit(SCRIPT_TIMEOUT);
 
-debugLog("Start");
-debugLog("Z-Push version: $zpush_version");
-debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
-
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
 
 // The script must always be called with authorisation info
 if(!isset($_SERVER['PHP_AUTH_PW'])) {
+    debugLog("Start");
+    debugLog("Z-Push version: $zpush_version");
+    debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
     header("WWW-Authenticate: Basic realm=\"ZPush\"");
     header("HTTP/1.1 401 Unauthorized");
     print("Access denied. Please send authorisation information");
     debugLog("Access denied: no password sent.");
-	debugLog("end");
-	debugLog("--------");
+    debugLog("end");
+    debugLog("--------");
     return;
 }
 
 // split username & domain if received as one
+global $auth_user;
 $pos = strrpos($_SERVER['PHP_AUTH_USER'], '\\');
 if($pos === false){
     $auth_user = $_SERVER['PHP_AUTH_USER'];
@@ -55,6 +55,10 @@ if($pos === false){
     $auth_user = substr($_SERVER['PHP_AUTH_USER'],$pos+1);
 }
 $auth_pw = $_SERVER['PHP_AUTH_PW'];
+
+debugLog("Start");
+debugLog("Z-Push version: $zpush_version");
+debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
 
 $cmd = $user = $devid = $devtype = "";
 
@@ -146,12 +150,12 @@ if($backend->Setup($user, $devid, $protocolversion) == false) {
     return;
 }
 
-// check policy header 
-if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] != 'OPTIONS' && $cmd != 'Ping' && $cmd != 'Provision' && 
+// check policy header
+if (PROVISIONING === true && $_SERVER["REQUEST_METHOD"] == 'POST' && $cmd != 'Ping' && $cmd != 'Provision' &&
     $backend->CheckPolicy($policykey, $devid) != SYNC_PROVISION_STATUS_SUCCESS &&
     (LOOSE_PROVISIONING === false ||
-    (LOOSE_PROVISIONING === true && isset($requestheaders["X-MS-PolicyKey"])))) {    	
-    	
+    (LOOSE_PROVISIONING === true && isset($requestheaders["X-MS-PolicyKey"])))) {
+
     header("HTTP/1.1 449 Retry after sending a PROVISION command");
     header("MS-Server-ActiveSync: 6.5.7638.1");
     header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5");
@@ -192,6 +196,7 @@ switch($_SERVER["REQUEST_METHOD"]) {
         }
         break;
     case 'GET':
+        debugLog("GET request from agent: ". $useragent);
         header("Content-type: text/html");
         print("<BODY>\n");
         print("<h3>GET not supported</h3><p>\n");
