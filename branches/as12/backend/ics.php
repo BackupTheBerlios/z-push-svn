@@ -2004,7 +2004,20 @@ class PHPContentsImportProxy extends MAPIMapping {
 	    }
 	    $message->airsyncbasebody = new SyncAirSyncBaseBody();
 	    debugLog("airsyncbasebody!");
-    	    if (isset($bodypreference[3]) && 
+	    if (isset($bodypreference[4]) && isset($mstream)) {
+            	$mstreamcontent = mapi_stream_read($mstream, MAX_EMBEDDED_SIZE);
+		$message->airsyncbasebody->type = 4;
+            	if (isset($bodypreference[4]["TruncationSize"])) {
+            	    $hdrend = strpos("\r\n\r\n",$mstreamcontent);
+            	    $message->airsyncbasebody->data = substr($mstreamcontent,0,$hdrend+$bodypreference[4]["TruncationSize"]);
+            	} else {
+		    $message->airsyncbasebody->data = $mstreamcontent;
+            	}
+            	if (strlen ($message->airsyncbasebody->data) < $mstreamstat["cb"]) {
+		    $message->airsyncbasebody->truncated = 1;
+            	}
+            	$message->airsyncbasebody->estimateddatasize = strlen($mstreamcontent);
+    	    } else if (isset($bodypreference[3]) && 
     		$message->airsyncbasenativebodytype==3) {
 		$message->airsyncbasebody->type = 3;
 		$rtf = mapi_openproperty($mapimessage, PR_RTF_COMPRESSED);
@@ -2012,7 +2025,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		$message->airsyncbasebody->estimateddatasize = strlen($rtf);
 		$message->airsyncbasebody->truncated = 0;
 		unset($message->airsyncbasebody->truncated);
-		debugLog("RTFL Body!");
+		debugLog("RTF Body!");
     	    } elseif (isset($bodypreference[2]) && 
     		$message->airsyncbasenativebodytype==2) {
 		$message->airsyncbasebody->type = 2;
@@ -2304,7 +2317,9 @@ class PHPContentsImportProxy extends MAPIMapping {
         $message->cc = implode(", ", $cc);
 
 	// CHANGED dw2412 to not have this problem at my system with mapi_inetmapi_imtoinet segfault
-        if (1==0 && $mimesupport == 2 && function_exists("mapi_inetmapi_imtoinet")) {
+        if ($mimesupport == 2 && function_exists("mapi_inetmapi_imtoinet") && 
+    	    !isset($message->airsyncbasebody) && 
+	    !defined('ICS_IMTOINET_SEGFAULT')) {
             $addrBook = mapi_openaddressbook($this->_session);
             $mstream = mapi_inetmapi_imtoinet($this->_session, $addrBook, $mapimessage, array());
 
