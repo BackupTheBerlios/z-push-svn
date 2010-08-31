@@ -1616,7 +1616,7 @@ function HandleProvision($backend, $devid, $protocolversion) {
 		    $encoder->startTag('Provision:EASProvisionDoc');
 		    $devicepasswordenable = 0;
 		    $encoder->startTag('Provision:DevicePasswordEnabled');$encoder->content($devicepasswordenable);$encoder->endTag();
-		    if ($devicepasswordenable == 1) {
+		    if ($devicepasswordenable == 1 || (defined('NOKIA_DETECTED') && NOKIA_DETECTED == true)) {
 			$encoder->startTag('Provision:AlphanumericDevicePasswordRequired');$encoder->content('0');$encoder->endTag();
 			$encoder->startTag('Provision:PasswordRecoveryEnabled');$encoder->content('1');$encoder->endTag();
 			$encoder->startTag('Provision:MinDevicePasswordLength');$encoder->content('1');$encoder->endTag();

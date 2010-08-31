@@ -146,6 +146,7 @@ if (isset($requestheaders["User-Agent"])) {
 if (strncmp($useragent,"Nokia",5) == 0) {
     debugLog("Nokia detected! Limit recipients to 100!");
     define("LIMIT_RECIPIENTS",100);
+    define("NOKIA_DETECTED",true);
 }
 
 // Load our backend driver
