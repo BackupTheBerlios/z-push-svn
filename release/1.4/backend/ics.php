@@ -141,8 +141,8 @@ class MAPIMapping {
                             "customerid" => PR_CUSTOMER_ID,
                             "governmentid" => PR_GOVERNMENT_ID_NUMBER,
                             "imaddress" => "PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8062",
-                            // imaddress2
-                            // imaddress3
+                            "imaddress2" => "PT_STRING8:{71035549-0739-4DCB-9163-00F0580DBBDF}:IMAddress2",
+                            "imaddress3" => "PT_STRING8:{71035549-0739-4DCB-9163-00F0580DBBDF}:IMAddress3",
                             "managername" => PR_MANAGER_NAME,
                             "companymainphone" => PR_COMPANY_MAIN_PHONE_NUMBER,
                             "accountname" => PR_ACCOUNT,
@@ -703,9 +703,9 @@ class ImportContentsChangesICS extends MAPIMapping {
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_LONG:{00062008-0000-0000-C000-000000000046}:0x8510") => 369));
 
-        // Set reminder boolean to 'true' if reminderminutes > 30
+        // Set reminder boolean to 'true' if reminder is set
         mapi_setprops($mapimessage, array(
-            $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) && $appointment->reminder > 0 ? true : false));
+            $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) ? true : false));
 
         if(isset($appointment->reminder) && $appointment->reminder > 0) {
             // Set 'flagdueby' to correct value (start - reminderminutes)
@@ -2480,7 +2480,7 @@ class BackendICS {
 
     function GetHierarchy() {
         $folders = array();
-        $himp= new PHPHierarchyImportProxy($this->_defaultstore, &$folders);
+        $himp= new PHPHierarchyImportProxy($this->_defaultstore, false);
 
         $rootfolder = mapi_msgstore_openentry($this->_defaultstore);
         $rootfolderprops = mapi_getprops($rootfolder, array(PR_SOURCE_KEY));

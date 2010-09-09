@@ -417,7 +417,7 @@ class SyncTask extends Streamer {
                       SYNC_POOMTASKS_DEADOCCUR => array (STREAMER_VAR => "deadoccur"),
                       SYNC_POOMTASKS_REMINDERSET => array (STREAMER_VAR => "reminderset"),
                       SYNC_POOMTASKS_REMINDERTIME => array (STREAMER_VAR => "remindertime", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
-                      SYNC_POOMTASKS_SENSITIVITY => array (STREAMER_VAR => "sensitiviy"),
+                      SYNC_POOMTASKS_SENSITIVITY => array (STREAMER_VAR => "sensitivity"),
                       SYNC_POOMTASKS_STARTDATE => array (STREAMER_VAR => "startdate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
                       SYNC_POOMTASKS_UTCSTARTDATE => array (STREAMER_VAR => "utcstartdate", STREAMER_TYPE => STREAMER_TYPE_DATE_DASHES),
                       SYNC_POOMTASKS_SUBJECT => array (STREAMER_VAR => "subject"),
