@@ -761,7 +761,7 @@ function HandleSync($backend, $protocolversion, $devid) {
                     }
                     foreach($collection["fetchids"] as $id) {
 			// CHANGED dw2412 to support bodypreference
-                        $data = $backend->Fetch($collection["collectionid"], $id, $collection["BodyPreference"], $mimesupport);
+                        $data = $backend->Fetch($collection["collectionid"], $id, (isset($collection["BodyPreference"]) ? $collection["BodyPreference"] : false), $mimesupport);
                         if($data !== false) {
                             $encoder->startTag(SYNC_FETCH);
                             $encoder->startTag(SYNC_SERVERENTRYID);
