@@ -27,7 +27,7 @@
                         "/usr/share/php5/" . PATH_SEPARATOR .
                         "/usr/share/pear/");
 
-    define('STATE_DIR', BASE_PATH.'/state');
+    define('STATE_DIR', 'state');
 
     // Try to set unlimited timeout
     define('SCRIPT_TIMEOUT', 0);
