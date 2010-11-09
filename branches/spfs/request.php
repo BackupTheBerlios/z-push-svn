@@ -200,7 +200,7 @@ function HandleFolderSync($backend, $protocolversion) {
 
     // additional information about already seen folders
     $sfolderstate = $statemachine->getSyncState("s".$synckey);
-    
+
     if (!$sfolderstate) {
         $foldercache = array();
         if ($sfolderstate === false)
@@ -216,11 +216,11 @@ function HandleFolderSync($backend, $protocolversion) {
     		$foldercache = $tmp;
     	}
     }
-        
+
     // We will be saving the sync state under 'newsynckey'
     $newsynckey = $statemachine->getNewSyncKey($synckey);
     $changes = false;
-    
+
     if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_CHANGES)) {
         // Ignore <Count> if present
         if($decoder->getElementStartTag(SYNC_FOLDERHIERARCHY_COUNT)) {
@@ -257,7 +257,7 @@ function HandleFolderSync($backend, $protocolversion) {
                     $serverid = $importer->ImportFolderDeletion($folder);
                     $changes = true;
                     // remove folder from the folderchache
-                    if (array_key_exists($serverid, $foldercache)) 
+                    if (array_key_exists($serverid, $foldercache))
                         unset($foldercache[$serverid]);
                     break;
             }
@@ -293,6 +293,20 @@ function HandleFolderSync($backend, $protocolversion) {
     // Output our WBXML reply now
     $encoder->StartWBXML();
 
+    // Simple Public Folder Sync
+    global $pubfolders;
+    if (!empty($pubfolders)) {
+        foreach ($pubfolders as $pf) {
+            $publicf = new SyncFolder();
+            $publicf->type = $pf['type'];
+            $publicf->displayname = $pf['name'];;
+            $publicf->parentid = "0";
+            $publicf->serverid = $pf['puid'];
+            $publicf->nodebug = true;
+            $importer->ImportFolderChange($publicf);
+        }
+    }
+
     $encoder->startTag(SYNC_FOLDERHIERARCHY_FOLDERSYNC);
     {
         $encoder->startTag(SYNC_FOLDERHIERARCHY_STATUS);
@@ -312,13 +326,13 @@ function HandleFolderSync($backend, $protocolversion) {
 
             if(count($importer->changed) > 0) {
                 foreach($importer->changed as $folder) {
-                	// send a modify flag if the folder is already known on the device
-                	if (isset($folder->serverid) && array_key_exists($folder->serverid, $foldercache) !== false)
+                    // send a modify flag if the folder is already known on the device
+                    if (isset($folder->serverid) && array_key_exists($folder->serverid, $foldercache) !== false)
                         $encoder->startTag(SYNC_FOLDERHIERARCHY_UPDATE);
-                	else 
+                    else
                         $encoder->startTag(SYNC_FOLDERHIERARCHY_ADD);
                     $foldercache[$folder->serverid] = $folder;
-                    
+
                     $folder->encode($encoder);
                     $encoder->endTag();
                 }
@@ -333,7 +347,7 @@ function HandleFolderSync($backend, $protocolversion) {
                     $encoder->endTag();
 
                     // remove folder from the folderchache
-                    if (array_key_exists($folder, $foldercache)) 
+                    if (array_key_exists($folder, $foldercache))
                         unset($foldercache[$folder]);
                 }
             }
@@ -626,7 +640,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 
                     $changecount = $exporter->GetChangeCount();
             	}
-            	
+
                 // Get a new sync key to output to the client if any changes have been requested or will be send
                 if (isset($collection["importedchanges"]) || $changecount > 0 || $collection["synckey"] == "0")
                     $collection["newsynckey"] = $statemachine->getNewSyncKey($collection["synckey"]);

@@ -2515,12 +2515,12 @@ class BackendICS {
 
     function GetContentsImporter($folderid) {
         $this->_importedFolders[] = $folderid;
-        return new ImportContentsChangesICS($this->_session, $this->_defaultstore, hex2bin($folderid));
+        return new ImportContentsChangesICS($this->_session, $this->_getMessageStoreForFolder($this->_session, $folderid), hex2bin($folderid));
     }
 
     function GetExporter($folderid = false) {
         if($folderid !== false)
-            return new ExportChangesICS($this->_session, $this->_defaultstore, hex2bin($folderid));
+            return new ExportChangesICS($this->_session, $this->_getMessageStoreForFolder($this->_session, $folderid), hex2bin($folderid));
         else
             return new ExportChangesICS($this->_session, $this->_defaultstore);
     }
@@ -2988,8 +2988,22 @@ class BackendICS {
 
     // ----------------------------------------------------------
 
-    // Open the store marked with PR_DEFAULT_STORE = TRUE
-    function _openDefaultMessageStore($session)
+    // Get store for folderID
+
+    function _getMessageStoreForFolder($session, $folderid) {
+        global $pubfolders;
+
+        if (!empty ($pubfolders)) {
+            foreach($pubfolders as $pf)
+                if ($folderid == $pf['puid'])
+                    return $this->_openDefaultMessageStore($this->_session, true);
+        }
+
+        return $this->_defaultstore;
+    }
+
+    // Open the store marked with PR_DEFAULT_STORE = TRUE or the public folder
+    function _openDefaultMessageStore($session, $return_public = false)
     {
         // Find the default store
         $storestables = mapi_getmsgstorestable($session);
@@ -3000,8 +3014,14 @@ class BackendICS {
             $rows = mapi_table_queryallrows($storestables, array(PR_ENTRYID, PR_DEFAULT_STORE, PR_MDB_PROVIDER));
 
             foreach($rows as $row) {
-                if(isset($row[PR_DEFAULT_STORE]) && $row[PR_DEFAULT_STORE] == true) {
+                if(!$return_public && isset($row[PR_DEFAULT_STORE]) && $row[PR_DEFAULT_STORE] == true) {
                     $entryid = $row[PR_ENTRYID];
+                    debugLog("_openDefaultMessageStore: default STORE");
+                    break;
+                }
+                if ($return_public && isset($row[PR_MDB_PROVIDER]) && $row[PR_MDB_PROVIDER] == ZARAFA_STORE_PUBLIC_GUID) {
+                    $entryid = $row[PR_ENTRYID];
+                    debugLog("_openDefaultMessageStore: PUBLIC STORE");
                     break;
                 }
             }

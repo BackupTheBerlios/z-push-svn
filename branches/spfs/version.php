@@ -6,10 +6,10 @@
 *
 * Created   :   18.04.2008
 *
-* � Zarafa Deutschland GmbH, www.zarafaserver.de
+* (C) Zarafa Deutschland GmbH, www.zarafaserver.de
 * This file is distributed under GPL v2.
 * Consult LICENSE file for details
 ************************************************/
 
-$zpush_version = "1.4.3RC 486";
+$zpush_version = "1.4.3RC 486 (spfs)";
 ?>

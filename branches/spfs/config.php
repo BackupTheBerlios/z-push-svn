@@ -37,13 +37,13 @@
 
     // Device Provisioning
     define('PROVISIONING', true);
-    
-    // This option allows the 'loose enforcement' of the provisioning policies for older 
+
+    // This option allows the 'loose enforcement' of the provisioning policies for older
     // devices which don't support provisioning (like WM 5 and HTC Android Mail) - dw2412 contribution
     // false (default) - Enforce provisioning for all devices
-    // true - allow older devices, but enforce policies on devices which support it  
-    define('LOOSE_PROVISIONING', false); 
-    
+    // true - allow older devices, but enforce policies on devices which support it
+    define('LOOSE_PROVISIONING', false);
+
     // The data providers that we are using (see configuration below)
     $BACKEND_PROVIDER = "BackendICS";
 
@@ -85,5 +85,31 @@
     //  BackendVCDir settings
     // **********************
     define('VCARDDIR_DIR', '/home/%u/.kde/share/apps/kabc/stdvcf');
+
+    // **************************
+    //  Simple Public Folder Sync
+    // **************************
+    // type: supported types are:
+    //          SYNC_FOLDER_TYPE_USER_CONTACT
+    //          SYNC_FOLDER_TYPE_USER_APPOINTMENT
+    //          SYNC_FOLDER_TYPE_USER_TASK
+    //          SYNC_FOLDER_TYPE_USER_MAIL
+    // name: displayname on the mobile device
+    // puid: folder sourcekey in the public folder
+
+    // NOTES:
+    // - use the publicfolders.php script to get a list of possible folders
+    // - only a few devices (like iPhones) support this feature
+    // - all Z-Push users must have full write permissions to the synchronized folders
+
+    global $pubfolders;
+    $pubfolders = array();
+/*
+    $pubfolders[] = array(
+        'type' => SYNC_FOLDER_TYPE_USER_CONTACT,
+        'name' => "Public Contacts",
+        'puid' => "",
+    );
+*/
 
 ?>
