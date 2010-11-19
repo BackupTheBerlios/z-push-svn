@@ -171,8 +171,8 @@ class MAPIMapping {
                             "customerid" => PR_CUSTOMER_ID,
                             "governmentid" => PR_GOVERNMENT_ID_NUMBER,
                             "imaddress" => "PT_STRING8:{00062004-0000-0000-C000-000000000046}:0x8062",
-                            // imaddress2
-                            // imaddress3
+                            "imaddress2" => "PT_STRING8:{71035549-0739-4DCB-9163-00F0580DBBDF}:IMAddress2",
+                            "imaddress3" => "PT_STRING8:{71035549-0739-4DCB-9163-00F0580DBBDF}:IMAddress3",
                             "managername" => PR_MANAGER_NAME,
                             "companymainphone" => PR_COMPANY_MAIN_PHONE_NUMBER,
                             "accountname" => PR_ACCOUNT,
@@ -235,6 +235,8 @@ class MAPIMapping {
                             "complete" => "PT_BOOLEAN:{00062003-0000-0000-C000-000000000046}:0x811C",
                             "datecompleted" => "PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x810F",
                             "duedate" => "PT_SYSTIME:{00062003-0000-0000-C000-000000000046}:0x8105",
+                            "utcduedate" => "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8517",
+                            "utcstartdate" => "PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8516",
                             "importance" => PR_IMPORTANCE,
                             // recurrence
                             // regenerate
@@ -536,13 +538,21 @@ class ImportContentsChangesICS extends MAPIMapping {
         mapi_importcontentschanges_config($this->importer, $stream, $flags);
         $this->_flags = $flags;
 
+        // conflicting messages can be cached here
+        $this->_memChanges = new ImportContentsChangesMem();
+    }
+
+    function LoadConflicts($mclass, $filtertype, $state) {
+        if (!isset($this->_session) || !isset($this->_store) || !isset($this->_folderid)) {
+            debugLog("Warning: can not load changes for conflict detections. Session, store or folder information not available");
+            return false;
+        }
+
         // configure an exporter so we can detect conflicts
         $exporter = new ExportChangesICS($this->_session, $this->_store, $this->_folderid);
-        $memImporter = new ImportContentsChangesMem();
-        $exporter->Config(&$memImporter, false, false, $state, 0, 0);
+        $exporter->Config(&$this->_memChanges, $mclass, $filtertype, $state, 0, 0);
         while(is_array($exporter->Synchronize()));
-        $this->_memChanges = $memImporter;
-
+        return true;
     }
 
     function ImportMessageChange($id, $message) {
@@ -560,7 +570,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 
             // check for conflicts
             if($this->_memChanges->isChanged($id)) {
-                if ($this->_flags == SYNC_CONFLICT_OVERWRITE_PIM) {
+                if ($this->_flags & SYNC_CONFLICT_OVERWRITE_PIM) {
                     debugLog("Conflict detected. Data from PIM will be dropped! Server overwrites PIM.");
                     return false;
                 }
@@ -610,20 +620,29 @@ class ImportContentsChangesICS extends MAPIMapping {
     // we would implement this via the 'offical' importmessagemove() function on the ICS importer, but the
     // Zarafa importer does not support this. Therefore we currently implement it via a standard mapi
     // call. This causes a mirror 'add/delete' to be sent to the PDA at the next sync.
+    // Manfred, 2010-10-21. For some mobiles import was causing duplicate messages in the destination folder
+    // (Mantis #202). Therefore we will create a new message in the destination folder, copy properties
+    // of the source message to the new one and then delete the source message.
     function ImportMessageMove($id, $newfolder) {
-        $sourcekey = hex2bin($id);
-        $parentsourcekey = $this->_folderid;
-
+        if (strtolower($newfolder) == strtolower(bin2hex($this->_folderid)) ) {
+            //TODO status value 4
+            debugLog("Source and destination are equal");
+            return false;
+        }
         // Get the entryid of the message we're moving
-        $entryid = mapi_msgstore_entryidfromsourcekey($this->_store, $parentsourcekey, $sourcekey);
-
+        $entryid = mapi_msgstore_entryidfromsourcekey($this->_store, $this->_folderid, hex2bin($id));
         if(!$entryid) {
             debugLog("Unable to resolve source message id");
             return false;
         }
 
+        //open the source message
+        $srcmessage = mapi_msgstore_openentry($this->_store, $entryid);
+        if (!$srcmessage) {
+            debugLog("Unable to open source message:".sprintf("%x", mapi_last_hresult()));
+            return false;
+        }
         $dstentryid = mapi_msgstore_entryidfromsourcekey($this->_store, hex2bin($newfolder));
-
         if(!$dstentryid) {
             debugLog("Unable to resolve destination folder");
             return false;
@@ -635,24 +654,58 @@ class ImportContentsChangesICS extends MAPIMapping {
             return false;
         }
 
-        // Open the source folder (we just open the root because it doesn't matter which folder you open as a source
-        // folder)
-        $root = mapi_msgstore_openentry($this->_store);
+        $newmessage = mapi_folder_createmessage($dstfolder);
+        if (!$newmessage) {
+            debugLog("Unable to create message in destination folder:".sprintf("%x", mapi_last_hresult()));
+            return false;
+        }
+        // Copy message
+        mapi_copyto($srcmessage, array(), array(), $newmessage);
+        if (mapi_last_hresult()){
+            debugLog("copy to failed:".sprintf("%x", mapi_last_hresult()));
+            return false;
+        }
 
-        // Do the actual move
-        return mapi_folder_copymessages($root, array($entryid), $dstfolder, MESSAGE_MOVE);
+        $srcfolderentryid = mapi_msgstore_entryidfromsourcekey($this->_store, $this->_folderid);
+        if(!$srcfolderentryid) {
+            debugLog("Unable to resolve source folder");
+            return false;
+        }
+
+        $srcfolder = mapi_msgstore_openentry($this->_store, $srcfolderentryid);
+        if (!$srcfolder) {
+            debugLog("Unable to open source folder:".sprintf("%x", mapi_last_hresult()));
+            return false;
+        }
+
+        // Save changes
+        mapi_savechanges($newmessage);
+        if (mapi_last_hresult()){
+            debugLog("mapi_savechanges failed:".sprintf("%x", mapi_last_hresult()));
+            return false;
+        }
+
+        // Delete the old message
+        if (!mapi_folder_deletemessages($srcfolder, array($entryid))) {
+            debugLog("Failed to delete source message. Possible duplicates");
+        }
+
+        $sourcekeyprops = mapi_getprops($newmessage, array (PR_SOURCE_KEY));
+        if (isset($sourcekeyprops[PR_SOURCE_KEY]) && $sourcekeyprops[PR_SOURCE_KEY]) return  bin2hex($sourcekeyprops[PR_SOURCE_KEY]);
+
+        return false;
     }
 
     function GetState() {
-    	if(!isset($this->statestream))
+        if(!isset($this->statestream))
             return false;
 
         if (function_exists("mapi_importcontentschanges_updatestate")) {
-        	debugLog("using mapi_importcontentschanges_updatestate");
-	        if(mapi_importcontentschanges_updatestate($this->importer, $this->statestream) != true) {
-	            debugLog("Unable to update state: " . sprintf("%X", mapi_last_hresult()));
-	            return false;
-	        }
+            debugLog("using mapi_importcontentschanges_updatestate");
+            if(mapi_importcontentschanges_updatestate($this->importer, $this->statestream) != true) {
+                debugLog("Unable to update state: " . sprintf("%X", mapi_last_hresult()));
+                return false;
+            }
         }
 
         mapi_stream_seek($this->statestream, 0, STREAM_SEEK_SET);
@@ -761,9 +814,9 @@ class ImportContentsChangesICS extends MAPIMapping {
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_LONG:{00062008-0000-0000-C000-000000000046}:0x8510") => 369));
 
-        // Set reminder boolean to 'true' if reminderminutes > 30
+        // Set reminder boolean to 'true' if reminder is set
         mapi_setprops($mapimessage, array(
-            $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) && $appointment->reminder > 0 ? true : false));
+            $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) ? true : false));
 
         if(isset($appointment->reminder) && $appointment->reminder > 0) {
             // Set 'flagdueby' to correct value (start - reminderminutes)
@@ -1614,39 +1667,39 @@ class PHPContentsImportProxy extends MAPIMapping {
                 $message->meetingrequest->globalobjid = base64_encode($props[$goidtag]);
 
             // Set Timezone
-			if(isset($props[$timezonetag]))
-			    $tz = $this->_getTZFromMAPIBlob($props[$timezonetag]);
-			else
-			    $tz = $this->_getGMTTZ();
+            if(isset($props[$timezonetag]))
+                $tz = $this->_getTZFromMAPIBlob($props[$timezonetag]);
+            else
+                $tz = $this->_getGMTTZ();
 
-	        $message->meetingrequest->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
+            $message->meetingrequest->timezone = base64_encode($this->_getSyncBlobFromTZ($tz));
 
             // send basedate if exception
             if(isset($props[$recReplTime]) || (isset($props[$lidIsException]) && $props[$lidIsException] == true)) {
-            	if (isset($props[$recReplTime])){
-            	   $basedate = $props[$recReplTime];
-            	   $message->meetingrequest->recurrenceid = $this->_getGMTTimeByTZ($basedate, $this->_getGMTTZ());
-            	}
-            	else {
-            	   if (!isset($props[$goidtag]) || !isset($props[$recurStartTime]) || !isset($props[$timezonetag]))
-            	       debugLog("Missing property to set correct basedate for exception");
-            	   else {
-            	       $basedate = extractBaseDate($props[$goidtag], $props[$recurStartTime]);
-            	       $message->meetingrequest->recurrenceid = $this->_getGMTTimeByTZ($basedate, $tz);
-            	   }
-            	}
+                if (isset($props[$recReplTime])){
+                   $basedate = $props[$recReplTime];
+                   $message->meetingrequest->recurrenceid = $this->_getGMTTimeByTZ($basedate, $this->_getGMTTZ());
+                }
+                else {
+                   if (!isset($props[$goidtag]) || !isset($props[$recurStartTime]) || !isset($props[$timezonetag]))
+                       debugLog("Missing property to set correct basedate for exception");
+                   else {
+                       $basedate = extractBaseDate($props[$goidtag], $props[$recurStartTime]);
+                       $message->meetingrequest->recurrenceid = $this->_getGMTTimeByTZ($basedate, $tz);
+                   }
+                }
             }
 
             // Organizer is the sender
             $message->meetingrequest->organizer = $message->from;
 
             // Process recurrence
-	        if(isset($props[$isrecurringtag]) && $props[$isrecurringtag]) {
-	            $myrec = new SyncMeetingRequestRecurrence();
-	            // get recurrence -> put $message->meetingrequest as message so the 'alldayevent' is set correctly
-	            $this->_getRecurrence($mapimessage, $props, $message->meetingrequest, $myrec, $tz);
-	            $message->meetingrequest->recurrences = array($myrec);
-	        }
+            if(isset($props[$isrecurringtag]) && $props[$isrecurringtag]) {
+                $myrec = new SyncMeetingRequestRecurrence();
+                // get recurrence -> put $message->meetingrequest as message so the 'alldayevent' is set correctly
+                $this->_getRecurrence($mapimessage, $props, $message->meetingrequest, $myrec, $tz);
+                $message->meetingrequest->recurrences = array($myrec);
+            }
 
             // Force the 'alldayevent' in the object at all times. (non-existent == 0)
             if(!isset($message->meetingrequest->alldayevent) || $message->meetingrequest->alldayevent == "")
@@ -2286,6 +2339,10 @@ class BackendICS {
 
         $status = SYNC_PROVISION_STATUS_SUCCESS;
 
+        //generate some devid if it is not set,
+        //in order to be able to remove it later via mdm
+        if (!isset($devid) || !$devid) $devid = $this->generatePolicyKey();
+
         $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
 
         if ($user_policykey != $policykey) {
@@ -2506,24 +2563,40 @@ class BackendICS {
         $items['searchtotal'] = $querycnt;
 
         if ($querycnt > 0)
-            $abentries = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS, PR_BUSINESS_TELEPHONE_NUMBER), $rangestart, $querylimit);
+            $abentries = mapi_table_queryrows($table, array(PR_ACCOUNT, PR_DISPLAY_NAME, PR_SMTP_ADDRESS, PR_BUSINESS_TELEPHONE_NUMBER, PR_GIVEN_NAME, PR_SURNAME, PR_MOBILE_TELEPHONE_NUMBER, PR_HOME_TELEPHONE_NUMBER), $rangestart, $querylimit);
 
         for ($i = 0; $i < $querylimit; $i++) {
-            $items[$i][SYNC_GAL_ALIAS] = w2u($abentries[$i][PR_ACCOUNT]);
             $items[$i][SYNC_GAL_DISPLAYNAME] = w2u($abentries[$i][PR_DISPLAY_NAME]);
 
             if (strlen(trim($items[$i][SYNC_GAL_DISPLAYNAME])) == 0)
-                $items[$i][SYNC_GAL_DISPLAYNAME] = $items[$i][SYNC_GAL_ALIAS];
+                $items[$i][SYNC_GAL_DISPLAYNAME] = w2u($abentries[$i][PR_ACCOUNT]);
 
+            $items[$i][SYNC_GAL_ALIAS] = $items[$i][SYNC_GAL_DISPLAYNAME];
             //it's not possible not get first and last name of an user
             //from the gab and user functions, so we just set lastname
             //to displayname and leave firstname unset
-            $items[$i][SYNC_GAL_LASTNAME] = $items[$i][SYNC_GAL_DISPLAYNAME];
+            //this was changed in Zarafa 6.40, so we try to get first and
+            //last name and fall back to the old behaviour if these values are not set
+            if (isset($abentries[$i][PR_GIVEN_NAME]))
+                $items[$i][SYNC_GAL_FIRSTNAME] = w2u($abentries[$i][PR_GIVEN_NAME]);
+            if (isset($abentries[$i][PR_SURNAME]))
+                $items[$i][SYNC_GAL_LASTNAME] = w2u($abentries[$i][PR_SURNAME]);
+
+            if (!isset($items[$i][SYNC_GAL_LASTNAME])) $items[$i][SYNC_GAL_LASTNAME] = $items[$i][SYNC_GAL_DISPLAYNAME];
 
             $items[$i][SYNC_GAL_EMAILADDRESS] = w2u($abentries[$i][PR_SMTP_ADDRESS]);
-            //check if an user has a office number or it might produce warnings in the log
+            //check if an user has an office number or it might produce warnings in the log
             if (isset($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]))
                 $items[$i][SYNC_GAL_OFFICE] = w2u($abentries[$i][PR_BUSINESS_TELEPHONE_NUMBER]);
+            //check if an user has a mobile number or it might produce warnings in the log
+            if (isset($abentries[$i][PR_MOBILE_TELEPHONE_NUMBER]))
+                $items[$i][SYNC_GAL_MOBILEPHONE] = w2u($abentries[$i][PR_MOBILE_TELEPHONE_NUMBER]);
+            //check if an user has a home number or it might produce warnings in the log
+            if (isset($abentries[$i][PR_HOME_TELEPHONE_NUMBER]))
+                $items[$i][SYNC_GAL_HOMEPHONE] = w2u($abentries[$i][PR_HOME_TELEPHONE_NUMBER]);
+
+            if (isset($abentries[$i][PR_ACCOUNT]))
+                $items[$i][SYNC_GAL_COMPANY] = w2u($abentries[$i][PR_ACCOUNT]);
         }
         return $items;
     }
@@ -2547,7 +2620,7 @@ class BackendICS {
 
     function GetHierarchy() {
         $folders = array();
-        $himp= new PHPHierarchyImportProxy($this->_defaultstore, &$folders);
+        $himp= new PHPHierarchyImportProxy($this->_defaultstore, false);
 
         $rootfolder = mapi_msgstore_openentry($this->_defaultstore);
         $rootfolderprops = mapi_getprops($rootfolder, array(PR_SOURCE_KEY));
@@ -2571,10 +2644,10 @@ class BackendICS {
         if (WBXML_DEBUG == true)
             debugLog("SendMail: forward: $forward   reply: $reply   parent: $parent\n" . $rfc822);
 
-        $mimeParams = array('decode_headers' => false,
+        $mimeParams = array('decode_headers' => true,
                             'decode_bodies' => true,
                             'include_bodies' => true,
-					        'charset' => 'utf-8');
+                            'charset' => 'utf-8');
 
         $mimeObject = new Mail_mimeDecode($rfc822);
         $message = $mimeObject->decode($mimeParams);
@@ -2595,7 +2668,7 @@ class BackendICS {
         $mapimessage = mapi_folder_createmessage($outbox);
 
         mapi_setprops($mapimessage, array(
-            PR_SUBJECT => u2wi($mimeObject->_decodeHeader(isset($message->headers["subject"])?$message->headers["subject"]:"")),
+            PR_SUBJECT => u2wi(isset($message->headers["subject"])?$message->headers["subject"]:""),
             PR_SENTMAIL_ENTRYID => $storeprops[PR_IPM_SENTMAIL_ENTRYID],
             PR_MESSAGE_CLASS => "IPM.Note",
             PR_MESSAGE_DELIVERY_TIME => time()
@@ -2643,7 +2716,7 @@ class BackendICS {
                     $mapirecip[PR_ADDRTYPE] = "SMTP";
                     $mapirecip[PR_EMAIL_ADDRESS] = $addr->mailbox . "@" . $addr->host;
                     if(isset($addr->personal) && strlen($addr->personal) > 0)
-                        $mapirecip[PR_DISPLAY_NAME] = u2wi($mimeObject->_decodeHeader($addr->personal));
+                        $mapirecip[PR_DISPLAY_NAME] = u2wi($addr->personal);
                     else
                         $mapirecip[PR_DISPLAY_NAME] = $mapirecip[PR_EMAIL_ADDRESS];
                     $mapirecip[PR_RECIPIENT_TYPE] = $type;
@@ -3073,9 +3146,9 @@ class BackendICS {
             $filename = $part->d_parameters["filename"];
         // filenames with more than 63 chars as splitted several strings
         else if (isset($part->d_parameters["filename*0"])) {
-        	for ($i=0; $i< count($part->d_parameters); $i++)
-        	   if (isset($part->d_parameters["filename*".$i]))
-        	       $filename .= $part->d_parameters["filename*".$i];
+            for ($i=0; $i< count($part->d_parameters); $i++)
+               if (isset($part->d_parameters["filename*".$i]))
+                   $filename .= $part->d_parameters["filename*".$i];
         }
         else
             $filename = "untitled";
