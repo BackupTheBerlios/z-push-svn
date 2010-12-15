@@ -1,0 +1,86 @@
+This is a z-push backend connector for open-xchange. It uses the open-xchange 
+AJAX API for communication. THE CONNECTOR IS CONSIDERED EXPERIMENTAL, SO USE 
+IT AT YOUR OWN RISK. IT MIGHT DAMAGE YOUR DATA, SO PLEASE USE A TEST ACCOUNT
+FIRST. It is capable of syncing contacts as well as appointments and tasks.
+Mails are not supported, because you may use IMAP for this. The connector was
+tested heavily with nokia devices and mail for exchange in different versions.
+
+
+Installation
+------------
+Just copy the ox.php to your z-push/backend directory and make sure that the
+webserver is allowed to read the file.
+
+Additionally the backend needs 2 pear modules: HTTP_Request and Services_JSON.
+You may install them using the package manager of your distribution. Please 
+see the documentation of your distribution on how to search for and install
+packages. If the modules are not available for your distribution you may
+install them directly via php pear:
+
+pear install HTTP_Request
+pear install Services_JSON
+
+
+Configuration
+-------------
+Configuration is done through config.php. 
+
+First of all you have to disable device provisioning:
+define('PROVISIONING', false);
+
+
+The following two settings are mandatory. 
+
+Change the backend provider to ox.
+$BACKEND_PROVIDER = "BackendOX";
+
+The next thing to define is the URL which points to the ajax directory of your
+open-xchange installation.
+define("OX_URL", "https://your.server.tld/ajax");
+
+
+The following settings are optional.
+
+Normally every folders is presented to the device, with this setting it is
+possible to filter folders based on their type. For example setting this to
+1 means only sync private folders, but no public folders. You may set mutiple
+folder types seperated by ",". 
+See http://oxpedia.org/wiki/index.php?title=HTTP_API#Module_.22folders.22 for 
+a description of the different folder types (ID 302).
+define("OX_FILTER_FOLDERTYPES", "1,2");
+
+Normally every folder is presented to the device, with this setting it is
+possible to filter folders based on their ids. This is useful for nokia
+devices, as mail for exchange seems to only sync the first contact folder
+it finds. This might be another folder then you expect. You may set multiple
+folders seperated by ",". 
+define("OX_FILTER_FOLDERIDS", "25,26,27");
+
+With this setting you are able to see the JSON requests which are sent and 
+received. Possible values are 0 or 1.
+define("OX_DEBUG", 0);
+
+
+Not working
+-----------
+
+General:
+- categories are not supported by z-push
+
+Contacts:
+- picture
+
+
+Known Bugs
+----------
+Contacts:
+- title does not work (Bug in z-push?)
+
+- imaddress does not work on nokia
+- officelocation does not work on nokia
+
+- customerid - not supported by OX
+- governmentid - not supported by OX
+- imaddress3 - not supported by OX
+- accountname - not supported by OX
+- mms - not supported by OX
