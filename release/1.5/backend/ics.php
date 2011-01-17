@@ -2621,7 +2621,8 @@ class BackendICS {
 
     function GetHierarchy() {
         $folders = array();
-        $himp= new PHPHierarchyImportProxy($this->_defaultstore, false);
+        $importer = false;
+        $himp= new PHPHierarchyImportProxy($this->_defaultstore, $importer);
 
         $rootfolder = mapi_msgstore_openentry($this->_defaultstore);
         $rootfolderprops = mapi_getprops($rootfolder, array(PR_SOURCE_KEY));
@@ -2786,6 +2787,8 @@ class BackendICS {
                     }
                     else {
                         // store ics as attachment
+                        //see icalTimezoneFix function in compat.php for more information
+                        $part->body = icalTimezoneFix($part->body);
                         $this->_storeAttachment($mapimessage, $part);
                         debugLog("Sending ICS file as attachment");
                     }
