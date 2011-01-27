@@ -1611,11 +1611,10 @@ class PHPContentsImportProxy extends MAPIMapping {
 
         // Override 'body' for truncation
         $body = mapi_openproperty($mapimessage, PR_BODY);
-        $bodysize = strlen($body);
-        if($bodysize > $truncsize) {
-            $body = substr($body, 0, $truncsize);
+        if(strlen($body) > $truncsize) {
+            $body = utf8_truncate($body, $truncsize);
             $message->bodytruncated = 1;
-            $message->bodysize = $bodysize;
+            $message->bodysize = strlen($body);
         } else {
             $message->bodytruncated = 0;
         }
@@ -2922,7 +2921,13 @@ class BackendICS {
             }
         }
 
-        mapi_setprops($mapimessage, array(PR_BODY => $body));
+        //set PR_INTERNET_CPID to 65001 (utf-8) if store supports it and to 1252 otherwise
+        $internetcpid = 1252;
+        if (defined('STORE_SUPPORTS_UNICODE') && STORE_SUPPORTS_UNICODE == true) {
+            $internetcpid = 65001;
+        }
+
+        mapi_setprops($mapimessage, array(PR_BODY => $body, PR_INTERNET_CPID => $internetcpid));
 
         if(strlen($body_html) > 0){
             mapi_setprops($mapimessage, array(PR_HTML => $body_html));
