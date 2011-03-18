@@ -819,9 +819,10 @@ class ImportContentsChangesICS extends MAPIMapping {
             $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) ? true : false));
 
         if(isset($appointment->reminder) && $appointment->reminder > 0) {
+            //start is in seconds and reminder in minutes, so it needs to be multiplied by 60
             // Set 'flagdueby' to correct value (start - reminderminutes)
             mapi_setprops($mapimessage, array(
-                $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8560") => $appointment->starttime - $appointment->reminder));
+                $this->_getPropIDFromString("PT_SYSTIME:{00062008-0000-0000-C000-000000000046}:0x8560") => ($appointment->starttime - $appointment->reminder * 60)));
         }
 
         if(isset($appointment->recurrence)) {
@@ -2046,12 +2047,13 @@ class ExportChangesICS  {
 
         $this->statestream = $stream;
 
+        // only set a restriction if the device has set a filtertype, except for Zarafa versions before 7 - see Mantis #368
         switch($mclass) {
             case "Email":
-                $restriction = $this->_getEmailRestriction($this->_getCutOffDate($restrict));
+                $restriction = ($restrict || !checkMapiExtVersion('7')) ? $this->_getEmailRestriction($this->_getCutOffDate($restrict)) : false;
                 break;
             case "Calendar":
-                $restriction = $this->_getCalendarRestriction($this->_getCutOffDate($restrict));
+                $restriction = ($restrict || !checkMapiExtVersion('7')) ? $this->_getCalendarRestriction($this->_getCutOffDate($restrict)) : false;
                 break;
             default:
             case "Contacts":
@@ -2402,7 +2404,9 @@ class BackendICS {
                 $devicesprops[0x68881040][] = time(); //first sync
                 $devicesprops[0x68891040][] = 0; //last sync
             }
-            mapi_setprops($this->_defaultstore, $devicesprops);
+
+            //android sends "validate" as deviceid, it does not need to be added to the device list
+            if (strcasecmp("validate", $devid) != 0) mapi_setprops($this->_defaultstore, $devicesprops);
 
             return $policykey;
         }
