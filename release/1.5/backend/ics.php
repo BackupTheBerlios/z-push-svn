@@ -463,7 +463,7 @@ class MAPIMapping {
         // Reverse 'overflow'. Eg week '10' will always be the last week of the month in which the
         // specified weekday exists
         while(1) {
-            $monthnow = gmdate("n", $date) - 1; // gmdate returns 1-12
+            $monthnow = gmdate("n", $date); // gmdate returns 1-12
             if($monthnow > $month)
                 $date = $date - (24 * 7 * 60 * 60);
             else
@@ -507,6 +507,10 @@ class ImportContentsChangesICS extends MAPIMapping {
         $this->_session = $session;
         $this->_store = $store;
         $this->_folderid = $folderid;
+        $this->_conflictsLoaded = false;
+        $this->_conflictsMclass = false;
+        $this->_conflictsFiltertype = false;
+        $this->_conflictsState = false;
 
         $entryid = mapi_msgstore_entryidfromsourcekey($store, $folderid);
         if(!$entryid) {
@@ -544,15 +548,36 @@ class ImportContentsChangesICS extends MAPIMapping {
 
     function LoadConflicts($mclass, $filtertype, $state) {
         if (!isset($this->_session) || !isset($this->_store) || !isset($this->_folderid)) {
-            debugLog("Warning: can not load changes for conflict detections. Session, store or folder information not available");
+            debugLog("Warning: can not load changes for conflict detection. Session, store or folder information not available");
+            return false;
+        }
+        // save data to load changes later if necessary
+        $this->_conflictsLoaded = false;
+        $this->_conflictsMclass = $mclass;
+        $this->_conflictsFiltertype = $filtertype;
+        $this->_conflictsState = $state;
+
+        debugLog("LoadConflicts: will be loaded later, if necessary");
+        return true;
+    }
+
+    // process potential conflicts only when really necessary (ADD/MODIFY)
+    function _lazyLoadConflicts() {
+        if (!isset($this->_session) || !isset($this->_store) || !isset($this->_folderid) ||
+            !$this->_conflictsMclass || !$this->_conflictsFiltertype || !$this->_conflictsState) {
+            debugLog("Warning: can not load changes in lazymode for conflict detection. Missing information");
             return false;
         }
 
-        // configure an exporter so we can detect conflicts
-        $exporter = new ExportChangesICS($this->_session, $this->_store, $this->_folderid);
-        $exporter->Config(&$this->_memChanges, $mclass, $filtertype, $state, 0, 0);
-        while(is_array($exporter->Synchronize()));
-        return true;
+        if (!$this->_conflictsLoaded) {
+            debugLog("LoadConflicts: loading..");
+            // configure an exporter so we can detect conflicts
+            $this->_memChanges = new ImportContentsChangesMem();
+            $exporter = new ExportChangesICS($this->_session, $this->_store, $this->_folderid);
+            $exporter->Config(&$this->_memChanges, $this->_conflictsMclass, $this->_conflictsFiltertype, $this->_conflictsState, 0, 0);
+            while(is_array($exporter->Synchronize()));
+            $this->_conflictsLoaded = true;
+        }
     }
 
     function ImportMessageChange($id, $message) {
@@ -569,6 +594,7 @@ class ImportContentsChangesICS extends MAPIMapping {
             $props[PR_SOURCE_KEY] = $sourcekey;
 
             // check for conflicts
+            $this->_lazyLoadConflicts();
             if($this->_memChanges->isChanged($id)) {
                 if ($this->_flags & SYNC_CONFLICT_OVERWRITE_PIM) {
                     debugLog("Conflict detected. Data from PIM will be dropped! Server overwrites PIM.");
@@ -601,6 +627,7 @@ class ImportContentsChangesICS extends MAPIMapping {
     // Import a deletion. This may conflict if the local object has been modified.
     function ImportMessageDeletion($objid) {
         // check for conflicts
+        $this->_lazyLoadConflicts();
         if($this->_memChanges->isChanged($objid)) {
            debugLog("Conflict detected. Data from Server will be dropped! PIM deleted object.");
         }
@@ -1419,9 +1446,10 @@ class PHPContentsImportProxy extends MAPIMapping {
         $isrecurringtag = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0x8223");
         $recurringstate = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8216");
         $timezonetag = $this->_getPropIDFromString("PT_BINARY:{00062002-0000-0000-C000-000000000046}:0x8233");
+        $recurrenceend = $this->_getPropIDFromString("PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8236");
 
         // Now, get and convert the recurrence and timezone information
-        $recurprops = mapi_getprops($mapimessage, array($isrecurringtag, $recurringstate, $timezonetag));
+        $recurprops = mapi_getprops($mapimessage, array($isrecurringtag, $recurringstate, $timezonetag, $recurrenceend));
 
         if(isset($recurprops[$timezonetag]))
             $tz = $this->_getTZFromMAPIBlob($recurprops[$timezonetag]);
@@ -1487,6 +1515,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                     case 1:
                     $syncRecurrence->type = 0;
                     $syncRecurrence->dayofweek = 62; // mon-fri
+                    $syncRecurrence->interval = 1;
                         break;
                 }
                 break;
@@ -1517,10 +1546,16 @@ class PHPContentsImportProxy extends MAPIMapping {
         }
         // Termination
         switch($recurrence->recur["term"]) {
-           case 0x21:
-            $syncRecurrence->until = $recurrence->recur["end"]; break;
+            case 0x21:
+                $syncRecurrence->until = $recurrence->recur["end"];
+                // fixes Mantis #350 : recur-end does not consider timezones - use ClipEnd if available
+                if (isset($recurprops[$this->_getPropIDFromString("PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8236")]))
+                    $syncRecurrence->until = $recurprops[$this->_getPropIDFromString("PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8236")];
+                // add one day (minus 1 sec) to the end time to make sure the last occurrence is covered
+                $syncRecurrence->until += 86399;
+                break;
             case 0x22:
-            $syncRecurrence->occurrences = $recurrence->recur["numoccur"]; break;
+                $syncRecurrence->occurrences = $recurrence->recur["numoccur"]; break;
             case 0x23:
                 // never ends
                 break;
@@ -1659,8 +1694,9 @@ class PHPContentsImportProxy extends MAPIMapping {
             $appSeqNr = $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8201");
             $lidIsException = $this->_getPropIDFromString("PT_BOOLEAN:{00062002-0000-0000-C000-000000000046}:0xA");
             $recurStartTime = $this->_getPropIDFromString("PT_LONG:{6ED8DA90-450B-101B-98DA-00AA003F1305}:0xE");
+            $recurrenceend = $this->_getPropIDFromString("PT_SYSTIME:{00062002-0000-0000-C000-000000000046}:0x8236");
 
-            $props = mapi_getprops($mapimessage, array($goidtag, $timezonetag, $recReplTime, $isrecurringtag, $recurringstate, $appSeqNr, $lidIsException, $recurStartTime));
+            $props = mapi_getprops($mapimessage, array($goidtag, $timezonetag, $recReplTime, $isrecurringtag, $recurringstate, $appSeqNr, $lidIsException, $recurStartTime, $recurrenceend));
 
             // Get the GOID
             if(isset($props[$goidtag]))
@@ -1749,7 +1785,7 @@ class PHPContentsImportProxy extends MAPIMapping {
             if(isset($row[PR_ATTACH_NUM])) {
                 $mapiattach = mapi_message_openattach($mapimessage, $row[PR_ATTACH_NUM]);
 
-                $attachprops = mapi_getprops($mapiattach, array(PR_ATTACH_LONG_FILENAME));
+                $attachprops = mapi_getprops($mapiattach, array(PR_ATTACH_LONG_FILENAME, PR_ATTACH_FILENAME));
 
                 $attach = new SyncAttachment();
 
@@ -1758,7 +1794,7 @@ class PHPContentsImportProxy extends MAPIMapping {
                     $stat = mapi_stream_stat($stream);
 
                     $attach->attsize = $stat["cb"];
-                    $attach->displayname = w2u($attachprops[PR_ATTACH_LONG_FILENAME]);
+                    $attach->displayname = w2u((isset($attachprops[PR_ATTACH_LONG_FILENAME]))?$attachprops[PR_ATTACH_LONG_FILENAME]:((isset($attachprops[PR_ATTACH_FILENAME]))?$attachprops[PR_ATTACH_FILENAME]:"attachment.bin"));
                     $attach->attname = bin2hex($this->_folderid) . ":" . bin2hex($sourcekey) . ":" . $row[PR_ATTACH_NUM];
 
                     if(!isset($message->attachments))
