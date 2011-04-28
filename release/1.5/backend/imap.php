@@ -150,6 +150,7 @@ class BackendIMAP extends BackendDiff {
         $body_base64 = false;
         $org_charset = "";
         $org_boundary = false;
+        $multipartmixed = false;
         foreach($message->headers as $k => $v) {
             if ($k == "subject" || $k == "to" || $k == "cc" || $k == "bcc")
                 continue;
@@ -276,6 +277,18 @@ class BackendIMAP extends BackendDiff {
             }
             else {
                 $mobj2 = new Mail_mimeDecode($origmail);
+                $m2headerstructure = imap_fetchstructure($this->_mbox, $forward, FT_UID);
+                $m2charset = "utf-8";
+                //get the original charset in order to preserver special characters (e.g. umlauts)
+                if (isset($m2headerstructure->parameters) && is_array($m2headerstructure->parameters)) {
+                    foreach ($m2headerstructure->parameters as $param) {
+                        if (isset($param->attribute) && $param->attribute == "charset" && isset($param->value)) {
+                            $m2charset = $param->value;
+                            break;
+                        }
+                    }
+                }
+                unset($m2headerstructure);
                 $mess2 = $mobj2->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'charset' => 'utf-8'));
 
                 if (!$use_orgbody)
@@ -329,6 +342,7 @@ class BackendIMAP extends BackendDiff {
                         $att_boundary = strtoupper(md5(uniqid(time())));
                         // add boundary headers
                         $headers .= "\n" . "Content-Type: multipart/mixed; boundary=$att_boundary";
+                        $multipartmixed = true;
                     }
 
                     foreach($mess2->parts as $part) {
@@ -358,6 +372,23 @@ class BackendIMAP extends BackendDiff {
                                 $body .= $this->enc_attach_file($att_boundary, $attname, strlen($part->body),$part->body, $part->ctype_primary ."/". $part->ctype_secondary);
                             }
                         }
+                    }
+                    if ($multipartmixed) {
+                        //this happens if a multipart/alternative message is forwarded
+                        //then it's a multipart/mixed message which consists of:
+                        //1. text/plain part which was written on the mobile
+                        //2. multipart/alternative part which is the original message
+                        $body = "This is a message with multiple parts in MIME format.\n--".
+                                $att_boundary.
+                                "\nContent-Type: $forward_h_ct\nContent-Transfer-Encoding: $forward_h_cte\n\n".
+                                (($body_base64) ? chunk_split(base64_encode($message->body)) : rtrim($message->body)).
+                                "\n--".$att_boundary.
+                                "\nContent-Type: {$mess2->headers['content-type']}\n\n".
+                                @imap_body($this->_mbox, $forward, FT_PEEK | FT_UID)."\n\n";
+                    }
+                    else {
+                        if (!empty($forward_h_ct)) $headers .= "\nContent-Type: $forward_h_ct";
+                        if (!empty($forward_h_cte)) $headers .= "\nContent-Transfer-Encoding: $forward_h_cte";
                     }
                     $body .= "--$att_boundary--\n\n";
                 }
@@ -440,6 +471,16 @@ class BackendIMAP extends BackendDiff {
      * are always handled as real deletes and will be sent to your importer as a DELETE
      */
     function GetWasteBasket() {
+        if ($this->_wasteID == false) {
+            //try to get the waste basket without doing complete hierarchy sync
+            $wastebaskt = @imap_getmailboxes($this->_mbox, $this->_server, "Trash");
+            if (isset($wastebaskt[0])) {
+                $this->_wasteID = imap_utf7_decode(substr($wastebaskt[0]->name, strlen($this->_server)));
+                return $this->_wasteID;
+            }
+            //try get waste id from hierarchy if it wasn't possible with above for some reason
+            $this->GetHierarchy();
+        }
         return $this->_wasteID;
     }
 
