@@ -13,6 +13,9 @@
 * Consult LICENSE file for details
 ************************************************/
 
+$sessionstarttime = microtime(true);
+//we handle connection aborts ourself. necessary to keep sync state clean in heartbeat/wait
+ignore_user_abort(true);
 ob_start(false, 1048576);
 
 include_once('zpushdefs.php');
@@ -28,28 +31,32 @@ if (!defined("SCRIPT_TIMEOUT")) {
     define('REAL_SCRIPT_TIMEOUT', 3540+600);
 } else {
     if ((SCRIPT_TIMEOUT-600) < 660) 
-	define('REAL_SCRIPT_TIMEOUT', SCRIPT_TIMEOUT+660);
+		define('REAL_SCRIPT_TIMEOUT', SCRIPT_TIMEOUT+660);
     else 
-	define('REAL_SCRIPT_TIMEOUT', SCRIPT_TIMEOUT);
+		define('REAL_SCRIPT_TIMEOUT', SCRIPT_TIMEOUT);
 }
 
 // Attempt to set maximum execution time
 ini_set('max_execution_time', REAL_SCRIPT_TIMEOUT);
 set_time_limit(REAL_SCRIPT_TIMEOUT);
 
+
 debugLog("Start ------ THIS IS AN UNOFFICIAL DEVELOPER VERSION!");
 debugLog("Z-Push version: $zpush_version");
 debugLog("Client IP: ". $_SERVER['REMOTE_ADDR']);
+debugLog("Set max_execution_time to ". ini_get('max_execution_time'));
 //debugLog(print_r($_SERVER,true));
 //debugLog(print_r($_GET,true));
 //debugLog(print_r($_POST,true));
 //debugLog(print_r(apache_request_headers(),true));
+register_shutdown_function("shutdownCommunication");
+$cachestatus = SYNCCACHE_UNCHANGED; 
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
 
 // The script must always be called with authorisation info
 
-if(!isset($_SERVER['PHP_AUTH_PW'])) {
+if (!isset($_SERVER['PHP_AUTH_PW'])) {
     header("HTTP/1.1 401 Unauthorized");
     header("WWW-Authenticate: Basic realm=\"ZPush\"");
     print("Access denied. Please send authorisation information");
@@ -59,16 +66,22 @@ if(!isset($_SERVER['PHP_AUTH_PW'])) {
     return;
 }
 
-
 // split username & domain if received as one
-$pos = strrpos($_SERVER['PHP_AUTH_USER'], '\\');
-if($pos === false){
-    $auth_user = $_SERVER['PHP_AUTH_USER'];
-    $auth_domain = '';
-}else{
+if (($pos = strrpos($_SERVER['PHP_AUTH_USER'], '\\')) === false) {
+	if (SEPARATE_UPN === true &&
+		($pos = strrpos($_SERVER['PHP_AUTH_USER'], '@')) !== false) {
+	    $auth_user = substr($_SERVER['PHP_AUTH_USER'],0,$pos);
+    	$auth_domain = substr($_SERVER['PHP_AUTH_USER'],$pos+1);
+	} else {
+    	$auth_user = $_SERVER['PHP_AUTH_USER'];
+    	$auth_domain = '';
+	}
+} else {
     $auth_domain = substr($_SERVER['PHP_AUTH_USER'],0,$pos);
     $auth_user = substr($_SERVER['PHP_AUTH_USER'],$pos+1);
 }
+
+
 $auth_pw = $_SERVER['PHP_AUTH_PW'];
 
 $cmd = $user = $devid = $devtype = "";
@@ -93,30 +106,44 @@ if (!isset($_GET['Cmd']) &&
     $uri_decoded = base64uri_decode($_SERVER['QUERY_STRING']);
     $devid = $uri_decoded['DevID'];
     switch($uri_decoded['DevType']) {
-	case 'PPC' 	: $devtype = 'PocketPC'; break;
-	case 'SP' 	: $devtype = 'SmartPhone'; break;
+		case 'PPC' 	: $devtype = 'PocketPC'; break;
+		case 'SP' 	: $devtype = 'SmartPhone'; break;
     };
     switch($uri_decoded['Command']) {
-	case '0' 	: $cmd = 'Sync'; break;
-	case '1' 	: $cmd = 'SendMail'; break;
-	case '2' 	: $cmd = 'SmartForward'; break;
-	case '3' 	: $cmd = 'SmartReply'; break;
-	case '4' 	: $cmd = 'GetAttachment'; break;
-	case '9' 	: $cmd = 'FolderSync'; break;
-	case '10' 	: $cmd = 'FolderCreate'; break;
-	case '11' 	: $cmd = 'FolderDelete'; break;
-	case '12' 	: $cmd = 'FolderUpdate'; break;
-	case '13' 	: $cmd = 'MoveItems'; break;
-	case '14' 	: $cmd = 'GetItemEstimate'; break;
-	case '15' 	: $cmd = 'MeetingResponse'; break;
-	case '16' 	: $cmd = 'Search'; break;
-	case '17' 	: $cmd = 'Settings'; break;
-	case '18' 	: $cmd = 'Ping'; break;
-	case '19' 	: $cmd = 'ItemOperations'; break;
-	case '20' 	: $cmd = 'Provision'; break;
-	case '21' 	: $cmd = 'ResolveRecipients'; break;
-	case '22' 	: $cmd = 'ValidateCert'; break;
+		case '0' 	: $cmd = 'Sync'; break;
+		case '1' 	: $cmd = 'SendMail'; break;
+		case '2' 	: $cmd = 'SmartForward'; break;
+		case '3' 	: $cmd = 'SmartReply'; break;
+		case '4' 	: $cmd = 'GetAttachment'; break;
+		case '9' 	: $cmd = 'FolderSync'; break;
+		case '10' 	: $cmd = 'FolderCreate'; break;
+		case '11' 	: $cmd = 'FolderDelete'; break;
+		case '12' 	: $cmd = 'FolderUpdate'; break;
+		case '13' 	: $cmd = 'MoveItems'; break;
+		case '14' 	: $cmd = 'GetItemEstimate'; break;
+		case '15' 	: $cmd = 'MeetingResponse'; break;
+		case '16' 	: $cmd = 'Search'; break;
+		case '17' 	: $cmd = 'Settings'; break;
+		case '18' 	: $cmd = 'Ping'; break;
+		case '19' 	: $cmd = 'ItemOperations'; break;
+		case '20' 	: $cmd = 'Provision'; break;
+		case '21' 	: $cmd = 'ResolveRecipients'; break;
+		case '22' 	: $cmd = 'ValidateCert'; break;
     }
+    if (isset($uri_decoded['AttachmentName'])) $_GET['AttachmentName'] = $uri_decoded['AttachmentName'];
+    if (isset($uri_decoded['ItemId'])) $_GET['ItemId'] = $uri_decoded['ItemId'];
+    if (isset($uri_decoded['CollectionId'])) $_GET['CollectionId'] = $uri_decoded['CollectionId'];
+    if (isset($uri_decoded['CollectionName'])) $_GET['CollectionName'] = $uri_decoded['CollectionName'];
+    if (isset($uri_decoded['ParentId'])) $_GET['ParentId'] = $uri_decoded['ParentId'];
+    if (isset($uri_decoded['LongId'])) $_GET['LongId'] = $uri_decoded['LongId'];
+    if (isset($uri_decoded['Occurrence'])) $_GET['Occurrence'] = $uri_decoded['Occurrence'];
+    if (isset($uri_decoded['Options'])) {
+		$uri_decoded['Options'] = bin2hex($uri_decoded['Options'])*1;
+		if($uri_decoded['Options'] & 0x01) debugLog("Save in sent Items");
+		if($uri_decoded['Options'] & 0x02) debugLog("AcceptMultiPart");
+    }
+    if (isset($uri_decoded['User'])) $_GET['User'] = $uri_decoded['User'];
+    debugLog('Base64 encoded URI contains: '.print_r($uri_decoded,true));
 };
 
 // The GET parameters are required
@@ -129,14 +156,15 @@ if($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Get the request headers so we can see the versions
 $requestheaders = apache_request_headers();
-if (isset($requestheaders["Ms-Asprotocolversion"])) $requestheaders["MS-ASProtocolVersion"] = $requestheaders["Ms-Asprotocolversion"];
-if(isset($requestheaders["MS-ASProtocolVersion"]) ||
-   isset($uri_decoded['ProtVer'])) {
+if (isset($requestheaders["Ms-Asprotocolversion"])) 
+	$requestheaders["MS-ASProtocolVersion"] = $requestheaders["Ms-Asprotocolversion"];
+if (isset($requestheaders["MS-ASProtocolVersion"]) ||
+   	isset($uri_decoded['ProtVer'])) {
     global $protocolversion;
     if (isset($requestheaders["MS-ASProtocolVersion"])) 
-	$protocolversion = $requestheaders["MS-ASProtocolVersion"];
+		$protocolversion = $requestheaders["MS-ASProtocolVersion"];
     else
-	$protocolversion = $uri_decoded['ProtVer']/10;
+		$protocolversion = $uri_decoded['ProtVer']/10;
     debugLog("Client supports version " . $protocolversion);
 } else {
     global $protocolversion;
@@ -145,13 +173,11 @@ if(isset($requestheaders["MS-ASProtocolVersion"]) ||
 }
 
 // START ADDED dw2412 Support Multipart response
-// From AS 14.0 there is no request header field for this. 
-// Looks like that multipart is in general accepted, requested, expected and ...
-// this is documented different in MS-ASCMD Page 52 (v20091030)
 //
 if ((isset($requestheaders["MS-ASAcceptMultiPart"]) &&
     $requestheaders["MS-ASAcceptMultiPart"] == "T") ||
-    $protocolversion>=14.0) {
+    (isset($uri_decoded['Options']) && 
+    $uri_decoded['Options'] & 0x02)) {
     $multipart = true;
 } else {
     $multipart = false;
@@ -164,28 +190,29 @@ if (isset($requestheaders["Accept-Encoding"])) {
     debugLog("Current zlib output compression setting: ".ini_get("zlib.output_compression"));
 
     if (array_search("gzip",$encodings) !== false &&
-	function_exists('gzencode')) {
-	ini_set("zlib.output_compression",'0');
-	debugLog("Enabled zlib output compression");
-	define ("GZIP_OUTPUT",true);
+		function_exists('gzencode')) {
+		ini_set("zlib.output_compression",'0');
+		debugLog("Enabled zlib output compression");
+		define ("GZIP_OUTPUT",true);
     } else {
-	ini_set("zlib.output_compression",'0');
-	debugLog("Disabled zlib output compression");
-	define ("GZIP_OUTPUT",false);
+		ini_set("zlib.output_compression",'0');
+		debugLog("Disabled zlib output compression");
+		define ("GZIP_OUTPUT",false);
     }
 } else {
     define ("GZIP_OUTPUT",false);
 }
 // END ADDED dw2412 Support gzip compression in result
 
-if (isset($requestheaders["X-Ms-Policykey"])) $requestheaders["X-MS-PolicyKey"] = $requestheaders["X-Ms-Policykey"];
+if (isset($requestheaders["X-Ms-Policykey"])) 
+	$requestheaders["X-MS-PolicyKey"] = $requestheaders["X-Ms-Policykey"];
 if (isset($requestheaders["X-MS-PolicyKey"]) ||
     isset($uri_decoded['PolKey'])) {
     global $policykey;
     if (isset($requestheaders["X-MS-PolicyKey"])) 
-	$policykey = $requestheaders["X-MS-PolicyKey"];
+		$policykey = $requestheaders["X-MS-PolicyKey"];
     else 
-	$policykey = $uri_decoded['PolKey'];
+		$policykey = $uri_decoded['PolKey'];
 } else {
     global $policykey;
     $policykey = 0;
@@ -204,6 +231,7 @@ if (isset($requestheaders["User-Agent"])) {
 if (strncmp($useragent,"Nokia",5) == 0) {
     debugLog("Nokia detected! Limit recipients to 100!");
     define("LIMIT_RECIPIENTS",100);
+    define("NOKIA_DETECTED",true);
 }
 
 // Load our backend driver
@@ -267,32 +295,46 @@ if($backend->Setup($user, $devid, $protocolversion) == false) {
 // Do the actual request
 switch($_SERVER["REQUEST_METHOD"]) {
     case 'OPTIONS':
-	// dw2412 changed to support AS14 Protocol
-        header("MS-Server-ActiveSync: 14.00.048.018");
-        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0,12.1,14.0");
-	header("MS-ASProtocolRevisions: 12.1r1");
-	header("X-MS-MV: 14.0.255");
-	// START ADDED dw2412 
-	// Compare and send X-MS-RP depending on Protocol Version string
-	// write the new Protocol Version string if update send
-	include_once ('statemachine.php');
-	$protstate = new StateMachine($devid);
-	$protsupp = $protstate->getProtocolState();
-	if ($protsupp !== false && $protsupp != "2.0,2.1,2.5,12.0,12.1,14.0") {
-    	    header("X-MS-RP: 2.0,2.1,2.5,12.0,12.1,14.0");
-	    debugLog("Sending X-MS-RP to update Protocol Version on Device");
-    	    $protstate->setProtocolState("2.0,2.1,2.5,12.0,12.1,14.0");
+		// dw2412 changed to support AS14 Protocol
+//		Beta E2K10 ID
+//      header("MS-Server-ActiveSync: 14.00.048.018");
+//      header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0,12.1,14.0");
+//  	header("MS-ASProtocolRevisions: 12.1r1");
+//		header("X-MS-MV: 14.0.255");
+        header("MS-Server-ActiveSync: 14.1");
+        header("MS-ASProtocolVersions: 1.0,2.0,2.1,2.5,12.0,12.1,14.0,14.1");
+		// START ADDED dw2412 
+		// Compare and send X-MS-RP depending on Protocol Version string
+		// write the new Protocol Version string if update send
+		include_once ('statemachine.php');
+		$protstate = new StateMachine($devid,$user);
+		$protsupp = $protstate->getProtocolState();
+		if ($protsupp !== false && $protsupp != "2.0,2.1,2.5,12.0,12.1,14.0,14.1") {
+    	    header("X-MS-RP: 2.0,2.1,2.5,12.0,12.1,14.0,14.1");
+		    debugLog("Sending X-MS-RP to update Protocol Version on Device");
+    	    $protstate->setProtocolState("2.0,2.1,2.5,12.0,12.1,14.0,14.1");
     	}
     	unset($protstate);
-	// END ADDED dw2412 
-	// START CHANGED dw2412 Settings and ItemOperations Command Support
+		// END ADDED dw2412 
+		// START CHANGED dw2412 Settings and ItemOperations Command Support
         header("MS-ASProtocolCommands: Sync,SendMail,SmartForward,SmartReply,GetAttachment,GetHierarchy,CreateCollection,DeleteCollection,MoveCollection,FolderSync,FolderCreate,FolderDelete,FolderUpdate,MoveItems,GetItemEstimate,MeetingResponse,ResolveRecipients,ValidateCert,Provision,Settings,Search,Ping,ItemOperations");
         debugLog("Options request");
         break;
     case 'POST':
-	// dw2412 changed to support AS14 Protocol
-	header("MS-Server-ActiveSync: 14.0");
+		// dw2412 changed to support AS14 Protocol
+//		header("MS-Server-ActiveSync: 14.0");
+		header("MS-Server-ActiveSync: 14.1");
         debugLog("POST cmd: $cmd");
+		// Update X-MS-RP In case version changed
+		include_once ('statemachine.php');
+		$protstate = new StateMachine($devid,$user);
+		$protsupp = $protstate->getProtocolState();
+		if ($protsupp !== false && $protsupp != "2.0,2.1,2.5,12.0,12.1,14.0,14.1") {
+    	    header("X-MS-RP: 2.0,2.1,2.5,12.0,12.1,14.0,14.1");
+		    debugLog("Sending X-MS-RP to update Protocol Version on Device");
+    	    $protstate->setProtocolState("2.0,2.1,2.5,12.0,12.1,14.0,14.1");
+    	}
+    	unset($protstate);
         // Do the actual request
         if(!HandleRequest($backend, $cmd, $devid, $protocolversion, $multipart)) {
             // Request failed. Try to output some kind of error information. We can only do this if
@@ -319,6 +361,7 @@ switch($_SERVER["REQUEST_METHOD"]) {
         break;
 }
 
+
 $len = ob_get_length();
 $data = ob_get_contents();
 ob_end_clean();
@@ -334,32 +377,54 @@ if (!headers_sent()) { // dw2412 need to do this since i.E. getAttachmentData Re
     // TODO: Find out what the hell is going on with compress DocumentLibrary body. If some needs the source
     //	 pakets from windump, please mail me.
     if (GZIP_OUTPUT == true &&
-	!defined("OVERRIDE_GZIP") &&
+		!defined("OVERRIDE_GZIP") &&
         ($gz_data = gzencode($data,9,FORCE_GZIP)) !== false) {
-	$gzlen=strlen(bin2hex($gz_data))/2;
+		$gzlen=strlen(bin2hex($gz_data))/2;
         if ($len > $gzlen) {
     	    debugLog("GZip Results: Original Size ".$len." / Compress Size ".$gzlen." byte(s) --> Send compressed data");
-	    header("Content-Encoding: gzip");
-	    header("Content-Length: ".$gzlen);
+		    header("Content-Encoding: gzip");
+		    header("Content-Length: ".$gzlen);
+		    flush();
+		    sleep(2);
+		    debugLog("Header Connection aborted :".(connection_aborted() ? "yes" : "no" ));
+		    debugLog("Header Connection status  :".connection_status());
     	    print $gz_data;
-	} else {
-	    debugLog("GZip Results: Original Size ".$len." / Compress Size ".$gzlen." byte(s) --> Send uncompressed data");
-	    header("Content-Length: ".$len);
-	    print $data;
-	}
+		} else {
+		    debugLog("GZip Results: Original Size ".$len." / Compress Size ".$gzlen." byte(s) --> Send uncompressed data");
+		    header("Content-Length: ".$len);
+		    flush();
+		    sleep(2);
+		    debugLog("Header Connection aborted :".(connection_aborted() ? "yes" : "no" ));
+		    debugLog("Header Connection status  :".connection_status());
+		    print $data;
+		}
     } else {
-	debugLog("Output Results: GZip not used send Original Size ".$len." byte(s) --> Send uncompressed data");
-	header("Content-Length: ".$len);
-	print $data;
+		debugLog("Output Results: GZip not used send Original Size ".$len." byte(s) --> Send uncompressed data");
+		header("Content-Length: ".$len);
+		flush();
+		sleep(2);
+		debugLog("Header Connection aborted :".(connection_aborted() ? "yes" : "no" ));
+		debugLog("Header Connection status  :".connection_status());
+		print $data;
     }
     // END CHANGED dw2412 Support gzip compression in result
     // destruct backend after all data is on the stream
 } else { // just output what we maybe got from the content buffer
+    flush();
+    sleep(2);
+    debugLog("1st Part Connection aborted :".(connection_aborted() ? "yes" : "no" ));
+    debugLog("1st Part Connection status  :".connection_status());
     debugLog("Output ".$len." Bytes of data found in content buffer since output already started earlier in backend");
     print $data;
 }
+flush();
+sleep(2);
+debugLog("Session run time duration :".(microtime(true) - $sessionstarttime));
+debugLog("Body Connection aborted :".(connection_aborted() ? "yes" : "no" ));
+debugLog("Body Connection status  :".connection_status());
 $backend->Logoff();
 
 debugLog("end");
 debugLog("--------");
+
 ?>

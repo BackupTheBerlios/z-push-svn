@@ -12,7 +12,7 @@
 ************************************************/
 include_once('debug.php');
 
-define('WBXML_DEBUG', false);
+define('WBXML_DEBUG', true);
 
 define('WBXML_SWITCH_PAGE',     0x00);
 define('WBXML_END',             0x01);
@@ -64,6 +64,7 @@ class WBXMLDecoder {
     var $ungetbuffer;
 
     var $logStack = array();
+	var $_inputRaw = '';
 
     function WBXMLDecoder($input, $dtd) {
         $this->in = $input;
@@ -121,6 +122,7 @@ class WBXMLDecoder {
     {
         $element = $this->getToken();
 
+//	debugLog("WBXML Element getElementStartTag ".print_r($element,true));
         if($element[EN_TYPE] == EN_TYPE_STARTTAG && $element[EN_TAG] == $tag)
             return $element;
         else {
@@ -136,10 +138,15 @@ class WBXMLDecoder {
     {
         $element = $this->getToken();
 
+//	debugLog("WBXML Element getElementEndTag ".print_r($element,true));
         if($element[EN_TYPE] == EN_TYPE_ENDTAG)
             return $element;
         else {
             debug("Unmatched end tag:");
+			if (defined('WBXML_DEBUG') &&
+				WBXML_DEBUG == true) {
+				debugLog("WBXML RAW Input (bin2hex): ".bin2hex($this->_inputRaw));
+			}
             debug(print_r($element,true));
             $bt = debug_backtrace();
             $c = count($bt);
@@ -155,11 +162,13 @@ class WBXMLDecoder {
     {
         $element = $this->getToken();
 
+//	debugLog("WBXML Element getElementContent ".print_r($element,true));
         if($element[EN_TYPE] == EN_TYPE_CONTENT) {
             return $element[EN_CONTENT];
         } 
-//        // also allow empty tags
+        // also allow empty tags
 //        else if($element[EN_TYPE] == EN_TYPE_ENDTAG) {
+//	    debugLog("WBXML Element EN_TYPE_ENDTAG ".print_r($element,true));
 //            $this->ungetElement($element);
 //            return "";
 //        }
@@ -223,9 +232,10 @@ class WBXMLDecoder {
 
         while(1) {
             $byte = $this->getByte();
-
             if(!isset($byte))
                 break;
+
+//	    debugLog("Byte: ".ord($byte));
 
             switch($byte) {
                 case WBXML_SWITCH_PAGE:
@@ -420,7 +430,7 @@ class WBXMLDecoder {
         $pos = strpos($attr,chr(61)); // equals sign
 
         if($pos)
-            $attributes[substr($attr, 0, $pos)] = substr($attr, $pos+1);
+            $attributes[byte_substr($attr, 0, $pos)] = byte_substr($attr, $pos+1);
         else
             $attributes[$attr] = null;
 
@@ -442,12 +452,35 @@ class WBXMLDecoder {
     }
 
     function getOpaque($len) {
-        return fread($this->in, $len);
+		$result = "";
+        while (byte_strlen($result) < $len) {
+           if (($ch = fread($this->in, $len-byte_strlen($result))) == false) return false;
+           $result .= $ch;
+        };
+        $this->_inputRaw .= $result;
+        return $result;
     }
 
     function getByte() {
-        $ch = fread($this->in, 1);
-        if(strlen($ch) > 0)
+
+//        $ch = fread($this->in, 1);
+// Start to cover timeout scenarios in input stream where stream is not eof but no char is read
+// Could solve t-sync problem. if not above line was replaced until END
+		$i = 0;
+		do {
+			if ($i > 0) usleep(500);
+        	$ch = fread($this->in, 1);
+        	$i++;
+        } while (!feof($this->in) &&
+        		  (byte_strlen($ch) == 0 && $i < 10));
+		if ($i == 10 &&
+			byte_strlen($ch) == 0 &&
+			!feof($this->in)) {
+			debugLog("wbxml: input stream is not feof and limit 10 reached during read without getting any byte from input!");
+		}
+// END
+        $this->_inputRaw .= $ch;
+        if(byte_strlen($ch) > 0)
             return ord($ch);
         else
             return;
@@ -477,6 +510,7 @@ class WBXMLDecoder {
         if($length > 0)
             $stringtable = fread($this->in, $length);
 
+        $this->_inputRaw .= $stringtable;
         return $stringtable;
     }
 
@@ -534,14 +568,14 @@ class WBXMLEncoder {
 
     function startWBXML($multipart=false) {
         // START CHANGED dw2412 to support multipart output
-	$this->_multipart=$multipart;
+		$this->_multipart=$multipart;
         if ($this->_multipart==true) {
-	    header("Content-Type: application/vnd.ms-sync.multipart");
+		    header("Content-Type: application/vnd.ms-sync.multipart");
         } else {
     	    header("Content-Type: application/vnd.ms-sync.wbxml");
-	}
+		}
         // END CHANGED dw2412 to support multipart output
-	
+
         $this->outByte(0x03); // WBXML 1.3
         $this->outMBUInt(0x01); // Public ID 1
         $this->outMBUInt(106); // UTF-8
@@ -573,31 +607,31 @@ class WBXMLEncoder {
         // Only output end tags for items that have had a start tag sent
         if($stackelem['sent']) {
             $this->_endTag();
-	    // START ADDED dw2412 multipart output handling
+		    // START ADDED dw2412 multipart output handling
     	    if(sizeof($this->_stack)==0 && $this->_multipart==true) {
-		// NOT THE NICE WAY IMHO but this keeps existing logic of data output in index.php file...
-		// first we grab the existing wbxml output, manipulate it and write it buffered way back.
-		$len = ob_get_length();
-		$data = ob_get_contents();
-		ob_end_clean();
-		ob_start();
-		$blockstart = ((sizeof($this->_bodyparts)+1)*2)*4+4;
-		$sizeinfo = pack("iii",sizeof($this->_bodyparts)+1,$blockstart,$len);
-		debugLog("GZip compressed Multipart Debug Output Total parts " . (sizeof($this->_bodyparts)+1));
-		debugLog(sprintf("Datapart BlockStart: %d Len: %d Content: %s",$blockstart,$len,bin2hex($data)));
-		foreach($this->_bodyparts as $bp) {
-		    $blockstart = $blockstart + $len;
-		    $len = strlen(bin2hex($bp))/ 2;
-		    $sizeinfo .= pack("ii",$blockstart,$len);
-		    debugLog(sprintf("Bodypart BlockStart: %d Len: %d Content: %s",$blockstart,$len,bin2hex($bp)));
-		}
-		fwrite($this->_out,$sizeinfo);
-		fwrite($this->_out,$data);
-		foreach($this->_bodyparts as $bp) {
-	    	    fwrite($this->_out,$bp);
-		}
+				// NOT THE NICE WAY IMHO but this keeps existing logic of data output in index.php file...
+				// first we grab the existing wbxml output, manipulate it and write it buffered way back.
+				$len = ob_get_length();
+				$data = ob_get_contents();
+				ob_end_clean();
+				ob_start();
+				$blockstart = ((sizeof($this->_bodyparts)+1)*2)*4+4;
+				$sizeinfo = pack("iii",sizeof($this->_bodyparts)+1,$blockstart,$len);
+				debugLog("GZip compressed Multipart Debug Output Total parts " . (sizeof($this->_bodyparts)+1));
+				debugLog(sprintf("Datapart BlockStart: %d Len: %d Content: %s",$blockstart,$len,bin2hex($data)));
+				foreach($this->_bodyparts as $bp) {
+				    $blockstart = $blockstart + $len;
+				    $len = byte_strlen(bin2hex($bp))/ 2;
+				    $sizeinfo .= pack("ii",$blockstart,$len);
+				    debugLog(sprintf("Bodypart BlockStart: %d Len: %d Content: %s",$blockstart,$len,bin2hex($bp)));
+				}
+				fwrite($this->_out,$sizeinfo);
+				fwrite($this->_out,$data);
+				foreach($this->_bodyparts as $bp) {
+	    		    fwrite($this->_out,$bp);
+				}
     	    }
-	    // END ADDED dw2412 multipart output handling
+			// END ADDED dw2412 multipart output handling
         }
     }
 
@@ -668,7 +702,7 @@ class WBXMLEncoder {
     function _contentopaque($content) {
         $this->logContent("OPAQUE: ".bin2hex($content));
         $this->outByte(WBXML_OPAQUE);
-	$this->outByte(strlen($content));
+		$this->outByte(byte_strlen($content));
         $this->outOpaque($content);
     }
 
@@ -743,8 +777,8 @@ class WBXMLEncoder {
         $pos = strpos($fulltag, chr(58)); // chr(58) == ':'
 
         if($pos) {
-            $ns = substr($fulltag, 0, $pos);
-            $tag = substr($fulltag, $pos+1);
+            $ns = byte_substr($fulltag, 0, $pos);
+            $tag = byte_substr($fulltag, $pos+1);
         } else {
             $tag = $fulltag;
         }

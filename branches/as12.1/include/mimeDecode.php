@@ -331,7 +331,6 @@ class Mail_mimeDecode
                 case 'multipart/alternative':
                 case 'multipart/related':
                 case 'multipart/mixed':
-                case 'multipart/report':
                     if(!isset($content_type['other']['boundary'])){
                         $this->_error = 'No boundary found for ' . $content_type['value'] . ' part';
                         return false;

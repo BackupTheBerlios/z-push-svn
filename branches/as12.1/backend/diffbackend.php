@@ -20,9 +20,87 @@
 include_once('proto.php');
 include_once('backend.php');
 
+function GetDiff($old_in, $new_in)
+{
+    $start = microtime(true);
+
+	$changes = $old = array();
+
+	if (count($old_in) == 0) {
+		// In case we don't find any old items - all changes can be considered new
+		foreach($new_in as $item) {
+			$changes[] = array( 'id' => $item['id'],
+								'type' => 'change',
+								'flags' => SYNC_NEWMESSAGE,
+							  );
+		}
+	} else {
+		// create associative array of old items with id as key
+		foreach($old_in as $item) {
+			$old[$item['id']] = $item;
+		}
+
+		// iterate through new items to identify new or changed items
+		foreach($new_in as $item) {
+			$id = $item['id'];
+			$change = array( 'id' => $id,
+						   );
+
+			if (!isset($old[$id])) {
+				// Message in new seems to be new (add)
+				$change['type'] = 'change';
+				$change['flags'] = SYNC_NEWMESSAGE;
+				$changes[] = $change;
+			} else {
+				$old_item = $old[$id];
+				// Both messages are still available, compare flags and mod
+				if(isset($old_item["flags"]) && isset($item["flags"]) && $old_item["flags"] != $item["flags"]) {
+					// Flags changed
+					$change['type'] = 'flags';
+					$change['flags'] = $item['flags'];
+					$changes[] = $change;
+				}
+
+				if(isset($old_item['olflags']) && isset($item['olflags']) && $old_item['olflags'] != $item['olflags']) {
+					// Outlook Flags changed
+					$change['type'] = 'olflags';
+					$change['olflags'] = 0;
+					$changes[] = $change;
+				}
+
+				if($old_item['mod'] != $item['mod']) {
+					$change['type'] = 'change';
+					$changes[] = $change;
+				}
+
+				// unset in $old, so $old contains only the deleted items
+				unset($old[$id]);
+			}
+		}
+
+		// now $old contains only deleted items
+		foreach($old as $id=>$item) {
+	        // Message in state seems to have disappeared (delete)
+    	    $changes[] = array(	'type' => 'delete',
+					            'id'   => $id,
+							  );
+		}
+    }
+
+    // report performance
+    if (file_exists(BASE_PATH . "/debug.txt")) {
+	    $new_time = microtime(true)-$start;
+    	$start = microtime(true);
+	    $old_changes = GetDiffOld($old_in,$new_in);
+    	$old_time = microtime(true)-$start;
+	    debugLog("GetDiff() count(old)=".count($old_in).', count(new)='.count($new_in).', count(changes)='.count($changes).', count(old_changes)='.count($old_changes).", old_time=$old_time, new_time=$new_time");
+    }
+   
+    return $changes;
+}
 
 
-function GetDiff($old, $new) {
+function GetDiffOld($old, $new) {
     $changes = array();
 
     // Sort both arrays in the same way by ID
@@ -106,6 +184,11 @@ function GetDiff($old, $new) {
 }
 
 function RowCmp($a, $b) {
+//	Trying to determine if $a['id'] or $b['id'] is a hex string without preceding 0x
+//  otherwise the compare will fail. Compare needs to have unique IDs so an equal between $a and $b should never exist
+	if (preg_match("/^[a-f0-9]{1,}$/is", trim($a['id']))) $a['id'] = '0x'.$a['id'];
+	if (preg_match("/^[a-f0-9]{1,}$/is", trim($b['id']))) $b['id'] = '0x'.$b['id'];
+	if ($a['id'] == $b['id']) debugLog ('diffBackend IDs not unique during RowCmp sorting!');
     return $a["id"] < $b["id"] ? 1 : -1;
 }
 
@@ -277,7 +360,20 @@ class ImportContentsChangesDiff extends DiffState {
     }
 
     function ImportMessageMove($id, $newfolder) {
-        return true;
+        //do nothing if it is a dummy folder
+        if ($this->_folderid == SYNC_FOLDER_TYPE_DUMMY || $newfolder == SYNC_FOLDER_TYPE_DUMMY)
+            return true;
+
+        // Update client state
+        $change = array();
+        $change["id"] = $id;
+        $change["mod"] = 0; // dummy, will be updated later if the change succeeds
+        $change["parent"] = $this->_folderid;
+        $change["flags"] = (isset($message->read)) ? $message->read : 0;
+        $change["olflags"] = 0;
+        $this->updateState("change", $change);
+
+        return $this->_backend->MoveMessage($this->_folderid, $id, $newfolder);
     }
 
     // Outlook Supports flagging messages - Imap afaik not. Simply return true in this case not to break sync...
@@ -360,17 +456,20 @@ class ExportChangesDiff extends DiffState {
     }
 
     // CHANGED dw2412 Support Protocol Version 12 (added bodypreference)
-    function Config(&$importer, $folderid, $restrict, $syncstate, $flags, $truncation, $bodypreference) {
+    function Config(&$importer, $folderid, $restrict, $syncstate, $flags, $truncation, $bodypreference, $optionbodypreference, $mimesupport=0) {
         $this->_importer = &$importer;
         $this->_restrict = $restrict;
         $this->_syncstate = unserialize($syncstate);
         $this->_flags = $flags;
         $this->_truncation = $truncation;
-	$this->_bodypreference = $bodypreference;
+		$this->_bodypreference = $bodypreference;
+		$this->_optionbodypreference = $optionbodypreference;
+		$this->_mimesupport = $mimesupport;
 
         $this->_changes = array();
         $this->_step = 0;
 
+		debugLog("DiffBackend::Config mimesupport is: ". $this->_mimesupport);
         $cutoffdate = $this->getCutOffDate($restrict);
 
         if($this->_folderid) {
@@ -410,6 +509,8 @@ class ExportChangesDiff extends DiffState {
             if(!isset($this->_syncstate) || !$this->_syncstate)
                 $this->_syncstate = array();
 
+//	    debugLog(print_r($this->_syncstate,true));
+//	    debugLog(print_r($folderlist,true));
             $this->_changes = GetDiff($this->_syncstate, $folderlist);
 
             debugLog("Found " . count($this->_changes) . " folder changes");
@@ -423,6 +524,7 @@ class ExportChangesDiff extends DiffState {
     function Synchronize() {
         $progress = array();
 
+		debugLog("DiffBackend::Synchronize mimesupport is: ". $this->_mimesupport);
         // Get one of our stored changes and send it to the importer, store the new state if
         // it succeeds
         if($this->_folderid == false) {
@@ -472,7 +574,7 @@ class ExportChangesDiff extends DiffState {
                         // calls. This may cause our algorithm to 'double see' changes.
 
                         $stat = $this->_backend->StatMessage($this->_folderid, $change["id"]);
-                        $message = $this->_backend->GetMessage($this->_folderid, $change["id"], $truncsize,(isset($this->_bodypreference) ? $this->_bodypreference : false));
+                        $message = $this->_backend->GetMessage($this->_folderid, $change["id"], $truncsize,(isset($this->_bodypreference) ? $this->_bodypreference : false),(isset($this->_optionbodypreference) ? $this->_optionbodypreference : false), $this->_mimesupport);
 
                         // copy the flag to the message
                         $message->flags = (isset($change["flags"])) ? $change["flags"] : 0;
@@ -489,7 +591,29 @@ class ExportChangesDiff extends DiffState {
                         if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageDeletion($change["id"]) == true)
                             $this->updateState("delete", $change);
                         break;
-                    case "move":
+/*                    case "flags":
+                        if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageReadFlag($change["id"], $change["flags"]) == true)
+                            $this->updateState("flags", $change);
+                        break;
+                    case "olflags":
+                        $truncsize = $this->getTruncSize($this->_truncation);
+
+                        // Note: because 'parseMessage' and 'statMessage' are two seperate
+                        // calls, we have a chance that the message has changed between both
+                        // calls. This may cause our algorithm to 'double see' changes.
+
+                        $stat = $this->_backend->StatMessage($this->_folderid, $change["id"]);
+                        $message = $this->_backend->GetMessage($this->_folderid, $change["id"], $truncsize,(isset($this->_bodypreference) ? $this->_bodypreference : false));
+
+                        // copy the flag to the message
+                        $message->flags = (isset($change["flags"])) ? $change["flags"] : 0;
+
+                        if($stat && $message) {
+                    	    if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageChange($change["id"], $message) == true)
+                        	$this->updateState("olflags", $change);
+                        }
+                        break;
+*/                    case "move":
                         if($this->_flags & BACKEND_DISCARD_DATA || $this->_importer->ImportMessageMove($change["id"], $change["parent"]) == true)
                             $this->updateState("move", $change);
                         break;
@@ -608,8 +732,8 @@ class BackendDiff {
         return $folders;
     }
 
-    function Fetch($folderid, $id, $bodypreference=false, $mimesupport = 0) {
-        return $this->GetMessage($folderid, $id, 1024*1024, $bodypreference, $mimesupport); // Forces entire message (up to 1Mb)
+    function Fetch($folderid, $id, $bodypreference=false, $optionbodypreference=false, $mimesupport = 0) {
+        return $this->GetMessage($folderid, $id, 1024*1024, $bodypreference, $optionbodypreference, $mimesupport); // Forces entire message (up to 1Mb)
     }
 
     function GetAttachmentData($attname) {
@@ -632,7 +756,7 @@ class BackendDiff {
         return false;
     }
 
-    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $mimesupport = 0) {
+    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $optionbodypreference=false, $mimesupport = 0) {
         return false;
     }
 
@@ -685,15 +809,15 @@ class BackendDiff {
         return false;
     }
 
-    /**
+	/**
      * Checks if the sent policykey matches the latest policykey on the server
      *
-     * @param string $policykey
+	 * @param string $policykey
      * @param string $devid
      *
-     * @return status flag
+	 * @return status flag
      */
-    function CheckPolicy($policykey, $devid) {
+	function CheckPolicy($policykey, $devid) {
         global $user, $auth_pw;
 
         $status = SYNC_PROVISION_STATUS_SUCCESS;
@@ -701,12 +825,12 @@ class BackendDiff {
         $user_policykey = $this->getPolicyKey($user, $auth_pw, $devid);
 
         if ($user_policykey != $policykey) {
-            $status = SYNC_PROVISION_STATUS_POLKEYMISM;
+        	$status = SYNC_PROVISION_STATUS_POLKEYMISM;
         }
 
         if (!$policykey) $policykey = $user_policykey;
         return $status;
-    }
+	}
 
     /**
      * Return a policy key for given user with a given device id.
@@ -720,6 +844,22 @@ class BackendDiff {
      * @return unknown
      */
     function getPolicyKey($user, $pass, $devid) {
+		if($this->_loggedin === false) {
+			debugLog("logon failed for user $user");
+			return false;
+        }
+		$this->_device_filename = STATE_PATH . '/' . strtolower($devid) . '/device_info_'.$user;
+
+		if (file_exists($this->_device_filename)) {
+			$this->_device_info = unserialize(file_get_contents($this->_device_filename));
+			if (isset($this->_device_info['policy_key'])) {
+				return $this->_device_info['policy_key'];
+			} else {
+				return $this->setPolicyKey(0, $devid);
+			}
+		} else {
+			return $this->setPolicyKey(0, $devid);
+		}
         return false;
     }
 
@@ -728,9 +868,13 @@ class BackendDiff {
      *
      * @return unknown
      */
-    function generatePolicyKey(){
-        return mt_rand(1000000000, 9999999999);
-    }
+	function generatePolicyKey() {
+//		AS14 transmit Policy Key in URI on MS Phones. 
+//		In the base64 encoded binary string only 4 Bytes being reserved for 
+//		policy key and works in signed mode... Thats why we need here the max...
+//		return mt_rand(1000000000, 9999999999);
+		return mt_rand(1000000000, 2147483647);
+	}
 
     /**
      * Set a new policy key for the given device id.
@@ -740,7 +884,16 @@ class BackendDiff {
      * @return unknown
      */
     function setPolicyKey($policykey, $devid) {
-        return false;
+		$this->_device_filename = STATE_PATH . '/' . strtolower($devid) . '/device_info_'.$this->_user;
+
+    	if($this->_loggedin !== false) {
+    		if (!$policykey) 
+    			$policykey = $this->generatePolicyKey();
+    		$this->_device_info['policy_key'] = $policykey;
+    		file_put_contents($this->_device_filename,serialize($this->_device_info));
+    		return $policykey;
+    	}
+	    return false;
     }
 
     /**
@@ -752,7 +905,7 @@ class BackendDiff {
      * @return int
      */
     function getDeviceRWStatus($user, $pass, $devid) {
-        return false;
+    	return false;
     }
 
     /**
@@ -774,7 +927,7 @@ class BackendDiff {
     }
 
     function AlterPingChanges($folderid, &$syncstate) {
-        return array();        
+        return array();
     }
 }
 ?>

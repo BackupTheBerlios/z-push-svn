@@ -227,6 +227,9 @@ define("SYNC_POOMCAL_STARTTIME","POOMCAL:StartTime");
 define("SYNC_POOMCAL_UID","POOMCAL:UID");
 define("SYNC_POOMCAL_ATTENDEE_STATUS","POOMCAL:Attendee_Status");
 define("SYNC_POOMCAL_ATTENDEE_TYPE","POOMCAL:Attendee_Type");
+// AS>=14.0
+define("SYNC_POOMCAL_RESPONSEREQUESTED","POOMCAL:ResponseRequested");
+define("SYNC_POOMCAL_DISALLOWNEWTIMEPROPOSAL","POOMCAL:DisallowNewTimeProposal");
 
 // Move
 define("SYNC_MOVE_MOVES","Move:Moves");
@@ -335,6 +338,14 @@ define("SYNC_RESOLVERECIPIENTS_RECIPIENTCOUNT","ResolveRecipients:RecipientCount
 define("SYNC_RESOLVERECIPIENTS_MAXCERTIFICATES","ResolveRecipients:MaxCertificates");
 define("SYNC_RESOLVERECIPIENTS_MAXAMBIGUOUSRECIPIENTS","ResolveRecipients:MaxAmbiguousRecipients");
 define("SYNC_RESOLVERECIPIENTS_CERTIFICATECOUNT","ResolveRecipients:CertificateCount");
+define("SYNC_RESOLVERECIPIENTS_AVAILABILITY","ResolveRecipients:Availability");
+define("SYNC_RESOLVERECIPIENTS_STARTTIME","ResolveRecipients:StartTime");
+define("SYNC_RESOLVERECIPIENTS_ENDTIME","ResolveRecipients:EndTime");
+define("SYNC_RESOLVERECIPIENTS_MERGEDFREEBUSY","ResolveRecipients:MergedFreeBusy");
+define("SYNC_RESOLVERECIPIENTS_PICTURE","ResolveRecipients:Picture");
+define("SYNC_RESOLVERECIPIENTS_MAXSIZE","ResolveRecipients:MaxSize");
+define("SYNC_RESOLVERECIPIENTS_DATA","ResolveRecipients:Data");
+define("SYNC_RESOLVERECIPIENTS_MAXPICTURES","ResolveRecipients:MaxPictures");
 
 // ValidateCert
 define("SYNC_VALIDATECERT_VALIDATECERT","ValidateCert:ValidateCert");
@@ -535,6 +546,7 @@ define("SYNC_COMPOSEMAIL_INSTANCEID","ComposeMail:InstanceId");
 define("SYNC_COMPOSEMAIL_MIME","ComposeMail:MIME");
 define("SYNC_COMPOSEMAIL_CLIENTID","ComposeMail:ClientId");
 define("SYNC_COMPOSEMAIL_STATUS","ComposeMail:Status");
+define("SYNC_COMPOSEMAIL_ACCOUNTID","ComposeMail:AccountId");
 
 // END ADDED dw2412 14.0 ComposeMail Support
 
@@ -598,4 +610,8 @@ define("SYNC_PROVISION_RWSTATUS_NA", 0);
 define("SYNC_PROVISION_RWSTATUS_OK", 1);
 define("SYNC_PROVISION_RWSTATUS_PENDING", 2);
 define("SYNC_PROVISION_RWSTATUS_WIPED", 3);
+
+define("SYNCCACHE_UNCHANGED"		, 0);
+define("SYNCCACHE_CHANGED"		, 1);
+
 ?>

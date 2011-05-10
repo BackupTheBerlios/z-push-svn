@@ -12,16 +12,39 @@
 * Consult LICENSE file for details
 ************************************************/
 include_once('diffbackend.php');
+include_once('z_RTF.php');
 
 class BackendVCDir extends BackendDiff {
+    var $_config;
     var $_user;
     var $_devid;
     var $_protocolversion;
+    var $_path;
 
     function Setup($user, $devid, $protocolversion) {
         $this->_user = $user;
         $this->_devid = $devid;
         $this->_protocolversion = $protocolversion;
+        $this->_path = $this->getPath();
+
+		// ItemID Cache
+    	$dir = opendir(STATE_PATH. "/" .strtolower($this->_devid));
+        if(!$dir) {
+	    	debugLog("IMAP Backend: creating folder for device ".strtolower($this->_devid));
+	    	if (mkdir(STATE_PATH. "/" .strtolower($this->_devid), 0744) === false) 
+				debugLog("IMAP Backend: failed to create folder ".strtolower($this->_devid));
+		}
+		$filename = STATE_DIR . '/' . strtolower($this->_devid). '/vcard_items_'. $this->_user;
+		$this->_items = false;
+		if (file_exists($filename)) {
+	    	if (($this->_items = file_get_contents(STATE_DIR . '/' . strtolower($this->_devid). '/vcard_items_'. $this->_user)) !== false) {
+				$this->_items = unserialize($this->_items);
+	    	} else {
+	        	$this->_items = array();
+		    }
+		} else {
+	    	$this->_items =  array();
+	    }
 
         return true;
     }
@@ -38,22 +61,37 @@ class BackendVCDir extends BackendDiff {
         debugLog('VCDir::GetMessageList('.$folderid.')');
         $messages = array();
 
-        $dir = opendir($this->getPath());
+        $dir = opendir($this->_path);
+		$mod = false;
         if(!$dir)
             return false;
 
         while($entry = readdir($dir)) {
-            if(is_dir($this->getPath() .'/'.$entry))
+            if(is_dir($this->_path .'/'.$entry))
                 continue;
 
+			// put real imap id in cache and create unique folderid instead
+			if (($entryid = array_search($entry,$this->_items)) === false) {
+				ksort($this->_items);
+				end($this->_items);
+				if (key($this->_items)+1 == 1)
+			    	$entryid = sprintf("1%09d",key($this->_items)+1);
+			    else 
+			    	$entryid = key($this->_items)+1;
+			    $this->_items[$entryid] = $entry;
+				$mod = true;
+			}
             $message = array();
-            $message["id"] = $entry;
-            $stat = stat($this->getPath() .'/'.$entry);
+            $message["id"] = $entryid;
+            $stat = stat($this->_path .'/'.$entry);
             $message["mod"] = $stat["mtime"];
             $message["flags"] = 1; // always 'read'
 
             $messages[] = $message;
         }
+
+		if ($mod == true)
+			file_put_contents(STATE_DIR . '/' . strtolower($this->_devid). '/vcard_items_'. $this->_user, serialize($this->_items));
 
         return $messages;
     }
@@ -97,11 +135,11 @@ class BackendVCDir extends BackendDiff {
     }
 
     function StatMessage($folderid, $id) {
-        debugLog('VCDir::StatMessage('.$folderid.', '.$id.')');
+        debugLog('VCDir::StatMessage('.$folderid.', '.$this->_items[$id].')');
         if($folderid != "root")
             return false;
 
-        $stat = stat($this->getPath() . "/" . $id);
+        $stat = stat($this->_path . "/" . $this->_items[$id]);
 
         $message = array();
         $message["mod"] = $stat["mtime"];
@@ -111,8 +149,8 @@ class BackendVCDir extends BackendDiff {
         return $message;
     }
 
-    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $mimesupport = 0) {
-        debugLog('VCDir::GetMessage('.$folderid.', '.$id.', ..)');
+    function GetMessage($folderid, $id, $truncsize, $bodypreference=false, $optionbodypreference=false, $mimesupport = 0) {
+        debugLog('VCDir::GetMessage('.$folderid.', '.$this->_items[$id].', ..)');
         if($folderid != "root")
             return;
 
@@ -134,7 +172,7 @@ class BackendVCDir extends BackendDiff {
         // Parse the vcard
         $message = new SyncContact();
 
-        $data = file_get_contents($this->getPath() . "/" . $id);
+        $data = file_get_contents($this->_path . "/" . $this->_items[$id]);
         $data = str_replace("\x00", '', $data);
         $data = str_replace("\r\n", "\n", $data);
         $data = str_replace("\r", "\n", $data);
@@ -307,11 +345,65 @@ class BackendVCDir extends BackendDiff {
         }
         if(!empty($vcard['org'][0]['val'][0]))
             $message->companyname = w2ui($vcard['org'][0]['val'][0]);
-        if(!empty($vcard['note'][0]['val'][0])){
-            $message->body = w2ui($vcard['note'][0]['val'][0]);
-            $message->bodysize = strlen($vcard['note'][0]['val'][0]);
-            $message->bodytruncated = 0;
-        }
+	    if(!empty($vcard['note'][0]['val'][0])){
+	    	if ($bodypreference === false) {
+    	        $message->body = w2ui($vcard['note'][0]['val'][0]);
+        	    $message->bodysize = strlen($vcard['note'][0]['val'][0]);
+            	$message->bodytruncated = 0;
+	        } else {
+	    	    if (isset($bodypreference[1]) && !isset($bodypreference[1]["TruncationSize"])) 
+	    		    $bodypreference[1]["TruncationSize"] = 1024*1024;
+				if (isset($bodypreference[2]) && !isset($bodypreference[2]["TruncationSize"])) 
+				    $bodypreference[2]["TruncationSize"] = 1024*1024;
+				if (isset($bodypreference[3]) && !isset($bodypreference[3]["TruncationSize"]))
+				    $bodypreference[3]["TruncationSize"] = 1024*1024;
+				if (isset($bodypreference[4]) && !isset($bodypreference[4]["TruncationSize"]))
+			    	$bodypreference[4]["TruncationSize"] = 1024*1024;
+				$message->airsyncbasebody = new SyncAirSyncBaseBody();
+				debugLog("airsyncbasebody!");
+				$body="";
+				$plain = $vcard['note'][0]['val'][0];
+				if (isset($bodypreference[2])) {
+				    debugLog("HTML Body");
+				    // Send HTML if requested and native type was html
+				    $message->airsyncbasebody->type = 2;
+				    $html = '<html>'.
+							'<head>'.
+							'<meta name="Generator" content="Z-Push">'.
+							'<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'.
+							'</head>'.
+							'<body>'.
+							str_replace("\n","<BR>",str_replace("\r","<BR>", str_replace("\r\n","<BR>",w2u($plain)))).
+							'</body>'.
+							'</html>';
+		    	    if(isset($bodypreference[2]["TruncationSize"]) &&
+	    	            strlen($html) > $bodypreference[2]["TruncationSize"]) {
+		                $html = utf8_truncate($html,$bodypreference[2]["TruncationSize"]);
+				        $message->airsyncbasebody->truncated = 1;
+				    }
+				    $message->airsyncbasebody->data = $html;
+				    $message->airsyncbasebody->estimateddatasize = strlen($html);
+		    	} else {
+					    // Send Plaintext as Fallback or if original body is plaintext
+				    debugLog("Plaintext Body");
+					$plain = $vcard['note'][0]['val'][0];
+				    $plain = w2u(str_replace("\n","\r\n",str_replace("\r","",$plain)));
+				    $message->airsyncbasebody->type = 1;
+		    	    if(isset($bodypreference[1]["TruncationSize"]) &&
+			    		strlen($plain) > $bodypreference[1]["TruncationSize"]) {
+			       		$plain = utf8_truncate($plain, $bodypreference[1]["TruncationSize"]);
+				    	$message->airsyncbasebody->truncated = 1;
+		   	        }
+				    $message->airsyncbasebody->estimateddatasize = strlen($plain);
+		    	    $message->airsyncbasebody->data = $plain;
+		    	}
+				// In case we have nothing for the body, send at least a blank... 
+				// dw2412 but only in case the body is not rtf!
+		    	if ($message->airsyncbasebody->type != 3 && 
+		    		(!isset($message->airsyncbasebody->data) || strlen($message->airsyncbasebody->data) == 0))
+		       	    $message->airsyncbasebody->data = " ";
+		    }
+	    }
         if(!empty($vcard['role'][0]['val'][0]))
             $message->jobtitle = w2ui($vcard['role'][0]['val'][0]);//$vcard['title'][0]['val'][0]
         if(!empty($vcard['url'][0]['val'][0]))
@@ -326,7 +418,7 @@ class BackendVCDir extends BackendDiff {
     }
 
     function DeleteMessage($folderid, $id) {
-        return unlink($this->getPath() . '/' . $id);
+        return unlink($this->_path . '/' . $this->_items[$id]);
     }
 
     function SetReadFlag($folderid, $id, $flags) {
@@ -334,7 +426,7 @@ class BackendVCDir extends BackendDiff {
     }
 
     function ChangeMessage($folderid, $id, $message) {
-        debugLog('VCDir::ChangeMessage('.$folderid.', '.$id.', ..)');
+        debugLog('VCDir::ChangeMessage('.$folderid.', '.$this->_items[$id].', ..)');
         $mapping = array(
             'fileas' => 'FN',
             'lastname;firstname;middlename;title;suffix' => 'N',
@@ -358,6 +450,40 @@ class BackendVCDir extends BackendDiff {
             'jobtitle' => 'ROLE',
             'webpage' => 'URL',
         );
+
+		// Since in >=AS12.1 we have the airsyncbasebody object
+		// By doing this hack we can continue using our current functions...
+		if (isset($message->airsyncbasebody)) {
+		    switch($message->airsyncbasebody->type) {
+		        case '3' 	: $message->rtf = $message->airsyncbasebody->data; break;
+		        case '1' 	: $message->body = $message->airsyncbasebody->data; break;
+	    	}
+		}
+		// In case body is sent in rtf, convert it to ascii and use it as message body element so that we
+		// can later on write it to file
+		if (isset($message->rtf)) {
+	    	// Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
+		    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
+		    // to see if it is realy empty and in case not, take the appointment body.
+	    	$rtf_body = new rtf ();
+		    $rtf_body->loadrtf(base64_decode($message->rtf));
+		    $rtf_body->output("ascii");
+	    	$rtf_body->parse();
+		    if (isset($message->body) &&
+		        isset($rtf_body->out) &&
+	    	    $rtf_body->out == "" && $message->body != "") {
+	        	unset($message->rtf);
+		    }
+		    debugLog('vcarddir::RTFDATA:' . $message->rtf);
+		    $rtf_body = new rtf ();
+		    $rtf_body->loadrtf(base64_decode($message->rtf));
+	    	$rtf_body->output("ascii");
+		    $rtf_body->parse();
+		    debugLog('vcarddir::RTFDATA-parsed:' . $rtf_body->out);
+	    	//put rtf into body
+		    if($rtf_body->out <> "") $message->body=$rtf_body->out;
+		}
+
         $data = "BEGIN:VCARD\nVERSION:2.1\nPRODID:Z-Push\n";
         foreach($mapping as $k => $v){
             $val = '';
@@ -399,14 +525,24 @@ class BackendVCDir extends BackendDiff {
                 $name = 'unknown';
             }
             $name = preg_replace('/[^a-z0-9 _-]/i', '', $name);
-            $id = $name.'.vcf';
+            $entry = $name.'.vcf';
             $i = 0;
-            while(file_exists($this->getPath().'/'.$id)){
+            while(file_exists($this->_path.'/'.$entry)){
                 $i++;
-                $id = $name.$i.'.vcf';
+                $entry = $name.$i.'.vcf';
             }
+    	    file_put_contents($this->_path.'/'.$entry, $data);
+			ksort($this->_items);
+			end($this->_items);
+			if (key($this->_items)+1 == 1)
+				$id = sprintf("1%09d",key($this->_items)+1);
+			else 
+				$id = key($this->_items)+1;
+			$this->_items[$id] = $entry;
+			file_put_contents(STATE_DIR . '/' . strtolower($this->_devid). '/vcard_items_'. $this->_user, serialize($this->_items));
+        } else {
+    	    file_put_contents($this->_path.'/'.$this->_items[$id], $data);
         }
-        file_put_contents($this->getPath().'/'.$id, $data);
         return $this->StatMessage($folderid, $id);
     }
 

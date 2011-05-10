@@ -42,41 +42,72 @@ class Streamer {
     function Streamer($mapping) {
         $this->_mapping = $mapping;
         $this->flags = false;
-	$this->_setflag = false;
-	$this->_setchange = false;
-	$this->_setread = false;
-	
+		$this->_setflag = false;
+		$this->_setchange = false;
+		$this->_setread = false;
+		$this->_setcategories = false;
     }
 
     // Decodes the WBXML from $input until we reach the same depth level of WBXML. This
     // means that if there are multiple objects at this level, then only the first is decoded
     // SubOjects are auto-instantiated and decoded using the same functionality
     function decode(&$decoder) {
+
+		// START HACK dw2412
+		// We need this just for decoding items sent by HTC Android Devices (HTC DESIRE Z - maybe others!) the right way...
+		switch (get_class($this)) {
+			case "SyncAppointment" :
+				if (!isset($this->_mapping[SYNC_POOMCAL_BODY]))
+					$this->_mapping += array(
+    			                SYNC_POOMCAL_BODY => array (STREAMER_VAR => "body"),
+                			    SYNC_POOMCAL_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
+			                    SYNC_POOMCAL_RTF => array (STREAMER_VAR => "rtf"),
+    	    				);
+				break;
+			case "SyncContact" :
+				if (!isset($this->_mapping[SYNC_POOMCONTACTS_BODY]))
+				    $this->_mapping += array(
+								SYNC_POOMCONTACTS_RTF => array (STREAMER_VAR => "rtf"),
+					        	SYNC_POOMCONTACTS_BODY => array (STREAMER_VAR => "body"),
+					        	SYNC_POOMCONTACTS_BODYSIZE => array (STREAMER_VAR => "bodysize"),
+					        	SYNC_POOMCONTACTS_BODYTRUNCATED => array (STREAMER_VAR => "bodytruncated"),
+				    	    );
+    	    	break;
+		}
+		// END HACK dw2412
+
         while(1) {
             $entity = $decoder->getElement();
-	    if (isset($entity[EN_TAG])) {
-		switch ($entity[EN_TAG]) {
-		    case "POOMMAIL:Read" : $this->_setread=true; break;
-		    case "POOMMAIL:Flag" : $this->_setflag=true; break;
-		    default		 : $this->_setflag=false; 
-					   $this->_setread=false; 
-					   $this->_setchange=true;
-	        };
-	    };
+		    if (isset($entity[EN_TAG])) {
+				switch ($entity[EN_TAG]) {
+				    case "POOMMAIL:Read" : 
+				    	$this->_setread=true; break;
+				    case "POOMMAIL:Flag" : 
+				    	$this->_setflag=true; break;
+				    case "POOMMAIL:Categories" : 
+				    	$this->_setcategories=true; break;
+				    default	: 
+				    	$this->_setflag=false; 
+						$this->_setread=false; 
+						$this->_setcategories=false; 
+						$this->_setchange=true;
+				};
+			};
 
             if($entity[EN_TYPE] == EN_TYPE_STARTTAG) {
-                if(! ($entity[EN_FLAGS] & EN_FLAGS_CONTENT)) {
+                if(! ($entity[EN_FLAGS] & EN_FLAGS_CONTENT) && (isset($entity[EN_TAG]) && $entity[EN_TAG] != '' && isset($this->_mapping[$entity[EN_TAG]]))) {
                     $map = $this->_mapping[$entity[EN_TAG]];
                     if(!isset($map[STREAMER_TYPE])) {
                         $this->$map[STREAMER_VAR] = "";
                     } else if ($map[STREAMER_TYPE] == STREAMER_TYPE_DATE || $map[STREAMER_TYPE] == STREAMER_TYPE_DATE_DASHES ) {
                         $this->$map[STREAMER_VAR] = "";
                     } else if ($map[STREAMER_TYPE] == "SyncPoommailFlag") { // added dw2412 to support empty flag = flag to delete
-			$this->poommailflag = new SyncPoommailFlag();
-		        $this->poommailflag->flagstatus="";
+						$this->poommailflag = new SyncPoommailFlag();
+		    		    $this->poommailflag->flagstatus="";
                     }
                     continue;
-                }
+                } else if (! ($entity[EN_FLAGS] & EN_FLAGS_CONTENT) && (!isset($entity[EN_TAG]) || $entity[EN_TAG] == '' || !isset($this->_mapping[$entity[EN_TAG]])))
+                	debugLog("Streamer::DEBUGDEBUGDEBUG:".print_r($entity,true));
                 // Found a start tag
                 if(!isset($this->_mapping[$entity[EN_TAG]])) {
                     // This tag shouldn't be here, abort
@@ -135,8 +166,11 @@ class Streamer {
                             $decoded = $decoder->getElementContent();
 
                             if($decoded === false) {
-                                debug("Unable to get content for " . $entity[EN_TAG]);
-                                return false;
+//                                debug("Unable to get content for " . $entity[EN_TAG]);
+//                                return false;
+								// the tag is declared to have content, but no content is available.
+								// set an empty content
+								$decoded = "";
                             }
 
                             if(!$decoder->getElementEndTag()) {
@@ -164,25 +198,6 @@ class Streamer {
     function encode(&$encoder) {
         $attributes = isset($this->attributes) ? $this->attributes : array();
 
-// START ADDED dw2412 Support V12.0
-	if(isset($this->_mapping["AirSyncBase:Attachments"])) {
-	    if (isset($this->attachments) &&
-		sizeof($this->attachments) > 0) {
-		for ($i=0;$i<sizeof($this->attachments);$i++) {
-		    $this->airsyncbaseattachments[$i] = new SyncAirSyncBaseAttachment();
-		    $this->airsyncbaseattachments[$i]->method = $this->attachments[$i]->attmethod;
-	    	    $this->airsyncbaseattachments[$i]->estimateddatasize = $this->attachments[$i]->attsize;
-		    $this->airsyncbaseattachments[$i]->displayname = $this->attachments[$i]->displayname;
-		    $this->airsyncbaseattachments[$i]->filereference = $this->attachments[$i]->attname;
-		    $this->airsyncbaseattachments[$i]->isinline = $this->attachments[$i]->isinline;
-		    $this->airsyncbaseattachments[$i]->contentlocation = $this->attachments[$i]->contentlocation;
-		    $this->airsyncbaseattachments[$i]->contentid = $this->attachments[$i]->contentid;
-		    if (isset($this->attachments[$i]->_data)) $this->airsyncbaseattachments[$i]->_data = $this->attachments[$i]->_data;
-		}
-		unset($this->attachments);
-	    }
-	}
-// END ADDED dw2412 Support V12.0
         foreach($this->_mapping as $tag => $map) {
             if(isset($this->$map[STREAMER_VAR])) {
                 // Variable is available
@@ -223,6 +238,12 @@ class Streamer {
                 	$encoder->_bodyparts[] = $this->$map[STREAMER_VAR];
                 	$encoder->startTag(SYNC_ITEMOPERATIONS_PART);
                 	$encoder->content("".(sizeof($encoder->_bodyparts)-1)."");
+                	$encoder->endTag();
+			continue; // END ADDED dw2412 to support mulitpart output
+                    } else if ($encoder->_multipart == false &&
+                		($tag == SYNC_ITEMOPERATIONS_DATA)) {  // START ADDED dw2412 to support mulitpart output
+                	$encoder->startTag($tag);
+                	$encoder->content(base64_encode($this->$map[STREAMER_VAR]));
                 	$encoder->endTag();
 			continue; // END ADDED dw2412 to support mulitpart output
                     } else
@@ -272,6 +293,14 @@ class Streamer {
                 $matches[3] = 18;
                 $matches[4] = $matches[5] = $matches[6] = 0;
             }
+            return gmmktime($matches[4], $matches[5], $matches[6], $matches[2], $matches[3], $matches[1]);
+        } else if (preg_match("/(\d{4})[^0-9]*(\d{2})[^0-9]*(\d{2})/", $ts, $matches)) { // Fixes SAMSUNG Date Problem. Samsung send in Contacts dates only the date without time information... unfortunately...
+            if ($matches[1] >= 2038){
+                $matches[1] = 2038;
+                $matches[2] = 1;
+                $matches[3] = 18;
+            }
+            $matches[4] = $matches[5] = $matches[6] = 0;
             return gmmktime($matches[4], $matches[5], $matches[6], $matches[2], $matches[3], $matches[1]);
         }
         return 0;
