@@ -277,18 +277,6 @@ class BackendIMAP extends BackendDiff {
             }
             else {
                 $mobj2 = new Mail_mimeDecode($origmail);
-                $m2headerstructure = imap_fetchstructure($this->_mbox, $forward, FT_UID);
-                $m2charset = "utf-8";
-                //get the original charset in order to preserver special characters (e.g. umlauts)
-                if (isset($m2headerstructure->parameters) && is_array($m2headerstructure->parameters)) {
-                    foreach ($m2headerstructure->parameters as $param) {
-                        if (isset($param->attribute) && $param->attribute == "charset" && isset($param->value)) {
-                            $m2charset = $param->value;
-                            break;
-                        }
-                    }
-                }
-                unset($m2headerstructure);
                 $mess2 = $mobj2->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'charset' => 'utf-8'));
 
                 if (!$use_orgbody)
@@ -386,10 +374,7 @@ class BackendIMAP extends BackendDiff {
                                 "\nContent-Type: {$mess2->headers['content-type']}\n\n".
                                 @imap_body($this->_mbox, $forward, FT_PEEK | FT_UID)."\n\n";
                     }
-                    else {
-                        if (!empty($forward_h_ct)) $headers .= "\nContent-Type: $forward_h_ct";
-                        if (!empty($forward_h_cte)) $headers .= "\nContent-Transfer-Encoding: $forward_h_cte";
-                    }
+
                     $body .= "--$att_boundary--\n\n";
                 }
 
@@ -404,6 +389,10 @@ class BackendIMAP extends BackendDiff {
         // remove carriage-returns from body
         $body = str_replace("\r\n", "\n", $body);
 
+        if (!$multipartmixed) {
+            if (!empty($forward_h_ct)) $headers .= "\nContent-Type: $forward_h_ct";
+            if (!empty($forward_h_cte)) $headers .= "\nContent-Transfer-Encoding: $forward_h_cte";
+        }
         //advanced debugging
         //debugLog("IMAP-SendMail: parsed message: ". print_r($message,1));
         //debugLog("IMAP-SendMail: headers: $headers");
