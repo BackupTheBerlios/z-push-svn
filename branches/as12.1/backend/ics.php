@@ -4031,8 +4031,8 @@ class BackendICS {
 									$mapiquery["query"][1][] = 
 										   	    array(RES_OR,
         		    	            			    array(
-                			            				array(RES_PROPERTY, array(RELOP => RELOP_EQ, ULPROPTAG => PR_MESSAGE_CLASS, VALUE => "IPM.Note")),
-                        			    				array(RES_PROPERTY, array(RELOP => RELOP_EQ, ULPROPTAG => PR_MESSAGE_CLASS, VALUE => "IPM.Post")),
+                			            				array(RES_PROPERTY, array(RELOP => RELOP_EQ, ULPROPTAG => PR_MESSAGE_CLASS, VALUE => array(PR_MESSAGE_CLASS => "IPM.Note"))),
+                        			    				array(RES_PROPERTY, array(RELOP => RELOP_EQ, ULPROPTAG => PR_MESSAGE_CLASS, VALUE => array(PR_MESSAGE_CLASS => "IPM.Post"))),
                         						    ), // RES_OR
                     							);
 									break;
@@ -4042,47 +4042,47 @@ class BackendICS {
 				    		$mapiquery["query"][1][] = 
 									    array(RES_OR, 
 									    	array (
-												array (RES_AND, 
+/*												array (RES_AND, 
 												   	array(
 							                    	    array(RES_EXIST, array(ULPROPTAG => PR_BODY)),
-							                            array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_BODY, VALUE => u2w($value))),
+							                            array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_BODY, VALUE => array(PR_BODY => u2w($value)))),
 						    	                    ), 
 						        	            ), // RES_AND
-						            	        array (RES_AND, 
+*/						            	        array (RES_AND, 
 						                	    	array(
 						                    	        array(RES_EXIST, array(ULPROPTAG => PR_SUBJECT)),
-							                            array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SUBJECT, VALUE => u2w($value))),
+							                            array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SUBJECT, VALUE => array(PR_SUBJECT => u2w($value)))),
 								                    ), 
 								                ), // RES_AND 
 							                    array (RES_AND, 
 							                    	array(
                     	   							    array(RES_EXIST, array(ULPROPTAG => PR_DISPLAY_TO)),
-                       								    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_DISPLAY_TO, VALUE => u2w($value))),
+                       								    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_DISPLAY_TO, VALUE => array(PR_DISPLAY_TO => u2w($value)))),
                    								    ), 
 	            							    ), // RES_AND 
 	               							    array (RES_AND, array(
 	                  								    array(RES_EXIST, array(ULPROPTAG => PR_DISPLAY_CC)),
-		                   							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_DISPLAY_CC, VALUE => u2w($value))),
+		                   							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_DISPLAY_CC, VALUE => array(PR_DISPLAY_CC => u2w($value)))),
 		               							    ), 
 	    	           						    ), // RES_AND 
 	        	       						    array (RES_AND, array(
 	            	       							    array(RES_EXIST, array(ULPROPTAG => PR_SENDER_NAME)),
-	                	   							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SUBJECT, VALUE => u2w($value))),
+	                	   							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENDER_NAME, VALUE => array(PR_SENDER_NAME => u2w($value)))),
     											    ), 
 		           							    ), // RES_AND 
 		           							    array (RES_AND, array(
 		               								    array(RES_EXIST, array(ULPROPTAG => PR_SENDER_EMAIL_ADDRESS)),
-		               								    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENDER_EMAIL_ADDRESS, VALUE => u2w($value))),
+		               								    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENDER_EMAIL_ADDRESS, VALUE => array(PR_SENDER_EMAIL_ADDRESS => u2w($value)))),
 			           							    ), 
 			         						    ), // RES_AND 
 			           						    array (RES_AND, array(
 		    	           							    array(RES_EXIST, array(ULPROPTAG => PR_SENT_REPRESENTING_NAME)),
-		        	       							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENT_REPRESENTING_NAME, VALUE => u2w($value))),
+		        	       							    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENT_REPRESENTING_NAME, VALUE => array(PR_SENT_REPRESENTING_NAME => u2w($value)))),
         										    ), 
 		          							    ), // RES_AND 
 		           							    array (RES_AND, array(
 		              								    array(RES_EXIST, array(ULPROPTAG => PR_SENT_REPRESENTING_EMAIL_ADDRESS)),
-		              								    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENT_REPRESENTING_EMAIL_ADDRESS, VALUE => u2w($value))),
+		              								    array(RES_CONTENT, array(FUZZYLEVEL => (FL_SUBSTRING | FL_IGNORECASE), ULPROPTAG => PR_SENT_REPRESENTING_EMAIL_ADDRESS, VALUE => array(PR_SENT_REPRESENTING_EMAIL_ADDRESS => u2w($value)))),
 		           								    ), 
 			          						    ), // RES_AND 
 			           						), // RES_OR
@@ -4103,7 +4103,6 @@ class BackendICS {
 				}
 	    	}
 		}
-		debugLog(print_r($mapiquery,true));
 		return $mapiquery;
     }
 
@@ -4166,10 +4165,12 @@ class BackendICS {
 		};
 		$search = mapi_folder_getsearchcriteria($folder);
 		$range = explode("-",$searchquery['range']);
-		if ($range[0] == 0 &&
-		    (!isset($search['restriction']) ||
-		     md5(serialize($search['restriction'])) != md5(serialize($query['query'])))) {
-		    debugLog("Set Search Criteria");
+//		if ($range[0] == 0 &&
+//		    (!isset($search['restriction']) ||
+//		     md5(serialize(ksort_recursive($search['restriction']))) != md5(serialize(ksort_recursive($query['query']))))) {
+		if ($range[0] == 0 || (isset($searchquery['rebuildresults']) && $searchquery['rebuildresults'] == true)) {
+//			debugLog("\n".serialize(ksort_recursive($search['restriction']))."\n".serialize(ksort_recursive($query['query'])));
+//		    debugLog("Set Search Criteria ".md5(serialize(ksort_recursive($search['restriction']))) . " ".  md5(serialize(ksort_recursive($query['query']))));
 		    if (($search['searchstate'] & SEARCH_REBUILD) == true &&
 				($search['searchstate'] & SEARCH_RUNNING) == true) {
 				mapi_folder_setsearchcriteria($folder, 
@@ -4187,12 +4188,12 @@ class BackendICS {
 		$table = mapi_folder_getcontentstable($folder);
 		do {
 		    $search = mapi_folder_getsearchcriteria($folder);
-		    usleep(500000);
+		    usleep(100000);
 		    $i++;
 		} while(($search['searchstate'] & SEARCH_REBUILD) == true &&
 		        ($search['searchstate'] & SEARCH_RUNNING) == true && 
-		        $i<40 &&
-		        mapi_table_getrowcount($table) <= $range[1]);
+		        $i<4000 &&
+		        mapi_table_getrowcount($table) <= ($range[1]*2)+1);
 		if (($rows = mapi_table_queryallrows($table, array(PR_ENTRYID, PR_SOURCE_KEY,PR_PARENT_SOURCE_KEY)))) {
 		    foreach($rows as $value) {
 				$res["searchfolderid"] = bin2hex($searchfoldersourcekey);
@@ -4204,8 +4205,12 @@ class BackendICS {
 		    $result['status']=1;
 		} else {
 		    $result = array();
-		    $result['status']=0;
+		    $result['status']=1;
 		}
+		if (($search['searchstate'] & SEARCH_REBUILD) == true &&
+		    ($search['searchstate'] & SEARCH_RUNNING) == true && 
+			$i==4000) 
+		    $result['status']=10;
 		$result['global_search_status'] = 1;
 		return $result;
     }
