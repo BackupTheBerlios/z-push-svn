@@ -488,24 +488,24 @@ function HandleSync($backend, $protocolversion, $devid) {
     $partial = false;
     $maxcacheage = 960; // 15 Minutes + 1 to store it long enough for Device being connected to ActiveSync PC.
 
-	$SyncStatus = 1; // AS14 over all SyncStatus
+	$SyncStatus = SYNC_STATUS_SUCCESS; // AS14 over all SyncStatus
 
     if(!$decoder->getElementStartTag(SYNC_SYNCHRONIZE)) {
 		if ($protocolversion >= 12.1) {
 	    	if (!($SyncCache = unserialize($statemachine->getSyncCache())) ||
 				!isset($SyncCache['collections'])) {
-				_HandleSyncError("13");
+				_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 				debugLog("HandleSync: Empty Sync request and no SyncCache or SyncCache without collections. ".
 						"(SyncCache[lastuntil]+".$maxcacheage."=".($SyncCache['lastuntil']+$maxcacheage).", ".
 						"Time now".(time()).", ".
 						"SyncCache[collections]=".(isset($SyncCache['collections']) ? "Yes" : "No" ).", ".
 						"SyncCache array=".(is_array($SyncCache) ? "Yes" : "No" ).") ".
-						" STATUS = 13");
+						"(STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
 				return true;
 		    } else {
 				if (sizeof($SyncCache['confirmed_synckeys']) > 0) {
-					debugLog("HandleSync: We have unconfirmed sync keys but during short request. Enforce full Sync Request (STATUS = 13)");
-					_HandleSyncError("13");
+					debugLog("HandleSync: We have unconfirmed sync keys but during short request. Enforce full Sync Request (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
+					_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 					return true;
 		 		}
 				$shortsyncreq = true;
@@ -533,14 +533,14 @@ function HandleSync($backend, $protocolversion, $devid) {
 					}
 				}
 				if (count($collections) == 0) {
-					debugLog("HandleSync: Don't have any collections. Enforce full request. (STATUS = 13)");
-					_HandleSyncError("13");
+					debugLog("HandleSync: Don't have any collections. Enforce full request. (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
+					_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 					return true;
 				}
 			}
 		} else {
-			_HandleSyncError("13");
-			debugLog("HandleSync: Empty Sync request and protocolversion < 12.1 (STATUS = 13)");
+			_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
+			debugLog("HandleSync: Empty Sync request and protocolversion < 12.1 (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
 			return true;
 		}
 	} else {
@@ -567,8 +567,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 		    	    }
 				    debugLog('HandleSync: Got Heartbeat Interval Sync ('.$SyncCache['hbinterval'].' Seconds)');
 					if ($SyncCache['hbinterval'] > (REAL_SCRIPT_TIMEOUT-600)) {
-				    	_HandleSyncError('14',(REAL_SCRIPT_TIMEOUT-600));
-				   		debugLog('HandleSync: HeartbeatInterval larger than '.(REAL_SCRIPT_TIMEOUT-600).' Seconds. This violates the protocol spec. (STATUS = 14, LIMIT = '.(REAL_SCRIPT_TIMEOUT-600).')');
+				    	_HandleSyncError(SYNC_STATUS_INVALID_WAIT_HEARTBEATINTERVAL,(REAL_SCRIPT_TIMEOUT-600));
+				   		debugLog('HandleSync: HeartbeatInterval larger than '.(REAL_SCRIPT_TIMEOUT-600).' Seconds. This violates the protocol spec. (STATUS = ".SYNC_STATUS_INVALID_WAIT_HEARTBEATINTERVAL.", LIMIT = '.(REAL_SCRIPT_TIMEOUT-600).')');
 					    return true;
 					}
 			    	break;
@@ -578,8 +578,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 		    	    }
 			    	debugLog('HandleSync: Got Wait Sync ('.$SyncCache['wait'].' Minutes)');
 					if ($SyncCache['wait'] > ((REAL_SCRIPT_TIMEOUT-600)/60)) {
-					    _HandleSyncError('14',((REAL_SCRIPT_TIMEOUT-600)/60));
-					    debugLog('HandleSync: Wait larger than '.((REAL_SCRIPT_TIMEOUT-600)/60).' Minutes. This violates the protocol spec. (STATUS = 14, LIMIT = '.((REAL_SCRIPT_TIMEOUT-600)/60).')');
+					    _HandleSyncError(SYNC_STATUS_INVALID_WAIT_HEARTBEATINTERVAL,((REAL_SCRIPT_TIMEOUT-600)/60));
+					    debugLog('HandleSync: Wait larger than '.((REAL_SCRIPT_TIMEOUT-600)/60).' Minutes. This violates the protocol spec. (STATUS = ".SYNC_STATUS_INVALID_WAIT_HEARTBEATINTERVAL.", LIMIT = '.((REAL_SCRIPT_TIMEOUT-600)/60).')');
 					    return true;
 					}
 			    	break;
@@ -639,8 +639,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 									$statemachine->cleanOldSyncState("mi".$collection["synckey"]);
 									if (is_numeric($collection['syncstate']) && 
 									   	$collection['syncstate'] < 0 && strlen($collection['syncstate']) < 8) {
-							    	    debugLog("HandleSync: GetSyncState - Got an error in HandleSync");
-										_HandleSyncError(3);
+							    	    debugLog("HandleSync: GetSyncState - Got an error in HandleSync ( STATUS = ".SYNC_STATUS_INVALID_SYNCKEY.")");
+										_HandleSyncError(SYNC_STATUS_INVALID_SYNCKEY);
 									    return false;
 									}
 									// Reset the msginfos for the collectionid if set and synckey is 0
@@ -838,14 +838,14 @@ function HandleSync($backend, $protocolversion, $devid) {
 									// If needed elements are missing we will return error Status to the client
 									if ($collection["collectionid"] == "" ||
 										$collection["collectionid"] == false) {
-										_HandleSyncError("3");
-										debugLog("HandleSync: Should do a perform but don't have a collectionid, sending status 3 to recover from this");
+										_HandleSyncError(SYNC_STATUS_INVALID_SYNCKEY);
+										debugLog("HandleSync: Should do a perform but don't have a collectionid, sending status ".SYNC_STATUS_INVALID_SYNCKEY." to recover from this ( STATUS = ".SYNC_STATUS_INVALID_SYNCKEY.")");
 									    return true;
 									}
 
                                     if (!isset($collection["synckey"])) {
-										_HandleSyncError("4");
-										debugLog("HandleSync: Should do a perform in collection ".$collection["collectionid"]." without any synckey, sending status 4 to recover from this");
+										_HandleSyncError(SYNC_STATUS_PROTOCOL_ERROR);
+										debugLog("HandleSync: Should do a perform in collection ".$collection["collectionid"]." without any synckey, sending status ".SYNC_STATUS_PROTOCOL_ERROR." to recover from this ( STATUS = ".SYNC_STATUS_PROTOCOL_ERROR.")");
 									    return true;
                                     }
 
@@ -856,8 +856,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 											$collection["class"] = $SyncCache['folders'][$collection["collectionid"]]["class"];
 											debugLog("HandleSync: Sync folder:{$collection["class"]}");
 									    } else {
-											_HandleSyncError("12");
-											debugLog("HandleSync: No Class even in cache, sending status 12 to recover from this");
+											_HandleSyncError(SYNC_STATUS_FOLDER_HIERARCHY_CHANGED);
+											debugLog("HandleSync: No Class even in cache, sending status ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED." to recover from this ( STATUS = ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED.")");
 									       	return true;
 								    	}
 									};
@@ -981,17 +981,17 @@ function HandleSync($backend, $protocolversion, $devid) {
 								    	          	   		$foldertype == $collection['optionfoldertype']) {
 								                   	   		$collection['changeids'][$serverid]['optionfoldertype'] = $foldertype;
 								                   	   		if (!isset($msginfo[$serverid])) 
-								                   	   		    $collection['changeids'][$serverid]['status'] = 8;
+								                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 								                   	   		else {
 								                   	   			$importer[$collection['optionfoldertype'].$collection["collectionid"]]->ImportMessageChange($serverid, $appdata);
-								                   	   		    $collection['changeids'][$serverid]['status'] = 1;
+								                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_SUCCESS;
 								                   	   		}
 														} else {
 								                   	   		if (!isset($msginfo[$serverid])) 
-								                   	   		    $collection['changeids'][$serverid]['status'] = 8;
+								                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 								                   	   		else {
 									                   	   		$importer[$collection["collectionid"]]->ImportMessageChange($serverid, $appdata);
-								                   	   		    $collection['changeids'][$serverid]['status'] = 1;
+								                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_SUCCESS;
 								                   	   		}
 								                   	   	}
 								                   	} else {
@@ -1001,17 +1001,17 @@ function HandleSync($backend, $protocolversion, $devid) {
 								    	          	   			$foldertype == $collection['optionfoldertype']) {
 									                   	   		$collection['changeids'][$serverid]['optionfoldertype'] = $foldertype;
 									                   	   		if (!isset($msginfo[$serverid])) 
-									                   	   		    $collection['changeids'][$serverid]['status'] = 8;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 									                   	   		else {
 										    						$collection["flagids"][$serverid]['status'] = $importer[$collection['optionfoldertype'].$collection["collectionid"]]->ImportMessageFlag($serverid, $appdata->poommailflag);
-									                   	   		    $collection['changeids'][$serverid]['status'] = 1;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_SUCCESS;
 									                   	   		}
 								    	  	        	   	} else {
 									                   	   		if (!isset($msginfo[$serverid])) 
-									                   	   		    $collection['changeids'][$serverid]['status'] = 8;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 									                   	   		else {
 										    						$collection["flagids"][$serverid]['status'] = $importer[$collection["collectionid"]]->ImportMessageFlag($serverid, $appdata->poommailflag);
-									                   	   		    $collection['changeids'][$serverid]['status'] = 1;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_SUCCESS;
 									                   	   		}
 									    					}
 								        	    		}
@@ -1021,17 +1021,17 @@ function HandleSync($backend, $protocolversion, $devid) {
 								    	          	   			$foldertype == $collection['optionfoldertype']) {
 									                   	   		$collection['changeids'][$serverid]['optionfoldertype'] = $foldertype;
 									                   	   		if (!isset($msginfo[$serverid])) 
-									                   	   		    $collection['changeids'][$serverid]['status'] = 8;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 									                   	   		else {
 									        		       			$collection["readids"][$serverid]['status'] = $importer[$collection['optionfoldertype'].$collection["collectionid"]]->ImportMessageReadFlag($serverid, $appdata->read);
-									                   	   		    $collection['changeids'][$serverid]['status'] = 1;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_SUCCESS;
 									                   	   		}
 								    	        	  	   	} else {
 									                   	   		if (!isset($msginfo[$serverid])) 
-									                   	   		    $collection['changeids'][$serverid]['status'] = 8;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 									                   	   		else {
 									        		       			$collection["readids"][$serverid]['status'] = $importer[$collection["collectionid"]]->ImportMessageReadFlag($serverid, $appdata->read);
-									                   	   		    $collection['changeids'][$serverid]['status'] = 1;
+									                   	   		    $collection['changeids'][$serverid]['status'] = SYNC_STATUS_SUCCESS;
 									                   	   		}
 															}
 								                		}
@@ -1113,7 +1113,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 			        			                   	debugLog("HandleSync: SYNC_REMOVE failed because there is no importer for collection");
 					                    	    $collection["importedchanges"] = true;
 												if (isset($collection['changeids'][$serverid]))
-													$collection['changeids'][$serverid]['status'] = 8;
+													$collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
 												unset($msginfo[$serverid]);
 					   	                    	break;
 						                    case SYNC_FETCH:
@@ -1195,8 +1195,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 			if ($found == false) {
 		   		$SyncCache['lastuntil'] = time();
     	   		$statemachine->setSyncCache(serialize($SyncCache));
-    	   		_HandleSyncError("13");
-		   		debugLog("HandleSync: No Collections with SyncKeys. Enforce Full Sync Request (STATUS = 13)");
+    	   		_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
+		   		debugLog("HandleSync: No Collections with SyncKeys. Enforce Full Sync Request (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
 				return true;
 			}
 		}
@@ -1246,16 +1246,16 @@ function HandleSync($backend, $protocolversion, $devid) {
 
 		// Give up in case we don't have a synched hierarchy synckey!
 		if (!isset($SyncCache['hierarchy']['synckey'])) {
-	    	_HandleSyncError("12");
-		    debugLog("HandleSync: HandleSync Error No Hierarchy SyncKey in SyncCache... Invalidate! (STATUS = 12)");
+	    	_HandleSyncError(SYNC_STATUS_FOLDER_HIERARCHY_CHANGED);
+		    debugLog("HandleSync: HandleSync Error No Hierarchy SyncKey in SyncCache... Invalidate! (STATUS = ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED.")");
 		    return true;
 		}
 
 		// Just in case some client runs amok. This HB Interval & Wait in one request is not allowed by definition
 		if ($SyncCache['hbinterval'] !== false &&
 		    $SyncCache['wait'] !== false) {
-		    _HandleSyncError("4");
-		    debugLog("HandleSync: HandleSync got Found HeartbeatInterval and Wait in request. This violates the protocol spec. (STATUS = 4)");
+		    _HandleSyncError(SYNC_STATUS_PROTOCOL_ERROR);
+		    debugLog("HandleSync: HandleSync got Found HeartbeatInterval and Wait in request. This violates the protocol spec. (STATUS = ".SYNC_STATUS_PROTOCOL_ERROR.")");
 		    return true;
 		}
 
@@ -1325,7 +1325,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 					!isset($v1['optionfoldertype'])) ||
 					(isset($v1['optionfoldertype']) &&
 					!isset($v2['optionfoldertype']))) {
-					$SyncStatus = 13;
+					$SyncStatus = SYNC_STATUS_REQUEST_INCOMPLETE;
 				}
 
 				unset($v1);
@@ -1365,8 +1365,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 
 			if (isset($SyncCache['lasthbsyncstarted']) && 
 				$SyncCache['lasthbsyncstarted'] > $SyncCache['lastsyncendnormal']) {
- 				debugLog("HandleSync: lasthbsyncstarted is larger than lastsyncendnormal. Request a full request now (STATUS = 13)");
-				_HandleSyncError("13");
+ 				debugLog("HandleSync: lasthbsyncstarted is larger than lastsyncendnormal. Request a full request now (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
+				_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 				return true;
 			}
 
@@ -1375,8 +1375,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 				isset($SyncCache['lastsyncendnormal']) &&
 				$SyncCache['lasthbsyncstarted'] > $SyncCache['lastsyncendnormal'] &&
 				time() < $SyncCache['lastuntil']) {
- 				debugLog("HandleSync: Current Time is lower than lastuntil. Request a full request now (STATUS = 13)");
-				_HandleSyncError("13");
+ 				debugLog("HandleSync: Current Time is lower than lastuntil. Request a full request now (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
+				_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 				return true;
 			}
 
@@ -1393,8 +1393,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 				$CollectionsUnchanged == $CollectionKeys &&
 				time() <= $SyncCache['lastuntil'] &&
 				($SyncCache['wait'] == false && $SyncCache['hbinterval'] == false)) {
- 				debugLog("HandleSync: Partial Request with completely unchanged collections. Request a full request now (STATUS = 13)");
-				_HandleSyncError("13");
+ 				debugLog("HandleSync: Partial Request with completely unchanged collections. Request a full request now (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
+				_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 				return true;
 			}
 
@@ -1486,8 +1486,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 			debugLog("Confirmed Synckeys contains: ".print_r($SyncCache['confirmed_synckeys'],true));
 			unset($SyncCache['confirmed_synckeys']);
     		$statemachine->setSyncCache(serialize($SyncCache));
-			debugLog("HandleSync: Some SyncKeys didn't get confirmed. To ensure sync integrity we request a full request now (STATUS = 13)");
-			_HandleSyncError("13");
+			debugLog("HandleSync: Some SyncKeys didn't get confirmed. To ensure sync integrity we request a full request now (STATUS = ".SYNC_STATUS_REQUEST_INCOMPLETE.")");
+			_HandleSyncError(SYNC_STATUS_REQUEST_INCOMPLETE);
 			return true;
 		} else {
 			debugLog("HandleSync: All SyncKeys got confirmed. We continue here...");
@@ -1500,8 +1500,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 			if (isset($value['synckey'])) $i++;
 		}
 		if ($i==0) {
-			debugLog("HandleSync: We don't have any synckeys in collection. Request a full request now (STATUS = 4/13?)");
-			_HandleSyncError("4");
+			debugLog("HandleSync: We don't have any synckeys in collection. Request a full request now (STATUS = ".SYNC_STATUS_PROTOCOL_ERROR.")");
+			_HandleSyncError(SYNC_STATUS_PROTOCOL_ERROR);
 			return true;
 		}
 	};
@@ -1545,7 +1545,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 				$rwstatus = $backend->getDeviceRWStatus($user, $auth_pw, $devid);
 				if ($rwstatus == SYNC_PROVISION_RWSTATUS_PENDING || $rwstatus == SYNC_PROVISION_RWSTATUS_WIPED) {
     	    		//return 12 because it forces folder sync
-	   				_HandleSyncError("12");
+	   				_HandleSyncError(SYNC_STATUS_FOLDER_HIERARCHY_CHANGED);
 	   				return true;
 				}
     		}
@@ -1662,13 +1662,13 @@ function HandleSync($backend, $protocolversion, $devid) {
     			while(is_array($exporter->Synchronize()));
 
 				if ($hierarchychanged) {
-	           	    debugLog("HandleSync: Found hierarchy changes during Wait/Heartbeat Interval... Sending status 12 to get changes (STATUS = 12)");
-				    _HandleSyncError("12");
+	           	    debugLog("HandleSync: Found hierarchy changes during Wait/Heartbeat Interval... Sending status ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED." to get changes (STATUS = ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED.")");
+				    _HandleSyncError(SYNC_STATUS_FOLDER_HIERARCHY_CHANGED);
 				    return true;
 				}
 		    } else {
-            	debugLog("HandleSync: Error in Syncstate during Wait/Heartbeat Interval... Sending status 12 to enforce hierarchy sync (STATUS = 12)");
-				_HandleSyncError("12");
+            	debugLog("HandleSync: Error in Syncstate during Wait/Heartbeat Interval... Sending status ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED." to enforce hierarchy sync (STATUS = ".SYNC_STATUS_FOLDER_HIERARCHY_CHANGED.")");
+				_HandleSyncError(SYNC_STATUS_FOLDER_HIERARCHY_CHANGED);
 				return true;
 		    }
 		    // 5 seconds sleep to keep the load low...
@@ -1695,12 +1695,12 @@ function HandleSync($backend, $protocolversion, $devid) {
     // Do a short answer to allow short sync requests
     debugLog("HandleSync: dataavailable: ".($dataavailable == true ? "Yes" : "No")." dataimported: ".($dataimported == true ? "Yes" : "No"));
     if ($protocolversion >= 12.1 &&
-		$SyncStatus == 1 &&
+		$SyncStatus == SYNC_STATUS_SUCCESS &&
 		$dataavailable == false &&
 		$dataimported == false &&
 		($SyncCache['wait'] !== false ||
 		 $SyncCache['hbinterval'] !== false)) {
-		debugLog("HandleSync: Doing a short reply since no data is available, no data was imported and syncstatus is 1");
+		debugLog("HandleSync: Doing a short reply since no data is available, no data was imported and syncstatus is ".$SyncStatus);
 		$SyncCache['lastsyncendnormal'] = time();
     	$statemachine->setSyncCache(serialize($SyncCache));
 
@@ -1812,7 +1812,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		    		}
             	    if ((isset($exporter->exporter) && $exporter->exporter === false) ||
             	    	(isset($optionexporter->exporter) && $optionexporter->exporter === false)) {
-            			$folderstatus = 8;
+            			$folderstatus = SYNC_STATUS_OBJECT_NOT_FOUND;
             	    }
                 };
 
@@ -2023,11 +2023,22 @@ function HandleSync($backend, $protocolversion, $devid) {
 						$class = GetObjectClassFromFolderClass($collection["class"]);
 						foreach ($array_rf as $rfid) {
 					        $encoder->startTag(SYNC_MODIFY);
-							if (!isset($msginfos[$collection["collectionid"]][$rfid]) ||
-								$msginfos[$collection["collectionid"]][$rfid]['class'] != $class) continue;
+							if (!isset($msginfos[$collection["collectionid"]][$rfid])) {
+
+							    $encoder->startTag(SYNC_SERVERENTRYID);
+							    	$encoder->content($rfid);
+							    $encoder->endTag();
+            	            	$encoder->startTag(SYNC_STATUS);
+									$encoder->content(SYNC_STATUS_OBJECT_NOT_FOUND);
+                    	    	$encoder->endTag();
+                    	    	$encoder->endTag();
+								continue;
+						    }
+							if ($msginfos[$collection["collectionid"]][$rfid]['class'] != $class) continue;
 						    $encoder->startTag(SYNC_SERVERENTRYID);
 						    	$encoder->content($rfid);
 						    $encoder->endTag();
+
 						    $encoder->startTag(SYNC_DATA);
 				    			if (isset($importer[$collection["collectionid"]]->_readids[$rfid]) &&
 				        			$importer[$collection["collectionid"]]->_readids[$rfid]['status'] == true) {
@@ -2070,13 +2081,23 @@ function HandleSync($backend, $protocolversion, $devid) {
 				    	debugLog("HandleSync: After Exporting Changes we still have following array_rf in importer for optionfoldertype: ".print_r($array_rf,true));
 						$class = GetObjectClassFromFolderClass($collection["optionfoldertype"]);
 						foreach ($array_rf as $rfid) {
-							if (!isset($msginfos[$collection["collectionid"]][$rfid]) ||
-								$msginfos[$collection["collectionid"]][$rfid]['class'] != $class) continue;
 					        $encoder->startTag(SYNC_MODIFY);
 
 						    $encoder->startTag(SYNC_FOLDERTYPE);
 						    $encoder->content($collection["optionfoldertype"]);
 				    	    $encoder->endTag();
+							if (!isset($msginfos[$collection["collectionid"]][$rfid])) {
+
+							    $encoder->startTag(SYNC_SERVERENTRYID);
+							    	$encoder->content($rfid);
+							    $encoder->endTag();
+            	            	$encoder->startTag(SYNC_STATUS);
+									$encoder->content(SYNC_STATUS_OBJECT_NOT_FOUND);
+                    	    	$encoder->endTag();
+                    	    	$encoder->endTag();
+								continue;
+						    }
+							if ($msginfos[$collection["collectionid"]][$rfid]['class'] != $class) continue;
 						    $encoder->startTag(SYNC_SERVERENTRYID);
 						    	$encoder->content($rfid);
 						    $encoder->endTag();

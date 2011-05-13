@@ -611,6 +611,20 @@ define("SYNC_PROVISION_RWSTATUS_OK", 1);
 define("SYNC_PROVISION_RWSTATUS_PENDING", 2);
 define("SYNC_PROVISION_RWSTATUS_WIPED", 3);
 
+define("SYNC_STATUS_SUCCESS", 1);
+define("SYNC_STATUS_INVALID_SYNCKEY", 3);
+define("SYNC_STATUS_PROTOCOL_ERROR", 4);
+define("SYNC_STATUS_SERVER_ERROR", 5); // currently unused
+define("SYNC_STATUS_MALFORMED_INVALID_ITEM", 6); // currently unused
+define("SYNC_STATUS_CONFLICT_OBJECT_MATCH", 7); // currently unused, should be returned for conflicts
+define("SYNC_STATUS_OBJECT_NOT_FOUND", 8);
+define("SYNC_STATUS_COMMAND_CANNOT_COMPLETE", 9); // currently unused, maybe useful for quota reached cases
+define("SYNC_STATUS_FOLDER_HIERARCHY_CHANGED", 12);
+define("SYNC_STATUS_REQUEST_INCOMPLETE", 13);
+define("SYNC_STATUS_INVALID_WAIT_HEARTBEATINTERVAL", 14);
+define("SYNC_STATUS_TOO_MANYY_COLLECTIONS", 15); // currently unused
+define("SYNC_STATUS_RETRY", 16); // currently unused
+
 define("SYNCCACHE_UNCHANGED"		, 0);
 define("SYNCCACHE_CHANGED"		, 1);
 
