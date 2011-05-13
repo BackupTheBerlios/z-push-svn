@@ -3926,10 +3926,11 @@ function HandleSearch($backend, $devid, $protocolversion) {
             $searchquery['range'] = $searchrange;
 			break;	
 	}
+
+
     //get search results from backend
-    $result = $backend->getSearchResults($searchquery,$searchname);
+	$result = $backend->getSearchResults($searchquery,$searchname);
     //END CHANGED dw2412 V12.0 Support
-    
 
     $encoder->startWBXML();
     // START ADDED dw2412 Protocol Version 12 Support
@@ -3938,6 +3939,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
     // END ADDED dw2412 Protocol Version 12 Support
 
     $encoder->startTag(SYNC_SEARCH_SEARCH);
+
 
         $encoder->startTag(SYNC_SEARCH_STATUS);
         $encoder->content($result['global_search_status']);
@@ -3950,20 +3952,22 @@ function HandleSearch($backend, $devid, $protocolversion) {
                 $encoder->content($result['status']);
                 $encoder->endTag();
 
+				if ($result['status'] == 1) {
 				// CHANGED dw2412 AS V12.0 Support (mentain single return way...)
-                if (is_array($result['rows']) && !empty($result['rows'])) {
+                if (isset($result['rows']) && is_array($result['rows']) && !empty($result['rows'])) {
                     $searchtotal = count($result['rows']);
 			    // CHANGED dw2412 AS V12.0 Support (honor the range in request...)
-			    eregi("(.*)\-(.*)",$searchrange,$range);
-			    $returnitems = $range[2] - $range[1];
+			    $range = explode("-",$searchrange);
+			    $returnitems = $range[1] - $range[0];
                 $returneditems=0;
-		    	$result['rows'] = array_slice($result['rows'],$range[1],$returnitems+1,true);
+		    	$result['rows'] = array_slice($result['rows'],$range[0],$returnitems+1,true);
 			    // CHANGED dw2412 AS V12.0 Support (mentain single return way...)
                 foreach ($result['rows'] as $u) {
 
 			    // CHANGED dw2412 AS V12.0 Support (honor the range in request...)
                	    if ($returneditems>$returnitems) break; 
-                 	    $returneditems++;
+               	    $returneditems++;
+
 
 				    switch (strtolower($searchname)) {
 						case 'documentlibrary'  : 
@@ -4086,18 +4090,18 @@ function HandleSearch($backend, $devid, $protocolversion) {
                    		    $encoder->endTag();//result
                 		    $encoder->endTag();//properties
 						    break;
-					    };
-                    }
-                    $searchrange = $range[1]."-".($range[1]+$returneditems-1);
-                    $encoder->startTag(SYNC_SEARCH_RANGE);
-                    $encoder->content($searchrange);
-                    $encoder->endTag();
-
-                    $encoder->startTag(SYNC_SEARCH_TOTAL);
-                    $encoder->content($searchtotal);
-                    $encoder->endTag();
+					};
                 }
+                $searchrange = $range[0]."-".($range[0]+$returneditems-1);
+                $encoder->startTag(SYNC_SEARCH_RANGE);
+                $encoder->content($searchrange);
+                $encoder->endTag();
 
+                $encoder->startTag(SYNC_SEARCH_TOTAL);
+                $encoder->content($searchtotal);
+                $encoder->endTag();
+                }
+                };
             $encoder->endTag();//store
         $encoder->endTag();//response
     $encoder->endTag();//search
