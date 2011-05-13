@@ -88,17 +88,7 @@ function HandleMoveItems($backend, $devid, $protocolversion) {
 
         $importer = $backend->GetContentsImporter($move["srcfldid"]);
         $result = $importer->ImportMessageMove($move["srcmsgid"], $move["dstfldid"]);
-/*		if ($result == 3) {
-			$msginfos = $statemachine->getMsgInfos($SyncCache['hierarchy']['synckey']);
-			if (isset($msginfos[$move["srcfldid"]]) &&
-				isset($msginfos[$move["srcfldid"]][$move["srcmsgid"]]) &&
-				isset($msginfos[$move["dstfldid"]])) {
-				$msginfos[$move["dstfldid"]][(is_string($result)?$result:$move["srcmsgid"])] = $msginfos[$move["srcfldid"]][$move["srcmsgid"]];
-				$statemachine->setMsgInfos($SyncCache['hierarchy']['synckey'], $msginfos);
-//				unset($msginfos[$move["srcfldid"]][$move["srcmsgid"]]);
-			}
-		}
-*/        // We discard the importer state for now.
+        // We discard the importer state for now.
 
         $encoder->startTag(SYNC_MOVE_STATUS);
         $encoder->content($result ? 3 : 1);
@@ -274,9 +264,6 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
     $seenfolders = unserialize($seenfolders);
     if (!$seenfolders) $seenfolders = array();
 
-//    if ($synckey == "0" ||
-//	!is_array($foldercache) ||
-//	sizeof($foldercache) == 0) $foldercache = array();
    	if (!$foldercache ||
 		!is_array($foldercache)) $foldercache = array();
 
