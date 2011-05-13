@@ -2345,7 +2345,7 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 		} else if ($protocolversion >= 12.1 && isset($options['filtertype']))  {
 		    $SyncCache['collections'][$collectionid]['filtertype'] = $options['filtertype'];
 		}
-		if ($protocolversion >= 12.1 && isset($options['foldertype']) && !isset($options[$options['name']]['filtertype']) && isset($SyncCache['collections'][$collectionid][$options['foldertype']]['filtertype'])) {
+		if ($protocolversion >= 12.1 && isset($options['foldertype']) && !isset($options[$options['foldertype']]['filtertype']) && isset($SyncCache['collections'][$collectionid][$options['foldertype']]['filtertype'])) {
 		    debugLog("filtertype not set! SyncCache Result ".$SyncCache['collections'][$collectionid][$options['foldertype']]['filtertype']);
 		    $options[$options['foldertype']]['filtertype'] = $SyncCache['collections'][$collectionid][$options['foldertype']]['filtertype'];
 		} else if ($protocolversion >= 12.1 && isset($options['foldertype']) && isset($options[$options['foldertype']]['filtertype']))  {
