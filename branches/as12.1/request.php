@@ -4420,6 +4420,7 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
 				switch(strtolower($value["store"])) {
 					case "mailbox" :
 	    				$encoder->startTag(SYNC_ITEMOPERATIONS_FETCH);
+
 						$encoder->startTag(SYNC_ITEMOPERATIONS_STATUS);
 						$encoder->content(1);
 						$encoder->endTag(); // end SYNC_ITEMOPERATIONS_STATUS
@@ -4427,6 +4428,15 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
 						    $encoder->startTag(SYNC_AIRSYNCBASE_FILEREFERENCE);
 						    $encoder->content($value["airsyncbasefilereference"]);
 					    	$encoder->endTag(); // end SYNC_SERVERENTRYID
+					    	$msg = $backend->ItemOperationsGetAttachmentData($value["airsyncbasefilereference"]);
+						} else if (isset($value["searchlongid"])) {
+							$encoder->startTag(SYNC_SEARCH_LONGID);
+							$encoder->content($value["searchlongid"]);
+							$encoder->endTag();
+		       		    	$encoder->startTag(SYNC_FOLDERTYPE);
+			           	    $encoder->content("Email");
+		    	   		    $encoder->endTag();
+						    $msg = $backend->ItemOperationsFetchMailbox($value['searchlongid'], $value['bodypreference'], $mimesupport);
 						} else {
 						    if (isset($value["folderid"])) {
 		    		    		$encoder->startTag(SYNC_FOLDERID);
@@ -4438,33 +4448,15 @@ function HandleItemOperations($backend, $devid, $protocolversion, $multipart) {
 								$encoder->content($value["serverentryid"]);
 								$encoder->endTag(); // end SYNC_SERVERENTRYID
 						    } 
-						    if (isset($value["searchlongid"])) {
-								$ids = $backend->ItemOperationsGetIDs($value['searchlongid']);
-    			    			$encoder->startTag(SYNC_FOLDERID);
-								$encoder->content($ids["folderid"]);
-			    	   			$encoder->endTag(); // end SYNC_FOLDERID
-								$encoder->startTag(SYNC_SERVERENTRYID);
-								$encoder->content($ids["serverentryid"]);
-								$encoder->endTag(); // end SYNC_SERVERENTRYID
-						    } 
 		       		    	$encoder->startTag(SYNC_FOLDERTYPE);
 			           	    $encoder->content("Email");
 		    	   		    $encoder->endTag();
+						    $msg = $backend->Fetch($value['folderid'], $value['serverentryid'], $value['bodypreference'], false, $mimesupport);
 			    	    }
 		            	$encoder->startTag(SYNC_ITEMOPERATIONS_PROPERTIES);
-		//				if (isset($value['bodypreference'])) $encoder->_bodypreference = $value['bodypreference'];
-						if (isset($value["searchlongid"])) {
-						    $msg = $backend->ItemOperationsFetchMailbox($value['searchlongid'], $value['bodypreference'], $mimesupport);
-						} else if(isset($value["airsyncbasefilereference"])) {
-					    	$msg = $backend->ItemOperationsGetAttachmentData($value["airsyncbasefilereference"]);
-						} else {
-						    $msg = $backend->Fetch($value['folderid'], $value['serverentryid'], $value['bodypreference'], false, $mimesupport);
-		//			    $msg->airsyncbasebody->estimateddatasize=0;
-		//			    $msg->airsyncbasebody->data=0;
-						};
 		        		$msg->encode($encoder);
-		
 		            	$encoder->endTag(); // end SYNC_ITEMOPERATIONS_PROPERTIES
+
 						$encoder->endTag(); // end SYNC_ITEMOPERATIONS_FETCH
 						break;
 				    case "documentlibrary" :
