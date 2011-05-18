@@ -2270,6 +2270,10 @@ class PHPContentsImportProxy extends MAPIMapping {
                         $attendee->email = w2u($userinfo["emailaddress"]);
                 }
             }
+			if (isset($row[PR_RECIPIENT_TRACKSTATUS]))
+				$attendee->attendeestatus = $row[PR_RECIPIENT_TRACKSTATUS];
+			if (isset($row[PR_RECIPIENT_TYPE]))
+				$attendee->attendeetype = $row[PR_RECIPIENT_TYPE];
             // Some attendees have no email or name (eg resources), and if you
             // don't send one of those fields, the phone will give an error ... so
             // we don't send it in that case.
