@@ -1480,7 +1480,7 @@ class ImportContentsChangesICS extends MAPIMapping {
                 $recip[PR_ADDRTYPE] = "SMTP";
 				// START CHANGED dw2412 to support AS 12.0 attendee type
 		        if (isset($attendee->type)) {
-				    $recip[PR_RECIPIENT_TYPE] = $attendee->type;
+				    $recip[PR_RECIPIENT_TYPE] = $attendee->attendeetype;
                 } else {
             	    $recip[PR_RECIPIENT_TYPE] = MAPI_TO;
 				}
