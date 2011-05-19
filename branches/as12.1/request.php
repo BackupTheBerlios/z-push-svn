@@ -1083,8 +1083,11 @@ function HandleSync($backend, $protocolversion, $devid) {
 															$msginfo[$id['sourcekey']] = $msginf;
 															debugLog("HandleSync: Generated msginfos for ".$id['sourcekey']." with following values: ".print_r($msginf,true));
 															unset($msginf);
+														} else {
+															$msginfo[$id] = array('md5msg' => 0, 'read' => '', 'md5flags' => '', 'class' => strtolower(get_class($appdata)));
+															debugLog("HandleSync: Generated msginfos for ".$id." with following values: ".print_r($msginf,true));
 														}
-							            	          	$collection["importedchanges"] = true;
+														$collection["importedchanges"] = true;
 													}
 							    	        	}
 							        	    	break;
