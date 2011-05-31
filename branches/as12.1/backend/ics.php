@@ -2248,7 +2248,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 
         // Do attendees
         $reciptable = mapi_message_getrecipienttable($mapimessage);
-        $rows = mapi_table_queryallrows($reciptable, array(PR_DISPLAY_NAME, PR_EMAIL_ADDRESS, PR_SMTP_ADDRESS, PR_ADDRTYPE));
+        $rows = mapi_table_queryallrows($reciptable, array(PR_DISPLAY_NAME, PR_EMAIL_ADDRESS, PR_SMTP_ADDRESS, PR_ADDRTYPE, PR_RECIPIENT_TRACKSTATUS, PR_RECIPIENT_TYPE));
         if(count($rows) > 0)
             $message->attendees = array();
 
