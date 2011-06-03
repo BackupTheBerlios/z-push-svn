@@ -4287,7 +4287,7 @@ class BackendICS {
         $ab_dir = mapi_ab_openentry($addrbook, $ab_entryid);
 
         $table = mapi_folder_getcontentstable($ab_dir);
-        $restriction = $this->_getSearchRestriction(u2w($searchquery));
+        $restriction = $this->_getSearchRestriction(u2w($searchquery['query']));
 
         mapi_table_restrict($table, $restriction);
         mapi_table_sort($table, array(PR_DISPLAY_NAME => TABLE_SORT_ASCEND));
