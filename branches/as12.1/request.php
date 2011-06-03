@@ -3817,7 +3817,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
 			$searchquery['query'] = ParseQuery($decoder);
 			break;	
 		case 'gal'	: 
-			$searchquery = $decoder->getElementContent(); 
+			$searchquery['query'] = $decoder->getElementContent(); 
 			break;
     }
     if(!$decoder->getElementEndTag())
@@ -3958,6 +3958,9 @@ function HandleSearch($backend, $devid, $protocolversion) {
            	$searchquery['deeptraversal'] =  $searchquerydeeptraversal;
             $searchquery['range'] = $searchrange;
 			break;	
+		case 'gal'		:
+            $searchquery['range'] = $searchrange;
+            break;
 	}
 
 
