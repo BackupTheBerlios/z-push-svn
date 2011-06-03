@@ -2446,7 +2446,7 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 
 	                $optionexporter = $backend->GetExporter($collection["collectionid"]);
     	            $optionexporter->Config($importer, $collection['options']['foldertype'], $collection['options'][$collection['options']['foldertype']]['filtertype'], $optionsyncstate, 0, 0, false, false);
-					$optionchangecount = $exporter->GetChangeCount();
+					$optionchangecount = $optionexporter->GetChangeCount();
 					if ($optionchangecount === false) {
 					    $optionsyncstatus=2;
 					} else {
