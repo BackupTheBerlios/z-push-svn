@@ -2775,7 +2775,15 @@ function HandleSendMail($backend, $protocolversion) {
 							$result == 1) {
 			    switch ($tag) {
 					case SYNC_COMPOSEMAIL_SAVEINSENTITEMS : 
-					    $data['saveinsentitems'] = true; 
+						if ($data['saveinsentitems'] = $decoder->getElementContent()) {
+							$decoder->getElementEndTag();
+						} else {
+							$e = $decoder->peek();
+							if ($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+								$decoder->getElementEndTag();
+							}
+					    	$data['saveinsentitems'] = true;
+						}
 					    break;
 					case SYNC_COMPOSEMAIL_CLIENTID :
     				    $data['clientid'] = $decoder->getElementContent();
@@ -2881,7 +2889,15 @@ function HandleSmartForward($backend, $protocolversion) {
 							$result == 1) {
 			    switch ($tag) {
 					case SYNC_COMPOSEMAIL_SAVEINSENTITEMS : 
-					    $data['saveinsentitems'] = true; 
+						if ($data['saveinsentitems'] = $decoder->getElementContent()) {
+							$decoder->getElementEndTag();
+						} else {
+							$e = $decoder->peek();
+							if ($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+								$decoder->getElementEndTag();
+							}
+					    	$data['saveinsentitems'] = true;
+						}
 					    break;
 					case SYNC_COMPOSEMAIL_CLIENTID :
 		    		    $data['clientid'] = $decoder->getElementContent();
@@ -3055,7 +3071,15 @@ function HandleSmartReply($backend, $protocolversion) {
 				$result == 1) {
 			    switch ($tag) {
 					case SYNC_COMPOSEMAIL_SAVEINSENTITEMS : 
-					    $data['saveinsentitems'] = true; 
+						if ($data['saveinsentitems'] = $decoder->getElementContent()) {
+							$decoder->getElementEndTag();
+						} else {
+							$e = $decoder->peek();
+							if ($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+								$decoder->getElementEndTag();
+							}
+					    	$data['saveinsentitems'] = true;
+						}
 					    break;
 					case SYNC_COMPOSEMAIL_CLIENTID :
 		    		    $data['clientid'] = $decoder->getElementContent();
