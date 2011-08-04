@@ -292,6 +292,12 @@ class MAPIMapping {
                 }
 
                 mapi_setprops($mapimessage, array($mapiprop => $value));
+
+                // fixes Mantis #468
+                if (is_array($value) && empty($value)) {
+                    debugLog(sprintf("mapi_deleteprops() for '%s' as it is an empty array", $asprop));
+                    mapi_deleteprops($mapimessage, array($mapiprop));
+                }
             }
         }
 
@@ -569,7 +575,7 @@ class ImportContentsChangesICS extends MAPIMapping {
     // process potential conflicts only when really necessary (ADD/MODIFY)
     function _lazyLoadConflicts() {
         if (!isset($this->_session) || !isset($this->_store) || !isset($this->_folderid) ||
-            !$this->_conflictsMclass || !$this->_conflictsFiltertype || !$this->_conflictsState) {
+            $this->_conflictsMclass === false || $this->_conflictsState === false) {
             debugLog("Warning: can not load changes in lazymode for conflict detection. Missing information");
             return false;
         }
@@ -1513,7 +1519,7 @@ class PHPContentsImportProxy extends MAPIMapping {
             // don't send one of those fields, the phone will give an error ... so
             // we don't send it in that case.
             // also ignore the "attendee" if the email is equal to the organizers' email
-            if(isset($attendee->name) && isset($attendee->email) && (!isset($message->organizeremail) || (isset($message->organizeremail) && $attendee->email != $message->organizeremail)))
+            if(isset($attendee->name) && isset($attendee->email) && $attendee->email != "" && (!isset($message->organizeremail) || (isset($message->organizeremail) && $attendee->email != $message->organizeremail)))
                 array_push($message->attendees, $attendee);
         }
         // Force the 'alldayevent' in the object at all times. (non-existent == 0)
