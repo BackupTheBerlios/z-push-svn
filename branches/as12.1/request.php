@@ -2250,7 +2250,7 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
     $statemachine = new StateMachine($devid,$user);
 
     $SyncCache = unserialize($statemachine->getSyncCache());
-    
+
     // Check the validity of the sync cache. If state is errornous set the syncstatus to 2 as retval for client
     $syncstatus=1;
 
@@ -2266,6 +2266,7 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 		unset($class);
 		unset($filtertype);
 		unset($synckey);
+		$options = array();
 		$conversationmode = false;
 		while (($type = ($decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDERTYPE)  ? SYNC_GETITEMESTIMATE_FOLDERTYPE 	:
 			    		($decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDERID)	? SYNC_GETITEMESTIMATE_FOLDERID 	:
@@ -2297,42 +2298,43 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 			        break;
 				case SYNC_CONVERSATIONMODE : 
 					if(($conversationmode = $decoder->getElementContent()) !== false) {
-		    	    if(!$decoder->getElementEndTag())
-			        	return false;
-			        } else {
-			    	    $conversationmode = true;
-			        }
+			    	    if(!$decoder->getElementEndTag())
+				        	return false;
+				    } else {
+				        $conversationmode = true;
+			    	}
 			        break;
 				case SYNC_OPTIONS :
-					unset($options);
+					unset($options_tmp);
 					while (($typeoptions = 	($decoder->getElementStartTag(SYNC_FOLDERTYPE)	? SYNC_FOLDERTYPE 	:
 											($decoder->getElementStartTag(SYNC_MAXITEMS)	? SYNC_MAXITEMS 	:
 											($decoder->getElementStartTag(SYNC_FILTERTYPE)	? SYNC_FILTERTYPE 	:
 											-1)))) != -1) {
 						switch ($typeoptions) {
 						    case SYNC_FOLDERTYPE : 
-								$options['foldertype'] = $decoder->getElementContent();
+								$options_tmp['foldertype'] = $decoder->getElementContent();
+								if (strtolower($options_tmp['foldertype']) == strtolower($SyncCache['folders'][$collectionid]['class']))
+									unset($options_tmp['foldertype']);
 						        if(!$decoder->getElementEndTag())
 						            return false;
 						        break;
 						    case SYNC_MAXITEMS : 
-								if (isset($options['foldertype']))
-									$options[$options['foldertype']]['maxitems'] = $decoder->getElementContent();
-								else
-									$options['maxitems'] = $decoder->getElementContent();
+								$options_tmp['maxitems'] = $decoder->getElementContent();
 						        if(!$decoder->getElementEndTag())
 						            return false;
 						        break;
 						    case SYNC_FILTERTYPE : 
-								if (isset($options['foldertype']))
-									$options[$options['foldertype']]['filtertype'] = $decoder->getElementContent();
-								else
-									$options['filtertype'] = $decoder->getElementContent();
+								$options_tmp['filtertype'] = $decoder->getElementContent();
 						        if(!$decoder->getElementEndTag())
 						            return false;
 						        break;
 						};
 				    };
+					if(isset($options_tmp['foldertype'])) {
+						$options['foldertype'] = $options_tmp['foldertype'];
+						$options[$options_tmp['foldertype']] = $options_tmp;
+					} else 
+						$options = array_merge($options,$options_tmp);
 					if(!$decoder->getElementEndTag()) // END Options
 						return false;
 		    };
