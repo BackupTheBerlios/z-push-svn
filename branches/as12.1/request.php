@@ -2170,7 +2170,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 	    	            $optionstate = $optionexporter->GetState();
 
 		            // nothing exported, but possible imported
-		            else if (isset($collection['optionfoldertype']))
+		            else if (isset($collection['optionfoldertype']) &&
+		            		 is_object($importer[$collection['optionfoldertype'].$collection["collectionid"]]))
 	    	            $optionstate = $importer[$collection['optionfoldertype'].$collection["collectionid"]]->GetState();
 
 		            // if a new request without state information (hierarchy) save an empty state
