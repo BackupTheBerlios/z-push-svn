@@ -2171,6 +2171,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 
 		            // nothing exported, but possible imported
 		            else if (isset($collection['optionfoldertype']) &&
+		            		 isset($importer[$collection['optionfoldertype'].$collection["collectionid"]]) &&
 		            		 is_object($importer[$collection['optionfoldertype'].$collection["collectionid"]]))
 	    	            $optionstate = $importer[$collection['optionfoldertype'].$collection["collectionid"]]->GetState();
 
