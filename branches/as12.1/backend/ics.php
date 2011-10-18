@@ -2569,7 +2569,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 			$message->airsyncbasebody->type = 4;
            	if (isset($bodypreference[4]["TruncationSize"])) {
            	    $hdrend = strpos("\r\n\r\n",$mstreamcontent);
-           	    $message->airsyncbasebody->data = substr($mstreamcontent,0,$hdrend+$bodypreference[4]["TruncationSize"]);
+				$message->airsyncbasebody->data = utf8_truncate($mstreamcontent,$hdrend+$bodypreference[4]["TruncationSize"]);
            	} else {
 			    $message->airsyncbasebody->data = $mstreamcontent;
            	}
@@ -2615,11 +2615,13 @@ class PHPContentsImportProxy extends MAPIMapping {
 				    '</body>'.
 				    '</html>';
 			}
-*/			$message->airsyncbasebody->estimateddatasize = strlen($html);
+*/
+			$html = str_replace("\n","",str_replace("\r","",$html));
+			$message->airsyncbasebody->estimateddatasize = strlen($html);
     		if (isset($bodypreference[2]["TruncationSize"]) &&
     	   	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
-	       	    $html = substr($html, 0, $bodypreference[2]["TruncationSize"]);
-			    $message->airsyncbasebody->truncated = 1;
+				$html = utf8_truncate($html,$bodypreference[2]["TruncationSize"]);
+				$message->airsyncbasebody->truncated = 1;
     		}
 			$message->airsyncbasebody->data = w2u($html);
 			debugLog("HTML Body!");
@@ -2629,7 +2631,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 			$message->airsyncbasebody->type = 1;
 	   		if (isset($bodypreference[1]["TruncationSize"]) &&
     		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
-        	    $body = substr($body, 0, $bodypreference[1]["TruncationSize"]);
+				$body = utf8_truncate($body,$bodypreference[1]["TruncationSize"]);
 			    $message->airsyncbasebody->truncated = 1;
     		}
     		$message->airsyncbasebody->data = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
@@ -2638,6 +2640,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		if (isset($bodypreference[1]["Preview"])) {
 			$body = mapi_openproperty($mapimessage, PR_BODY);
             $body = substr($body, 0, $bodypreference[1]["Preview"]);
+			$body = utf8_truncate($body,$bodypreference[1]["Preview"]);
 //		    $message->airsyncbasebody->preview = 1;
     		$message->airsyncbasebody->preview = str_replace("\n","\r\n", w2u(str_replace("\r","",$body)));
 //			unset($message->airsyncbasebody->data);
