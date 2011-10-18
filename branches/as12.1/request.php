@@ -1776,6 +1776,62 @@ function HandleSync($backend, $protocolversion, $devid) {
 		}
    	}
 
+    if ($dataimported == false &&
+		($SyncCache['wait'] === false &&
+	 	 $SyncCache['hbinterval'] === false)) {
+		unset($foundchange);
+		foreach($collections as $collection) {
+			if ((isset($collection["getchanges"]) &&
+               	 $collection["getchanges"] != 0) && 
+               	 !isset($collection["importedchanges"]) &&
+               	 $collection["synckey"] != "0") {
+				$foundchange = false;
+            	// Try to get the exporter. In case it is not possible (i.e. folder removed) set
+                // status according. 
+                $exporter = $backend->GetExporter($collection["collectionid"]);
+		    	debugLog("HandleSync: Exporter Value: ".is_object($exporter). " " .(isset($exporter->exporter) ? $exporter->exporter : ""));
+				$filtertype = (isset($collection["filtertype"]) ? $collection["filtertype"] : 
+								 	 (isset($SyncCache['collections'][$collection["collectionid"]]["filtertype"]) ? $SyncCache['collections'][$collection["collectionid"]]["filtertype"]
+						    																						: 0)
+						  		);
+				$optionfiltertype = (isset($collection["optionfoldertype"]) ? 
+						    			(isset($collection[$collection["optionfoldertype"]]["filtertype"]) ? $collection[$collection["optionfoldertype"]]["filtertype"] :
+						    				(isset($SyncCache['collections'][$collection["collectionid"]][$collection["optionfoldertype"]]["filtertype"]) ? $SyncCache['collections'][$collection["collectionid"]][$collection["optionfoldertype"]]["filtertype"] 
+						    																																: 0)
+						    			)
+						    			: 0
+						    		);
+
+                debugLog("HandleSync: FilterType GetChanges : ".$filtertype. " ".$optionfiltertype);
+				$changecount = 0;
+
+				if ($collection['onlyoptionbodypreference'] === false) {
+   	            	$exporter = $backend->GetExporter($collection["collectionid"]);
+					debugLog("HandleSync: Messageclass for Export: ".$collection["class"]);
+            		$exporter->Config($importer[$collection["collectionid"]], $collection["class"], $filtertype, $collection['syncstate'], 0, $collection["truncation"],$collection["BodyPreference"], false, (isset($collection["mimesupport"]) ? $collection['mimesupport'] : 0));
+   	            	$changecount = $exporter->GetChangeCount();
+   	            }
+
+				// Optionfoldertype
+				if (isset($collection['optionfoldertype'])) {
+           	    	$optionexporter = $backend->GetExporter($collection["collectionid"]);
+					debugLog("HandleSync: Messageclass for Export: ".$collection["optionfoldertype"]);
+           			$optionexporter->Config($importer[$collection['optionfoldertype'].$collection["collectionid"]], $collection['optionfoldertype'], $optionfiltertype, $collection[$collection['optionfoldertype'].'syncstate'], 0, 9, false, $collection[$collection["optionfoldertype"]]["BodyPreference"], (isset($collection["mimesupport"]) ? $collection['mimesupport'] : 0));
+	                	$changecount = $changecount + $optionexporter->GetChangeCount();
+				}
+				if ($changecount > 0) {
+					$foundchange = true; 
+					break;
+				}
+			}
+		}
+    	if (isset($foundchange) &&
+    		$foundchange == false) {
+			debugLog("HandleSync: No changes although devices requested them. Exit silently!"); // Undocumented in Open Protocols!
+    		return true;
+    	}
+	}
+
     $encoder = new WBXMLEncoder($output, $zpushdtd);
     $encoder->startWBXML();
 
@@ -2660,13 +2716,7 @@ function HandlePing($backend, $devid) {
  		if (file_exists($file)) {
         	$ping = unserialize(file_get_contents($file));
 			if ($ping['timestamp'] > $timestamp) {
-				debugLog("Another Ping is running. Tell the device that we don't have changes (just in case connection is still alive) and return.");
-			    $encoder->StartWBXML();
-			    $encoder->startTag(SYNC_PING_PING);
-		        $encoder->startTag(SYNC_PING_STATUS);
-            	$encoder->content("1");
-		        $encoder->endTag();
-        		$encoder->endTag();
+				debugLog("Another Ping is running. Lets exit silently without any returning any result!"); // NOT Documented in Open Protocols!
 				return true;
 			}
         }
