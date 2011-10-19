@@ -4365,7 +4365,7 @@ class BackendICS {
     function SendMail($rfc822, $smartdata=array(), $protocolversion = false) {
         if (WBXML_DEBUG === true &&
     	    $protocolversion <= 14.0)
-            debugLog("SendMail: task ".$smartdata['task']." itemid: ".(isset($smartdata['itemid']) ? $smartdata['itemid'] : "")." parent: ".(isset($smartdata['folderid']) ? $smartdata['folderid'] : "")."\n" . $rfc822);
+            debugLog("SendMail: task ".$smartdata['task']." itemid: ".(isset($smartdata['itemid']) ? $smartdata['itemid'] : "")." folderid: ".(isset($smartdata['folderid']) ? $smartdata['folderid'] : "")."\n" . $rfc822);
 
         $mimeParams = array('decode_headers' => false,
                             'decode_bodies' => true,
@@ -4606,7 +4606,7 @@ class BackendICS {
         if ((isset($smartdata['itemid']) && $smartdata['itemid']) ||
         	(isset($smartdata['longid']) && $smartdata['longid'])) {
             // Append the original text body for reply/forward
-			if (isset($smartdata['longid'])) 
+			if (isset($smartdata['longid']) && $smartdata['longid'] != false) 
 				$entryid = hex2bin($smartdata['longid']);
 			else 
 	            $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($smartdata['folderid']), hex2bin($smartdata['itemid']));
@@ -4646,32 +4646,28 @@ class BackendICS {
                 $stream = mapi_openproperty($fwmessage, PR_BODY, IID_IStream, 0, 0);
                 $fwbody = "";
 
-                while(1) {
-                    $data = mapi_stream_read($stream, 1024);
-                    if(strlen($data) == 0)
-                        break;
-                    $fwbody .= $data;
-                }
+				if ($stream != false) {
+	                while(1) {
+    	                $data = mapi_stream_read($stream, 1024);
+        	            if(strlen($data) == 0)
+            	            break;
+                	    $fwbody .= $data;
+	                }
+				} else
+					debugLog ("stream is false during reading PR_BODY");
 
-                $stream = mapi_openproperty($fwmessage, PR_HTML, IID_IStream, 0, 0);
-                $fwbody_html = "";
+				$stream = mapi_openproperty($fwmessage, PR_HTML, IID_IStream, 0, 0);
+				$fwbody_html = "";
 
-                while(1) {
-                    $data = mapi_stream_read($stream, 1024);
-                    if(strlen($data) == 0)
-                        break;
-                    $fwbody_html .= $data;
-                }
-
-                $stream = mapi_openproperty($fwmessage, PR_HTML, IID_IStream, 0, 0);
-                $fwbody_html = "";
-
-                while(1) {
-                    $data = mapi_stream_read($stream, 1024);
-                    if(strlen($data) == 0)
-                        break;
-                    $fwbody_html .= $data;
-                }
+				if ($stream != false) {
+	                while(1) {
+                	    $data = mapi_stream_read($stream, 1024);
+            	        if(strlen($data) == 0)
+        	                break;
+    	                $fwbody_html .= $data;
+	                }
+				} else
+					debugLog ("stream is false during reading PR_HTML");
 
 				// dw2412 Enable this only in case of AS2.5 Protocol... in AS12 this seem 
 				// being done already by winmobile client.
@@ -4719,7 +4715,7 @@ class BackendICS {
 
         if($smartdata['task'] == 'forward') {
             // Add attachments from the original message in a forward
-			if (isset($smartdata['longid'])) 
+			if (isset($smartdata['longid']) && $smartdata['longid'] != false) 
 				$entryid = hex2bin($smartdata['longid']);
 			else 
 	            $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($smartdata['folderid']), hex2bin($smartdata['itemid']));
