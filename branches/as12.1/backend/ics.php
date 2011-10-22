@@ -2013,7 +2013,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 				$message->body) {
 				$body = mapi_openproperty($mapimessage, PR_BODY);
 	        	$bodysize = strlen($body);
-				if($bodysize > $truncsize) {
+				if($truncsize != false && $bodysize > $truncsize) {
         		    $body = substr($body, 0, $truncsize);
         		    $message->bodysize = $bodysize;
         	    	$message->bodytruncated = 1;
@@ -2529,7 +2529,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 		if ($bodypreference == false) {
 		    $body = mapi_openproperty($mapimessage, PR_BODY);
             $bodysize = strlen($body);
-	 		if($bodysize > $truncsize) {
+	 		if($truncsize != false && $bodysize > $truncsize) {
         		$body = substr($body, 0, $truncsize);
 	        	$message->bodysize = $bodysize;
     	    	$message->bodytruncated = 1;
@@ -2567,7 +2567,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 	    	($mimesupport == 1 && strtolower(substr($messageprops[PR_MESSAGE_CLASS],0,14)) == 'ipm.note.smime'))) {
            	$mstreamcontent = mapi_stream_read($mstream, MAX_EMBEDDED_SIZE);
 			$message->airsyncbasebody->type = 4;
-           	if (isset($bodypreference[4]["TruncationSize"])) {
+           	if ($truncsize != false && isset($bodypreference[4]["TruncationSize"])) {
            	    $hdrend = strpos("\r\n\r\n",$mstreamcontent);
 				$message->airsyncbasebody->data = utf8_truncate($mstreamcontent,$hdrend+$bodypreference[4]["TruncationSize"]);
            	} else {
@@ -2618,7 +2618,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 */
 			$html = str_replace("\n","",str_replace("\r","",$html));
 			$message->airsyncbasebody->estimateddatasize = strlen($html);
-    		if (isset($bodypreference[2]["TruncationSize"]) &&
+    		if ($truncsize != false && isset($bodypreference[2]["TruncationSize"]) &&
     	   	    strlen($html) > $bodypreference[2]["TruncationSize"]) {
 				$html = utf8_truncate($html,$bodypreference[2]["TruncationSize"]);
 				$message->airsyncbasebody->truncated = 1;
@@ -2629,7 +2629,7 @@ class PHPContentsImportProxy extends MAPIMapping {
 			$body = mapi_openproperty($mapimessage, PR_BODY);
 			$message->airsyncbasebody->estimateddatasize = strlen($body);
 			$message->airsyncbasebody->type = 1;
-	   		if (isset($bodypreference[1]["TruncationSize"]) &&
+	   		if ($truncsize != false && isset($bodypreference[1]["TruncationSize"]) &&
     		    strlen($body) > $bodypreference[1]["TruncationSize"]) {
 				$body = utf8_truncate($body,$bodypreference[1]["TruncationSize"]);
 			    $message->airsyncbasebody->truncated = 1;
@@ -4253,7 +4253,7 @@ class BackendICS {
         // Fake a contents importer because it can do the conversion for us
         $importer = new PHPContentsImportProxy($this->_session, $this->_defaultstore, $props[PR_PARENT_SOURCE_KEY], $dummy, SYNC_TRUNCATION_ALL, $bodypreference, false, $mimesupport);
 
-        return $importer->_getMessage($message, 1024*1024, $bodypreference, false, $mimesupport); // Get 1MB of body size
+        return $importer->_getMessage($message, false, $bodypreference, false, $mimesupport); // Get 1MB of body size
     }
 
     function ItemOperationsGetAttachmentData($attname) {
@@ -4816,7 +4816,7 @@ class BackendICS {
             return false;
         }
 
-        return $importer->_getMessage($message, 1024*1024, $bodypreference, $optionbodypreference, $mimesupport); // Get 1MB of body size
+        return $importer->_getMessage($message, false, $bodypreference, $optionbodypreference, $mimesupport); // Get 1MB of body size
     }
 
     function GetWasteBasket() {
