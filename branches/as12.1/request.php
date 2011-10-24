@@ -483,6 +483,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 
     // Start decode
     $shortsyncreq = false;
+    $fetchitems = false;
     $dataimported = false;
     $dataavailable = false;
     $partial = false;
@@ -1119,11 +1120,9 @@ function HandleSync($backend, $protocolversion, $devid) {
 					                    	    $collection["importedchanges"] = true;
 												if (isset($collection['changeids'][$serverid]))
 													$collection['changeids'][$serverid]['status'] = SYNC_STATUS_OBJECT_NOT_FOUND;
-												unset($msginfo[$serverid]);
 					   	                    	break;
 						                    case SYNC_FETCH:
 			    			                   	array_push($collection["fetchids"], $serverid);
-					                    	    $collection["importedchanges"] = true;
 				        		               	break;
 										}
 
@@ -1142,6 +1141,8 @@ function HandleSync($backend, $protocolversion, $devid) {
 						    		if (isset($collection["importedchanges"]) &&
 						    			$collection["importedchanges"] == true) 
 					    				$dataimported = true;
+						    		if (isset($collection["fetchids"])) 
+					    				$fetchitems = true;
 
 				        		    if(!$decoder->getElementEndTag()) // end SYNC_PERFORM
 				        	    		return false;
@@ -1777,6 +1778,7 @@ function HandleSync($backend, $protocolversion, $devid) {
    	}
 
     if ($dataimported == false &&
+		$fetchitems == false &&
 		($SyncCache['wait'] === false &&
 	 	 $SyncCache['hbinterval'] === false)) {
 		unset($foundchange);
