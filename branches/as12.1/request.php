@@ -892,9 +892,10 @@ function HandleSync($backend, $protocolversion, $devid) {
 									} else {
 										$optionbodypreference = false;
 									}
-									debugLog("HandleSync: FilterTypes Perform: ".$filtertype. " ".$optionfiltertype);
-									if ($collection['onlyoptionbodypreference'] === false)
-						        	   	$importer[$collection["collectionid"]]->Config($collection['syncstate'], $collection["conflict"], $mclass, $filtertype, $bodypreference, false);
+									debugLog("HandleSync: FilterTypes Perform: ".$filtertype. " ".(isset($optionfiltertype) ? $optionfiltertype : ""));
+									if ($collection['onlyoptionbodypreference'] === false) {
+										$importer[$collection["collectionid"]]->Config($collection['syncstate'], $collection["conflict"], $mclass, $filtertype, $bodypreference, false);
+									}
 
 					    	        $nchanges = 0;
 						            while(($performtag = ($decoder->getElementStartTag(SYNC_ADD) ? SYNC_ADD :
@@ -1088,7 +1089,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 															unset($msginf);
 														} else {
 															$msginfo[$id] = array('md5msg' => 0, 'read' => '', 'md5flags' => '', 'class' => strtolower(get_class($appdata)));
-															debugLog("HandleSync: Generated msginfos for ".$id." with following values: ".print_r($msginf,true));
+															debugLog("HandleSync: Generated msginfos for ".$id." with following values: ".print_r($msginfo,true));
 														}
 							            	          	$collection["importedchanges"] = true;
 													}
@@ -2038,7 +2039,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 	                $n = 0;
 
 	                // Stream the changes to the PDA
-	
+
 					if ($collection['onlyoptionbodypreference'] === false) {
 						$ids = array("readids" => (isset($collection["readids"]) ? $collection["readids"]: array()),
 								     "flagids" => (isset($collection["flagids"]) ? $collection["flagids"]: array()));
@@ -2235,7 +2236,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 
 		            // if a new request without state information (hierarchy) save an empty state
 		            else if ($collection["synckey"] == "0")
-	    	            $state = "";
+	    	            $optionstate = "";
 
 		            if (isset($state)) 
 		              	$statemachine->setSyncState($collection["newsynckey"], $state);
@@ -3102,7 +3103,7 @@ function HandleSmartReply($backend, $protocolversion) {
 
     // In some way there could be a header in XML and not only in _GET...
 
-    $data['task'] = 'reply';    
+    $data['task'] = 'reply';
     $data['replacemime'] = false;
 	// dw2412 Backend should return proper status.
 	// For Protocolversion <AS14 everything that is not true results in 400 Bad Request header
