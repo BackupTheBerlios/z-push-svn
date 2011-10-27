@@ -4282,11 +4282,10 @@ function HandleSettings($backend, $devid, $protocolversion) {
 				case SYNC_SETTINGS_GET :
 		    		switch ($reqtype) {
 		    			case SYNC_SETTINGS_OOF:
-							if(!$decoder->getElementStartTag(SYNC_SETTINGS_BODYTYPE))
-    	   	    				return false;
- 				           	$bodytype = $decoder->getElementContent();
-			            	if(!$decoder->getElementEndTag())
-            			    	return false; // end SYNC_SETTINGS BODYTYPE
+							if($decoder->getElementStartTag(SYNC_SETTINGS_BODYTYPE))
+ 					           	if (($bodytype = $decoder->getElementContent()) !== false)
+					            	if(!$decoder->getElementEndTag())
+            			    			return false; // end SYNC_SETTINGS BODYTYPE
 			            	if(!$decoder->getElementEndTag())
 			                	return false; // end SYNC_SETTINGS_OOF
 							$request["get"]["oof"]["bodytype"] = $bodytype;
@@ -4308,40 +4307,49 @@ function HandleSettings($backend, $devid, $protocolversion) {
 											-1))))) != -1) {
 								switch ($type) {
 									case SYNC_SETTINGS_OOFSTATE:
-										$oofstate = $decoder->getElementContent();
-										$decoder->getElementEndTag();
+										if (($oofstate = $decoder->getElementContent()) !== false)
+											$decoder->getElementEndTag();
 										$request["set"]["oof"]["oofstate"] = $oofstate;
 										break;
 									case SYNC_SETTINGS_STARTTIME:
-										$starttime = $decoder->getElementContent();
-										$decoder->getElementEndTag();
+										if (($starttime = $decoder->getElementContent()) !== false)
+											$decoder->getElementEndTag();
 										$request["set"]["oof"]["starttime"] = $starttime;
 										break;
 									case SYNC_SETTINGS_ENDTIME:
-										$endtime = $decoder->getElementContent();
-										$decoder->getElementEndTag();
+										if (($endtime = $decoder->getElementContent()) !== false)
+											$decoder->getElementEndTag();
 										$request["set"]["oof"]["endtime"] = $endtime;
 										break;
 									case SYNC_SETTINGS_OOFMESSAGE:
-					                    $oofmsgs = array();
 									    while (($type = ($decoder->getElementStartTag(SYNC_SETTINGS_APPLIESTOINTERNAL)        ? SYNC_SETTINGS_APPLIESTOINTERNAL :
 												   		($decoder->getElementStartTag(SYNC_SETTINGS_APPLIESTOEXTERNALKNOWN)   ? SYNC_SETTINGS_APPLIESTOEXTERNALKNOWN :
 												    	($decoder->getElementStartTag(SYNC_SETTINGS_APPLIESTOEXTERNALUNKNOWN) ? SYNC_SETTINGS_APPLIESTOEXTERNALUNKNOWN :
 												    	-1)))) != -1) {
 											$oof = array();
 						        			$oof["appliesto"] = $type;
-						    	    		$decoder->getElementStartTag(SYNC_SETTINGS_ENABLED);
-					    	    			$oof["enabled"] = $decoder->getElementContent();
-						    	    		$decoder->getElementEndTag(); // end SYNC_SETTINGS_ENABLED
-					    	    			$decoder->getElementStartTag(SYNC_SETTINGS_REPLYMESSAGE);
-						        			$oof["replymessage"] = $decoder->getElementContent();
-					    		    		$decoder->getElementEndTag(); // end SYNC_SETTINGS_REPLYMESSAGE
-						    	    		$decoder->getElementStartTag(SYNC_SETTINGS_BODYTYPE);
-					        				$oof["bodytype"] = $decoder->getElementContent();
-					        				$decoder->getElementEndTag(); // end SYNC_SETTINGS_BODYTYPE
-											$oofmsgs[]=$oof;
+						    	    		while (($type = ($decoder->getElementStartTag(SYNC_SETTINGS_ENABLED) 			? SYNC_SETTINGS_ENABLED			:
+						    	    						($decoder->getElementStartTag(SYNC_SETTINGS_REPLYMESSAGE)		? SYNC_SETTINGS_REPLYMESSAGE	:
+						    	    						($decoder->getElementStartTag(SYNC_SETTINGS_BODYTYPE)			? SYNC_SETTINGS_BODYTYPE		:
+						    	    						-1)))) != -1) {
+						    	    			switch ($type) {
+						    	    				case SYNC_SETTINGS_ENABLED:
+						    	    					if (($oof["enabled"] = $decoder->getElementContent()) !== false) 
+						    	    						$decoder->getElementEndTag(); // end SYNC_SETTINGS_ENABLED
+						    	    					break;
+						    	    				case SYNC_SETTINGS_REPLYMESSAGE:
+						    	    					if (($oof["replymessage"] = $decoder->getElementContent()) !== false)
+						    	    						$decoder->getElementEndTag(); // end SYNC_SETTINGS_REPLYMESSAGE
+						    	    					break;
+						    	    				case SYNC_SETTINGS_BODYTYPE:
+						    	    					if (($oof["bodytype"] = $decoder->getElementContent()) != false)
+					        								$decoder->getElementEndTag(); // end SYNC_SETTINGS_BODYTYPE
+					        							break;
+												}
+											}
 									    };
-										$request["set"]["oof"]["oofmsgs"] = $oofmsgs;    
+										if (!isset($request["set"]["oof"]["oofmsgs"])) $request["set"]["oof"]["oofmsgs"] = array();
+										$request["set"]["oof"]["oofmsgs"][] = $oof;
 										$decoder->getElementEndTag(); // end SYNC_SETTINGS_OOFMESSAGE
 										break;
 								}
