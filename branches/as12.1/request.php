@@ -2487,12 +2487,13 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 					    strlen($syncstate) < 8) {
 					    debugLog("GetSyncState: Got an error in HandleGetItemEstimate");
 					    $syncstate = false;
-					    if ($collection["synckey"] != '0') $syncstatus = 2;
+					    if ($collection["synckey"] != '0' &&
+					    	$syncstate != -9) $syncstatus = 2;
 					    else $syncstatus=4;
 					} 
 
 	                $exporter = $backend->GetExporter($collection["collectionid"]);
-	                $exporter->Config($importer, $collection["class"], (isset($collection["options"]["filtertype"]) ? $collection["options"]["filtertype"]: $collection["filtertype"]), $syncstate, 0, 0, false, false);
+	                $exporter->Config($importer, $collection["class"], (isset($collection["options"]["filtertype"]) ? $collection["options"]["filtertype"] : (isset($collection['filtertype']) ? $collection["filtertype"] : 0)), $syncstate, 0, 0, false, false);
 
 					$changecount = $exporter->GetChangeCount();
 					if ($changecount === false) {
@@ -2503,14 +2504,15 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
 				// todo: validate with future open protocol specification!
 				if (isset($collection['options']['foldertype'])) {
 					$optionsyncstatus = 1;
-		            $optionsyncstate = $statemachine->getSyncState($collection["synckey"]);
+		            $optionsyncstate = $statemachine->getSyncState($collection['options']['foldertype'].$collection["synckey"]);
 					$statemachine->cleanOldSyncState($collection['options']['foldertype'].$collection["synckey"]);
 					if (is_numeric($optionsyncstate) &&
 					    $optionsyncstate < 0 &&
 					    strlen($optionsyncstate) < 8) {
 					    debugLog("GetSyncState: Got an error in HandleGetItemEstimate");
 					    $optionsyncstate = false;
-					    if ($collection["synckey"] != '0') $optionsyncstatus = 2;
+					    if ($collection["synckey"] != '0' &&
+					    	$syncstate != -9) $optionsyncstatus = 2;
 				    	else $optionsyncstatus=4;
 					}
 
