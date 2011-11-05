@@ -1783,7 +1783,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 		($SyncCache['wait'] === false &&
 	 	 $SyncCache['hbinterval'] === false)) {
 		unset($foundchange);
-		foreach($collections as $collection) {
+		foreach($collections as $key=>$collection) {
 			if ((isset($collection["getchanges"]) &&
                	 $collection["getchanges"] != 0) && 
                	 !isset($collection["importedchanges"]) &&
@@ -1822,16 +1822,19 @@ function HandleSync($backend, $protocolversion, $devid) {
            			$optionexporter->Config($importer[$collection['optionfoldertype'].$collection["collectionid"]], $collection['optionfoldertype'], $optionfiltertype, $collection[$collection['optionfoldertype'].'syncstate'], 0, 9, false, $collection[$collection["optionfoldertype"]]["BodyPreference"], (isset($collection["mimesupport"]) ? $collection['mimesupport'] : 0));
 	                	$changecount = $changecount + $optionexporter->GetChangeCount();
 				}
+				$collections[$key]['changecount'] = $changecount;
 				if ($changecount > 0) {
 					$foundchange = true; 
-					break;
 				}
 			}
 		}
+
     	if (isset($foundchange) &&
     		$foundchange == false) {
-			debugLog("HandleSync: No changes although devices requested them. Exit silently!"); // Undocumented in Open Protocols!
-    		return true;
+			if ($protocolversion >= 14.0) {
+				debugLog("HandleSync: No changes although devices requested them. Exit silently!"); // E2K10 Behaviour! Undocumented in Open Protocols!
+   				return true;
+    		}
     	}
 	}
 
@@ -1853,32 +1856,36 @@ function HandleSync($backend, $protocolversion, $devid) {
 			    if (isset($collection["BodyPreference"])) $encoder->_bodypreference = $collection["BodyPreference"];
 			    // END ADDED dw2412 Protocol Version 12 Support
 
-                // Get a new sync key to output to the client if any changes have been requested or have been sent
-                if (isset($collection["importedchanges"]) || (isset($collection["getchanges"]) && $collection["getchanges"] != 0) || $collection["synckey"] == "0") {
-                    $collection["newsynckey"] = $statemachine->getNewSyncKey($collection["synckey"]);
-					debugLog("HandleSync: New Synckey generated because importedchanges: ".isset($collection["importedchanges"]). " getchanges: ". isset($collection["getchanges"]) . " initialsync: " . ($collection["synckey"] == "0"));
-				}
-
 				$folderstatus=1;
 				// dw2412 ensure that no older exporter definition exists and could be used
 				// figthing against that some folder get content of another folder...
 				if (isset($exporter)) unset($exporter);
 				if (isset($optionexporter)) unset($optionexporter);
+
                 if ((isset($collection["getchanges"]) &&
                 	 $collection["getchanges"] != 0)) {
-                    // Try to get the exporter. In case it is not possible (i.e. folder removed) set
-                    // status according. 
-                    $exporter = $backend->GetExporter($collection["collectionid"]);
-		    		debugLog("HandleSync: Exporter Value: ".is_object($exporter). " " .(isset($exporter->exporter) ? $exporter->exporter : ""));
 		    		if (isset($collection['optionfoldertype'])){
 						$optionexporter = $backend->GetExporter($collection["collectionid"]);
 		    			debugLog("HandleSync: OptionExporter Value: ".is_object($optionexporter). " " .(isset($optionexporter->exporter) ? $optionexporter->exporter : ""));
 		    		}
+
             	    if ((isset($exporter->exporter) && $exporter->exporter === false) ||
             	    	(isset($optionexporter->exporter) && $optionexporter->exporter === false)) {
             			$folderstatus = SYNC_STATUS_OBJECT_NOT_FOUND;
             	    }
                 };
+
+                // Get a new sync key to output to the client if any changes have been requested or have been sent
+                if (isset($collection["importedchanges"]) || (isset($collection["getchanges"]) && $collection["getchanges"] != 0) || $collection["synckey"] == "0") {
+					if (isset($collection['changecount']) && $collection['changecount'] > 0) {
+	                    $collection["newsynckey"] = $statemachine->getNewSyncKey($collection["synckey"]);
+						debugLog("HandleSync: New Synckey generated because importedchanges: ".isset($collection["importedchanges"]). " getchanges: ". (isset($collection["getchanges"]) && $collection["getchanges"] != 0) . " changecount: ".$collection['changecount']. " initialsync: " . ($collection["synckey"] == "0"));
+					} else if (!isset($collection['changecount'])) {
+	                    $collection["newsynckey"] = $statemachine->getNewSyncKey($collection["synckey"]);
+						debugLog("HandleSync: New Synckey generated because importedchanges: ".isset($collection["importedchanges"]). " getchanges: ". (isset($collection["getchanges"]) && $collection["getchanges"] != 0) . " initialsync: " . ($collection["synckey"] == "0"));
+					}
+				}
+
 
                 $encoder->startTag(SYNC_FOLDER);
     			// FolderType/Class is only being returned by AS up to 12.0. 
@@ -2593,7 +2600,7 @@ function _HandlePingError($errorcode, $limit = false) {
     $encoder->endTag();
 }
 
-function HandlePing($backend, $devid) {
+function HandlePing($backend, $devid, $protocolversion) {
     global $zpushdtd, $input, $output;
     global $user, $auth_pw;
     $timeout = 10;
@@ -2615,7 +2622,6 @@ function HandlePing($backend, $devid) {
         $lifetime = $ping["lifetime"];
     	file_put_contents(STATE_PATH . "/" . strtolower($devid). "/" . $devid, serialize(array("lifetime" => $lifetime, "timestamp" => time(), "collections" => $collections)));
     }
-
     if($decoder->getElementStartTag(SYNC_PING_PING)) {
         debugLog("Ping init");
         if($decoder->getElementStartTag(SYNC_PING_LIFETIME)) {
@@ -2697,7 +2703,7 @@ function HandlePing($backend, $devid) {
 
     if ($lifetime < 60) {
 		_HandlePingError("5","60");
-		debugLog("Lifetime lower than 60 Seconds. This violates the protocol spec. (STATUS = 5, LIMIT min = 60)");
+		debugLog("Lifetime below 60 Seconds. This violates the protocol spec. (STATUS = 5, LIMIT min = 60)");
 		return true;
     }
     if ($lifetime > (REAL_SCRIPT_TIMEOUT-600)) {
@@ -2707,6 +2713,9 @@ function HandlePing($backend, $devid) {
     }
 
     debugLog("Waiting for changes... (lifetime $lifetime)");
+	// Store current ping state to prevent multiple pings arriving without being handled
+   	file_put_contents(STATE_PATH . "/" . strtolower($devid). "/" . $devid, serialize(array("lifetime" => $lifetime, "timestamp" => $timestamp, "collections" => $collections)));
+
     // Wait for something to happen
 	$pingrunavrgduration = 0;
 	$pingrunmaxduration = 0;
@@ -2719,8 +2728,10 @@ function HandlePing($backend, $devid) {
  		if (file_exists($file)) {
         	$ping = unserialize(file_get_contents($file));
 			if ($ping['timestamp'] > $timestamp) {
-				debugLog("Another Ping is running. Lets exit silently without any returning any result!"); // NOT Documented in Open Protocols!
-				return true;
+				if ($protocolversion >= 14.0) {
+					debugLog("Another Ping is running. Lets exit silently without any returning any result!"); //E2K10 Behaviour! NOT Documented in Open Protocols!
+					return true;
+				}
 			}
         }
 
