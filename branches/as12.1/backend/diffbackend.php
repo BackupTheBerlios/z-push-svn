@@ -390,7 +390,7 @@ class ExportChangesDiff extends DiffState {
             //do nothing if it is a dummy folder
             if ($this->_folderid != SYNC_FOLDER_TYPE_DUMMY) {
 
-				if ($mclass == 'syncsms') {
+				if ($mclass == 'SMS') {
 					$this->_changes == array();
 				} else
                 // on ping: check if backend supports alternative PING mechanism & use it
