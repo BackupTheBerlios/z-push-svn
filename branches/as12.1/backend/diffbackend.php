@@ -363,7 +363,7 @@ class ExportChangesDiff extends DiffState {
     }
 
     // CHANGED dw2412 Support Protocol Version 12 (added bodypreference)
-    function Config(&$importer, $mclass, $restrict, $syncstate, $flags, $truncation, $bodypreference, $optionbodypreference, $mimesupport) {
+    function Config(&$importer, $mclass, $restrict, $syncstate, $flags, $truncation, $bodypreference, $optionbodypreference, $mimesupport=0) {
         $this->_importer = &$importer;
         $this->_restrict = $restrict;
         $this->_syncstate = unserialize($syncstate);
