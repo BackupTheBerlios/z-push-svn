@@ -846,7 +846,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 		    $tmp = substr($convidxprops[PR_CONVERSATION_INDEX],22,strlen($convidxprops[PR_CONVERSATION_INDEX]-22));
 		   	while (strlen($tmp) > 0) {
 				$convindex .= substr($tmp,0,5);
-				$tmp = substr(5,strlen($tmp)-5);
+				$tmp = substr($tmp,5,strlen($tmp)-5);
 		    }
 		   	$ret['sourcekey'] = bin2hex($sourcekeyprops[PR_SOURCE_KEY]);
 		    $ret['convid'] = $convid;
