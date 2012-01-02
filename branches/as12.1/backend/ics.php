@@ -76,6 +76,7 @@ include_once('backend.php');
 include_once('z_tnef.php');
 include_once('z_ical.php');
 include_once('z_RTF.php');
+include_once('z_mimehelper.php');
 
 
 function GetPropIDFromString($store, $mapiprop) {
@@ -1126,7 +1127,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 		    // Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
 		    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
 		    // to see if it is realy empty and in case not, take the appointment body.
-		    $rtf_body = new rtf ();
+		    $rtf_body = new z_RTF ();
 		    $rtf_body->loadrtf(base64_decode($email->rtf));
 		    $rtf_body->output("ascii");
 		    $rtf_body->parse();
@@ -1179,7 +1180,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 		    // Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
 		    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
 		    // to see if it is realy empty and in case not, take the appointment body.
-		    $rtf_body = new rtf ();
+		    $rtf_body = new z_RTF ();
 		    $rtf_body->loadrtf(base64_decode($email->rtf));
 		    $rtf_body->output("ascii");
 		    $rtf_body->parse();
@@ -1282,7 +1283,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 		    // Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
 		    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
 		    // to see if it is realy empty and in case not, take the appointment body.
-		    $rtf_body = new rtf ();
+		    $rtf_body = new z_RTF ();
 		    $rtf_body->loadrtf(base64_decode($appointment->rtf));
 		    $rtf_body->output("ascii");
 		    $rtf_body->parse();
@@ -1526,7 +1527,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 	    // Nokia MfE 2.9.158 sends contact notes with RTF and Body element. 
 	    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
 	    // to see if it is realy empty and in case not, take the contact body.
-	    $rtf_body = new rtf ();
+	    $rtf_body = new z_RTF ();
 	    $rtf_body->loadrtf(base64_decode($contact->rtf));
 	    $rtf_body->output("ascii");
 	    $rtf_body->parse();
@@ -1739,7 +1740,7 @@ class ImportContentsChangesICS extends MAPIMapping {
 	    // Nokia MfE 2.9.158 sends task notes with RTF and Body element. 
 	    // The RTF is empty, the body contains the note therefore we need to unpack the rtf 
 	    // to see if it is realy empty and in case not, take the task body.
-	    $rtf_body = new rtf ();
+	    $rtf_body = new z_RTF ();
 	    $rtf_body->loadrtf(base64_decode($task->rtf));
 	    $rtf_body->output("ascii");
 	    $rtf_body->parse();
@@ -2033,7 +2034,6 @@ class PHPContentsImportProxy extends MAPIMapping {
 		    if (!$rtf) {
 				$message->airsyncbasenativebodytype=1;
 		    } else {
-		        $rtf_len = strlen($rtf);
 		        $rtf = mapi_decompressrtf($rtf);
 		        $rtf_replaced = preg_replace("/(\n.*)/m","",$rtf);
 		        if (strpos($rtf_replaced,"\\fromtext") != false) {
@@ -2242,8 +2242,7 @@ class PHPContentsImportProxy extends MAPIMapping {
         if(isset($recurprops[$isrecurringtag]) && $recurprops[$isrecurringtag]) {
             // Process recurrence
             $message->recurrence = new SyncRecurrence();
-	    $this->_getRecurrence($mapimessage, $recurprops, $message, $message->recurrence, $tz);
-
+		    $this->_getRecurrence($mapimessage, $recurprops, $message, $message->recurrence, $tz);
         }
 
         // Do attendees
@@ -2306,6 +2305,10 @@ class PHPContentsImportProxy extends MAPIMapping {
                 break;
             case 11: // weekly
                     $syncRecurrence->type = 1;
+				if (!isset($recurrence->recur["firstdow"]))
+					$syncRecurrence->firstdayofweek = 0;
+				else 
+					$syncRecurrence->firstdayofweek = $recurrence->recur["firstdow"];
                 break;
             case 12: // monthly
                 switch($recurrence->recur["subtype"]) {
@@ -3369,12 +3372,12 @@ class ExportChangesICS  {
 			return 0;
 	}
 
-    function Synchronize() {
-        if ($this->exporter) {
-            return mapi_exportchanges_synchronize($this->exporter);
-        }else
-           return false;
-    }
+	function Synchronize() {
+		if ($this->exporter) {
+			return mapi_exportchanges_synchronize($this->exporter);
+		} else
+			return false;
+	}
 
     // ----------------------------------------------------------------------------------------------
 
