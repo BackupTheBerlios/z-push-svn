@@ -2921,12 +2921,14 @@ function HandleSendMail($backend, $protocolversion) {
 			$rfc822 = $mime;
 			if ($result == 1)
 			    $result = $backend->SendMail($rfc822, $data, $protocolversion);
-		    $encoder->startWBXML();
-			$encoder->startTag(SYNC_COMPOSEMAIL_SENDMAIL);
-			$encoder->startTag(SYNC_COMPOSEMAIL_STATUS);
-	        $encoder->content(($result === true ? "1" : $result));
-	        $encoder->endTag();
-    	    $encoder->endTag();
+			if ($result !== true) {
+			    $encoder->startWBXML();
+				$encoder->startTag(SYNC_COMPOSEMAIL_SENDMAIL);
+				$encoder->startTag(SYNC_COMPOSEMAIL_STATUS);
+		        $encoder->content(($result === true ? "1" : $result));
+		        $encoder->endTag();
+	    	    $encoder->endTag();
+			}
 		}
     } else {
         $rfc822 = readStream($input);
@@ -3085,12 +3087,14 @@ function HandleSmartForward($backend, $protocolversion) {
 			$rfc822 = $mime;
 			if ($result == 1)
 			    $result = $backend->SendMail($rfc822, $data, $protocolversion);
-    	    $encoder->startWBXML();
-			$encoder->startTag(SYNC_COMPOSEMAIL_SMARTFORWARD);
-			$encoder->startTag(SYNC_COMPOSEMAIL_STATUS);
-	        $encoder->content(($result === true ? "1" : $result));
-	        $encoder->endTag();
-	        $encoder->endTag();
+			if ($result !== true) {
+	    	    $encoder->startWBXML();
+				$encoder->startTag(SYNC_COMPOSEMAIL_SMARTFORWARD);
+				$encoder->startTag(SYNC_COMPOSEMAIL_STATUS);
+		        $encoder->content(($result === true ? "1" : $result));
+		        $encoder->endTag();
+		        $encoder->endTag();
+			}
 		}
 	} else {
 		if (isset($_GET['LongId'])) 
@@ -3268,12 +3272,14 @@ function HandleSmartReply($backend, $protocolversion) {
 			$rfc822 = $mime;
 			if ($result == 1)
 		    	$result = $backend->SendMail($rfc822, $data, $protocolversion);
-	    	$encoder->startWBXML();
-			$encoder->startTag(SYNC_COMPOSEMAIL_SMARTREPLY);
-			$encoder->startTag(SYNC_COMPOSEMAIL_STATUS);
-		    $encoder->content(($result === true ? "1" : $result));
-	        $encoder->endTag();
-	        $encoder->endTag();
+			if ($result !== true) {
+		    	$encoder->startWBXML();
+				$encoder->startTag(SYNC_COMPOSEMAIL_SMARTREPLY);
+				$encoder->startTag(SYNC_COMPOSEMAIL_STATUS);
+			    $encoder->content(($result === true ? "1" : $result));
+		        $encoder->endTag();
+		        $encoder->endTag();
+			}
 		}
 	} else {
 		if (isset($_GET['LongId'])) 
