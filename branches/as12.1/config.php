@@ -89,9 +89,10 @@
 	define('INTERNAL_SMTPCLIENT_CONNECTTIMEOUT',25);
 	define('INTERNAL_SMTPCLIENT_SOCKETTIMEOUT',5);
 	define('INTERNAL_SMTPCLIENT_MAILDOMAIN','');
+	define('INTERNAL_SMTPCLIENT_STARTTLS',false);
 	// Set this in case your mailserver requires authentication
-	define('INTERNAL_SMTPCLIENT_USERNAME','');
-	define('INTERNAL_SMTPCLIENT_PASSWORD','');
+	define('INTERNAL_SMTPCLIENT_USERNAME',''); // i.e. $auth_user in case you have no static user for auth and want to use z-push user name
+	define('INTERNAL_SMTPCLIENT_PASSWORD',''); // i.e. $auth_pw in case you have no static user for auth and want to use z-push user password
 
     // The data providers that we are using (see configuration below)
     $BACKEND_PROVIDER = "BackendICS";

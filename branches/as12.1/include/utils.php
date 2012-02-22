@@ -557,113 +557,211 @@ function InternalSMTPClient($from,$to,$cc,$bcc,$content) {
 	}
 
 	while ($line = fgets($handle, 515)) {
+		debugLog('Server said: '.$line);
 		if (substr($line,3,1) == ' ') break;
 	}
 
 	if (substr(PHP_OS, 0, 3) != 'WIN') {
 		socket_set_timeout($handle, INTERNAL_SMTPCLIENT_SOCKETTIMEOUT, 0);
 	}
+	debugLog('Sending EHLO '.INTERNAL_SMTPCLIENT_MAILDOMAIN);
 	fputs($handle, "EHLO ".INTERNAL_SMTPCLIENT_MAILDOMAIN."\n");
 
 	while ($line = fgets($handle, 515)) {
+		debugLog('Server said: '.$line);
 		if (substr($line,3,1) == ' ') {
 			if (substr($line,0,3) != '250') {
 				debugLog('Error: EHLO not accepted from server!');
 				return false;
+			} else {
+				break;
+			}
+		}
+	}
+
+	// STARTTLS
+	if (defined('INTERNAL_SMTPCLIENT_STARTTLS') &&  INTERNAL_SMTPCLIENT_STARTTLS == true) {
+		debugLog('Sending STARTTLS');
+		fputs($handle, "STARTTLS\n");
+		while ($line = fgets($handle, 515)) {
+			debugLog('Server said: '.$line);
+			if (substr($line,3,1) == ' ') {
+				if (substr($line,0,3) != '220') {
+					debugLog('Error: STARTTLS not accepted from server!');
+					return false;
+				} else {
+					break;
+				}
+			}
+		}
+		if(stream_socket_enable_crypto($handle,true,STREAM_CRYPTO_METHOD_TLS_CLIENT) === false) {
+			debugLog('Error: Cannot enable crypto for connection');
+			return false;
+		}
+		debugLog('Sending EHLO '.INTERNAL_SMTPCLIENT_MAILDOMAIN);
+		fputs($handle, "EHLO ".INTERNAL_SMTPCLIENT_MAILDOMAIN."\n");
+
+		while ($line = fgets($handle, 515)) {
+			debugLog('Server said: '.$line);
+			if (substr($line,3,1) == ' ') {
+				if (substr($line,0,3) != '250') {
+					debugLog('Error: EHLO not accepted from server!');
+					return false;
+				} else {
+					break;
+				}
 			}
 		}
 	}
 
 	// SMTP authorization
 	if (INTERNAL_SMTPCLIENT_USERNAME != '' && INTERNAL_SMTPCLIENT_PASSWORD != '') {
+		debugLog('Sending AUTH LOGIN');
 		fputs($handle, "AUTH LOGIN\n");
 		while ($line = fgets($handle, 515)) {
+			debugLog('Server said: '.$line);
 			if (substr($line,3,1) == ' ') {
 				if (substr($line,0,3) != '334') {
 					debugLog('Error: AUTH LOGIN not accepted from server!');
 					return false;
+				} else {
+					break;
 				}
-				break;
 			}
 		}
+		debugLog('Sending '.base64_encode(INTERNAL_SMTPCLIENT_USERNAME));
 		fputs($handle, base64_encode(INTERNAL_SMTPCLIENT_USERNAME)."\n");
 		while ($line = fgets($handle, 515)) {
+			debugLog('Server said: '.$line);
 			if (substr($line,3,1) == ' ') {
 				if (substr($line,0,3) != '334') {
 					debugLog('Error: Username not accepted by server!');
 					return false;
+				} else {
+					break;
 				}
-				break;
 			}
 		}
+		debugLog('Sending '.base64_encode(INTERNAL_SMTPCLIENT_PASSWORD));
 		fputs($handle, base64_encode(INTERNAL_SMTPCLIENT_PASSWORD)."\n");
 		while ($line = fgets($handle, 515)) {
+			debugLog('Server said: '.$line);
 			if (substr($line,3,1) == ' ') {
 				if (substr($line,0,3) != '235') {
 					debugLog('Error: Password not accepted by server!');
 					return false;
+				} else {
+					break;
 				}
-				break;
 			}
 		}
 	}
 
 	// Send out the e-mail
+	debugLog('Sending MAIL FROM: '.$from);
 	fputs($handle, "MAIL FROM: ".$from."\n");
 	while ($line = fgets($handle, 515)) {
+		debugLog('Server said: '.$line);
 		if (substr($line,3,1) == ' ') {
 			if (substr($line,0,3) != '250') {
 				debugLog('Error: MAIL FROM not accepted by server!');
 				return false;
+			} else {
+				break;
 			}
 		}
 	}
 
 	foreach ($addrs as $value) {
 		if ($value['addr'] != "") {
+			debugLog('Sending RCPT TO: '.$value['addr']);
 			fputs($handle, "RCPT TO: ".$value['addr']."\n");
 			while ($line = fgets($handle, 515)) {
+				debugLog('Server said: '.$line);
 				if (substr($line,3,1) == ' ') {
 					if (substr($line,0,3) != '250' && substr($line,0,3) != '251') {
 						debugLog('Error: RCPT TO not accepted by server!');
 						return false;
+					} else {
+						break;
 					}
 				}
 			}
 		}
 	}
 
+	debugLog('Sending DATA');
 	fputs($handle, "DATA\n");
 	while ($line = fgets($handle, 515)) {
+		debugLog('Server said: '.$line);
 		if (substr($line,3,1) == ' ') {
 			if (substr($line,0,3) != '354') {
 				debugLog('Error: DATA Command not accepted by server!');
 				return false;
+			} else {
+				break;
 			}
 		}
 	}
+	debugLog('Sending '.$content);
 	fputs($handle, $content. "\n");
+	debugLog('Sending END');
 	fputs($handle, ".\n");
 	while ($line = fgets($handle, 515)) {
+		debugLog('Server said: '.$line);
 		if (substr($line,3,1) == ' ') {
 			if (substr($line,0,3) != '250') {
 				debugLog('Error: DATA Content not accepted by server!');
 				return false;
+			} else {
+				break;
 			}
 		}
 	}
 	// Close connection to SMTP server
 	fputs($handle, "QUIT\n");
 	while ($line = fgets($handle, 515)) {
+		debugLog('Server said: '.$line);
 		if (substr($line,3,1) == ' ') {
 			if (substr($line,0,3) != '221') {
 				debugLog('Error: QUIT not accepted by server!');
 				return false;
+			} else {
+				break;
 			}
 		}
 	}
 	fclose ($handle);
 	return true;
 }
+
+function ksort_recursive($arr) {
+	foreach($arr as $key => $value) {
+		if (is_array($value)) $arr[$key] = ksort_recursive($value);
+	};
+	ksort($arr);
+	return $arr;
+}
+
+function array_diff_assoc_recursive($array1, $array2) {
+	foreach ($array1 as $key => $value) {
+		if (is_array($value)) {
+			if(!isset($array2[$key])) {
+				$difference[$key] = $value;
+			} elseif(!is_array($array2[$key])) {
+				$difference[$key] = $value;
+			} else {
+				$new_diff = array_diff_assoc_recursive($value, $array2[$key]);
+				if($new_diff != false) {
+					$difference[$key] = $new_diff;
+				}
+			}
+		} elseif(!isset($array2[$key]) || $array2[$key] != $value) {
+			$difference[$key] = $value;
+		}
+	}
+	return !isset($difference) ? 0 : $difference;
+}
+
 
 ?>
