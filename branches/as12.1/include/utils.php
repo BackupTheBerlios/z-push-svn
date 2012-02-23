@@ -495,6 +495,7 @@ function parseVFB_date($tstring) {
 // END ADDED dw2412 ResolveRecipient Support
 
 function InternalSMTPClient($from,$to,$cc,$bcc,$content) {
+	global $auth_user, $auth_pw;
 	$addpath = "";
 	if (strlen($to) > 0) $addpath .= $to.", ";
 	if (strlen($cc) > 0) $addpath .= $cc.", ";
@@ -629,8 +630,13 @@ function InternalSMTPClient($from,$to,$cc,$bcc,$content) {
 				}
 			}
 		}
-		debugLog('Sending '.base64_encode(INTERNAL_SMTPCLIENT_USERNAME));
-		fputs($handle, base64_encode(INTERNAL_SMTPCLIENT_USERNAME)."\n");
+		if (INTERNAL_SMTPCLIENT_USERNAME == '$auth_user') {
+			debugLog('Sending '.base64_encode($auth_user));
+			fputs($handle, base64_encode($auth_user)."\n");
+		} else {
+			debugLog('Sending '.base64_encode(INTERNAL_SMTPCLIENT_USERNAME));
+			fputs($handle, base64_encode(INTERNAL_SMTPCLIENT_USERNAME)."\n");
+		}
 		while ($line = fgets($handle, 515)) {
 			debugLog('Server said: '.$line);
 			if (substr($line,3,1) == ' ') {
@@ -642,8 +648,13 @@ function InternalSMTPClient($from,$to,$cc,$bcc,$content) {
 				}
 			}
 		}
-		debugLog('Sending '.base64_encode(INTERNAL_SMTPCLIENT_PASSWORD));
-		fputs($handle, base64_encode(INTERNAL_SMTPCLIENT_PASSWORD)."\n");
+		if (INTERNAL_SMTPCLIENT_PASSWORD == '$auth_pw') {
+			debugLog('Sending '.base64_encode($auth_pw));
+			fputs($handle, base64_encode($auth_pw)."\n");
+		} else {
+			debugLog('Sending '.base64_encode(INTERNAL_SMTPCLIENT_PASSWORD));
+			fputs($handle, base64_encode(INTERNAL_SMTPCLIENT_PASSWORD)."\n");
+		}
 		while ($line = fgets($handle, 515)) {
 			debugLog('Server said: '.$line);
 			if (substr($line,3,1) == ' ') {
