@@ -443,7 +443,7 @@ function HandleFolderSync($backend, $devid, $protocolversion) {
 	foreach ($foldercache['collections'] as $key => $value) {
 	    if (!isset($foldercache['folders'][$key])) unset($foldercache['collections'][$key]);
 	}
-    $statemachine->setSyncCache(serialize($foldercache));
+    $statemachine->setSyncCache(serialize($foldercache),true);
 
     return true;
 }
@@ -1362,6 +1362,7 @@ function HandleSync($backend, $protocolversion, $devid) {
 					if (isset($SyncCache['confirmed_synckeys'][$value['synckey']])) {
 						debugLog('HandleSync: Removed '.$SyncCache['confirmed_synckeys'][$value['synckey']].' from confirmed_synckeys array');
 						unset($SyncCache['confirmed_synckeys'][$value['synckey']]);
+						$statemachine->deleteSyncCacheConfirmedSyncKey($SyncCache,$value['synckey']);
 						$ConfirmedKeys++;
 					}
 				}
@@ -3508,7 +3509,7 @@ function HandleFolderCreate($backend, $devid, $protocolversion) {
     // Save the sync state for the next time
     $statemachine->setSyncState($newsynckey, $importer->GetState());
     $statemachine->setSyncState("s".$newsynckey, serialize($seenfolders));
-    $statemachine->setSyncCache(serialize($foldercache));
+    $statemachine->setSyncCache(serialize($foldercache),true);
     
     return true;
 }

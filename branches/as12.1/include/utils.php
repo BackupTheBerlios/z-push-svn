@@ -774,5 +774,17 @@ function array_diff_assoc_recursive($array1, $array2) {
 	return !isset($difference) ? 0 : $difference;
 }
 
+function rrmdir($dir) {
+	if (is_dir($dir)) {
+		$objects = scandir($dir);
+		foreach ($objects as $object) {
+			if ($object != "." && $object != "..") {
+				if (filetype($dir."/".$object) == "dir") rrmdir($dir."/".$object); else unlink($dir."/".$object);
+			}
+		}
+		reset($objects);
+		rmdir($dir);
+	}
+}
 
 ?>
