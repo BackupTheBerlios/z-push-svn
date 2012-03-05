@@ -238,14 +238,17 @@ class StateMachine {
 		    } else $cachestatus = SYNCCACHE_CHANGED;
 		} else $cachestatus = SYNCCACHE_CHANGED;
 		$dir = STATE_PATH. "/" .$this->_devid."/cache_".$this->_user;
+		$initialconvert = false;
         if(!is_dir($dir)) {
 	    	debugLog("StateMachine->setSyncCache: created folder ".$dir);
+			$initialconvert = true;
 	 		if (mkdir($dir, 0744) === false) 
 				debugLog("StateMachine->setSyncCache: failed to create folder ".$dir);
 		}
 		foreach($this->newsynccache as $k1=>$v1) {
 			if ($folders == false && 
-				$k1 == 'folders') continue;
+				$k1 == 'folders' &&
+				$initialconvert == false) continue;
 			if (is_array($v1)) {
 				if (!is_dir($dir."/".$k1))
 			 		mkdir($dir.'/'.$k1, 0744);
