@@ -41,5 +41,5 @@
 * Consult LICENSE file for details
 ************************************************/
 
-$zpush_version = "1.5.9-1226";
+$zpush_version = "1.5.10RC-1246";
 ?>
