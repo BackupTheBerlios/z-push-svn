@@ -906,36 +906,43 @@ class ImportContentsChangesICS extends MAPIMapping {
                         $recur["subtype"] = 0;
 
                     $recur["everyn"] = $appointment->recurrence->interval * (60 * 24);
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 1));
                     break;
                 case 1:
                     $recur["type"] = 11;
                     $recur["subtype"] = 1;
                     $recur["everyn"] = $appointment->recurrence->interval;
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 2));
                     break;
                 case 2:
                     $recur["type"] = 12;
                     $recur["subtype"] = 2;
                     $recur["everyn"] = $appointment->recurrence->interval;
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 3));
                     break;
                 case 3:
                     $recur["type"] = 12;
                     $recur["subtype"] = 3;
                     $recur["everyn"] = $appointment->recurrence->interval;
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 3));
                     break;
                 case 4:
                     $recur["type"] = 13;
                     $recur["subtype"] = 1;
                     $recur["everyn"] = $appointment->recurrence->interval * 12;
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 4));
                     break;
                 case 5:
                     $recur["type"] = 13;
                     $recur["subtype"] = 2;
                     $recur["everyn"] = $appointment->recurrence->interval * 12;
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 4));
                     break;
                 case 6:
                     $recur["type"] = 13;
                     $recur["subtype"] = 3;
                     $recur["everyn"] = $appointment->recurrence->interval * 12;
+                    mapi_setprops($mapimessage, array( $this->_getPropIDFromString("PT_LONG:{00062002-0000-0000-C000-000000000046}:0x8231") => 4));
                     break;
             }
 
