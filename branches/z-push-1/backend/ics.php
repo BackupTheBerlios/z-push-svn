@@ -2933,6 +2933,11 @@ class BackendICS {
 
         $mapimessage = mapi_folder_createmessage($outbox);
 
+        if($forward)
+            $orig = $forward;
+        if($reply)
+            $orig = $reply;
+
         // Check if imtomapi function is available and use it to send the mime message.
         // It is available since ZCP 7.0.6
         // @see http://jira.zarafa.com/browse/ZCP-9508
@@ -2940,6 +2945,50 @@ class BackendICS {
             debugLog("Use the mapi_inetmapi_imtomapi function");
             $ab = mapi_openaddressbook($this->_session);
             mapi_inetmapi_imtomapi($this->_session, $this->_defaultstore, $ab, $mapimessage, $rfc822, array());
+
+            // Delete the PR_SENT_REPRESENTING_* properties because some android devices
+            // do not send neither From nor Sender header causing empty PR_SENT_REPRESENTING_NAME and
+            // PR_SENT_REPRESENTING_EMAIL_ADDRESS properties and "broken" PR_SENT_REPRESENTING_ENTRYID
+            // which results in spooler not being able to send the message.
+            // @see http://jira.zarafa.com/browse/ZP-85
+            mapi_deleteprops($mapimessage,
+                array(  PR_SENT_REPRESENTING_NAME, PR_SENT_REPRESENTING_EMAIL_ADDRESS, PR_SENT_REPRESENTING_ENTRYID,
+                        PR_SENT_REPRESENTING_ADDRTYPE, PR_SENT_REPRESENTING_SEARCH_KEY));
+
+            if(isset($orig) && $orig) {
+                $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($parent), hex2bin($orig));
+                $fwmessage = mapi_msgstore_openentry($this->_defaultstore, $entryid);
+
+                if($fwmessage) {
+                    //update icon when forwarding or replying message
+                    if ($forward) mapi_setprops($fwmessage, array(PR_ICON_INDEX=>262));
+                    elseif ($reply) mapi_setprops($fwmessage, array(PR_ICON_INDEX=>261));
+                    mapi_savechanges($fwmessage);
+
+                    if($forward) {
+                        $this->_copyAttachments($mapimessage, $fwmessage);
+                    }
+
+                    $body = $this->_readPropStream($mapimessage, PR_BODY);
+                    $body_html = $this->_readPropStream($mapimessage, PR_HTML);
+
+                    if (strlen($body) > 0) {
+                        $fwbody = $this->_readPropStream($fwmessage, PR_BODY);
+                        $body .= $fwbody;
+
+                    }
+                    if (strlen($body_html) > 0) {
+                        $fwbody_html = $this->_readPropStream($fwmessage, PR_HTML);
+                        $body_html .= $fwbody_html;
+                    }
+                    mapi_setprops($mapimessage, array(PR_BODY => $body));
+
+                    if(strlen($body_html) > 0){
+                        mapi_setprops($mapimessage, array(PR_HTML => $body_html));
+                    }
+                }
+            }
+
             mapi_message_savechanges($mapimessage);
             mapi_message_submitmessage($mapimessage);
             $hr = mapi_last_hresult();
@@ -3102,11 +3151,6 @@ class BackendICS {
             $body = strip_tags($body_html);
         }
 
-        if($forward)
-            $orig = $forward;
-        if($reply)
-            $orig = $reply;
-
         if(isset($orig) && $orig) {
             // Append the original text body for reply/forward
             $entryid = mapi_msgstore_entryidfromsourcekey($this->_defaultstore, hex2bin($parent), hex2bin($orig));
@@ -3118,25 +3162,8 @@ class BackendICS {
                 elseif ($reply) mapi_setprops($fwmessage, array(PR_ICON_INDEX=>261));
                 mapi_savechanges($fwmessage);
 
-                $stream = mapi_openproperty($fwmessage, PR_BODY, IID_IStream, 0, 0);
-                $fwbody = "";
-
-                while(1) {
-                    $data = mapi_stream_read($stream, 1024);
-                    if(strlen($data) == 0)
-                        break;
-                    $fwbody .= $data;
-                }
-
-                $stream = mapi_openproperty($fwmessage, PR_HTML, IID_IStream, 0, 0);
-                $fwbody_html = "";
-
-                while(1) {
-                    $data = mapi_stream_read($stream, 1024);
-                    if(strlen($data) == 0)
-                        break;
-                    $fwbody_html .= $data;
-                }
+                $fwbody = $this->_readPropStream($fwmessage, PR_BODY);
+                $fwbody_html = $this->_readPropStream($fwmessage, PR_HTML);
 
                 if($forward) {
                     // During a forward, we have to add the forward header ourselves. This is because
@@ -3545,6 +3572,71 @@ class BackendICS {
             define('STORE_SUPPORTS_UNICODE', true);
             //setlocale to UTF-8 in order to support properties containing Unicode characters
             setlocale(LC_CTYPE, "en_US.UTF-8");
+        }
+    }
+
+    /**
+    * Reads data of large properties from a stream
+    *
+    * @access public
+    *
+    * @param MAPIMessage $message
+    * @param long $prop
+    * @return string
+    */
+    function _readPropStream($message, $prop) {
+        $stream = mapi_openproperty($message, $prop, IID_IStream, 0, 0);
+        $data = "";
+        $string = "";
+        while(1) {
+            $data = mapi_stream_read($stream, 1024);
+            if(strlen($data) == 0)
+                break;
+            $string .= $data;
+        }
+
+        return $string;
+    }
+
+    /**
+    * Copies attachments from one message to another.
+    *
+    * @param MAPIMessage $toMessage
+    * @param MAPIMessage $fromMessage
+    *
+    * @return void
+    */
+    private function _copyAttachments(&$toMessage, $fromMessage) {
+        $attachtable = mapi_message_getattachmenttable($fromMessage);
+        $rows = mapi_table_queryallrows($attachtable, array(PR_ATTACH_NUM));
+
+        foreach($rows as $row) {
+            if(isset($row[PR_ATTACH_NUM])) {
+                $attach = mapi_message_openattach($fromMessage, $row[PR_ATTACH_NUM]);
+
+                $newattach = mapi_message_createattach($toMessage);
+
+                // Copy all attachments from old to new attachment
+                $attachprops = mapi_getprops($attach);
+                mapi_setprops($newattach, $attachprops);
+
+                if(isset($attachprops[mapi_prop_tag(PT_ERROR, mapi_prop_id(PR_ATTACH_DATA_BIN))])) {
+                    // Data is in a stream
+                    $srcstream = mapi_openpropertytostream($attach, PR_ATTACH_DATA_BIN);
+                    $dststream = mapi_openpropertytostream($newattach, PR_ATTACH_DATA_BIN, MAPI_MODIFY | MAPI_CREATE);
+
+                    while(1) {
+                        $data = mapi_stream_read($srcstream, 4096);
+                        if(strlen($data) == 0)
+                            break;
+
+                        mapi_stream_write($dststream, $data);
+                    }
+
+                    mapi_stream_commit($dststream);
+                }
+                mapi_savechanges($newattach);
+            }
         }
     }
 }
