@@ -2918,14 +2918,6 @@ class BackendICS {
         if (WBXML_DEBUG == true)
             debugLog("SendMail: forward: $forward   reply: $reply   parent: $parent\n" . $rfc822);
 
-        $mimeParams = array('decode_headers' => true,
-                            'decode_bodies' => true,
-                            'include_bodies' => true,
-                            'charset' => 'utf-8');
-
-        $mimeObject = new Mail_mimeDecode($rfc822);
-        $message = $mimeObject->decode($mimeParams);
-
         // Open the outbox and create the message there
         $storeprops = mapi_getprops($this->_defaultstore, array(PR_IPM_OUTBOX_ENTRYID, PR_IPM_SENTMAIL_ENTRYID));
         if(!isset($storeprops[PR_IPM_OUTBOX_ENTRYID])) {
@@ -2940,6 +2932,33 @@ class BackendICS {
         }
 
         $mapimessage = mapi_folder_createmessage($outbox);
+
+        // Check if imtomapi function is available and use it to send the mime message.
+        // It is available since ZCP 7.0.6
+        // @see http://jira.zarafa.com/browse/ZCP-9508
+        if(function_exists('mapi_feature') && mapi_feature('INETMAPI_IMTOMAPI')) {
+            debugLog("Use the mapi_inetmapi_imtomapi function");
+            $ab = mapi_openaddressbook($this->_session);
+            mapi_inetmapi_imtomapi($this->_session, $this->_defaultstore, $ab, $mapimessage, $rfc822, array());
+            mapi_message_savechanges($mapimessage);
+            mapi_message_submitmessage($mapimessage);
+            $hr = mapi_last_hresult();
+
+            if ($hr) {
+                debugLog(sprintf("SendMail(): Error saving/submitting the message to the Outbox: 0x%X", mapi_last_hresult()));
+                return false;
+            }
+
+            return true;
+        }
+
+        $mimeParams = array('decode_headers' => true,
+                                    'decode_bodies' => true,
+                                    'include_bodies' => true,
+                                    'charset' => 'utf-8');
+
+        $mimeObject = new Mail_mimeDecode($rfc822);
+        $message = $mimeObject->decode($mimeParams);
 
         mapi_setprops($mapimessage, array(
             PR_SUBJECT => u2wi(isset($message->headers["subject"])?$message->headers["subject"]:""),
