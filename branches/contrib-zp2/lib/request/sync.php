@@ -72,7 +72,11 @@ class Sync extends RequestProcessor {
             }
 
             // Synching specified folders
-            if(self::$decoder->getElementStartTag(SYNC_FOLDERS)) {
+            // Android still sends heartbeat sync even if all syncfolders are disabled.
+            // Check if Folders tag is empty (<Folders/>) and only sync if there are
+            // some folders in the request. See ZP-172
+            $startTag = self::$decoder->getElementStartTag(SYNC_FOLDERS);
+            if(isset($startTag[EN_FLAGS]) && $startTag[EN_FLAGS]) {
                 while(self::$decoder->getElementStartTag(SYNC_FOLDER)) {
                     $actiondata = array();
                     $actiondata["requested"] = true;
@@ -95,10 +99,15 @@ class Sync extends RequestProcessor {
                     }
 
                     // SyncKey
-                    if(!self::$decoder->getElementStartTag(SYNC_SYNCKEY))
-                        return false;
-                    $synckey = self::$decoder->getElementContent();
-                    if(!self::$decoder->getElementEndTag())
+                    if(self::$decoder->getElementStartTag(SYNC_SYNCKEY)) {
+                        $synckey = "0";
+                        if (($synckey = self::$decoder->getElementContent()) !== false) {
+                            if(!self::$decoder->getElementEndTag()) {
+                                return false;
+                            }
+                        }
+                    }
+                    else
                         return false;
 
                     // FolderId
@@ -385,11 +394,6 @@ class Sync extends RequestProcessor {
                             else
                                 $message = false;
 
-                            if ($status != SYNC_STATUS_SUCCESS) {
-                                ZLog::Write(LOGLEVEL_WARN, "Ignored incoming change, global status indicates problem.");
-                                continue;
-                            }
-
                             switch($element[EN_TAG]) {
                                 case SYNC_FETCH:
                                     array_push($actiondata["fetchids"], $serverid);
@@ -401,6 +405,8 @@ class Sync extends RequestProcessor {
 
                                     if ($status == SYNC_STATUS_SUCCESS)
                                         $this->importMessage($spa, $actiondata, $element[EN_TAG], $message, $clientid, $serverid);
+                                    else
+                                        ZLog::Write(LOGLEVEL_WARN, "Ignored incoming change, global status indicates problem.");
 
                                     break;
                             }
@@ -759,6 +765,11 @@ class Sync extends RequestProcessor {
                                 $data = false;
                                 try {
                                     $fetchstatus = SYNC_STATUS_SUCCESS;
+
+                                    // if this is an additional folder the backend has to be setup correctly
+                                    if (!self::$backend->Setup(ZPush::GetAdditionalSyncFolderStore($spa->GetFolderId())))
+                                        throw new StatusException(sprintf("HandleSync(): could not Setup() the backend to fetch in folder id '%s'", $spa->GetFolderId()), SYNC_STATUS_OBJECTNOTFOUND);
+
                                     $data = self::$backend->Fetch($spa->GetFolderId(), $id, $spa->GetCPO());
 
                                     // check if the message is broken
@@ -802,7 +813,7 @@ class Sync extends RequestProcessor {
                         }
 
                         // Stream outgoing changes
-                        if($status == SYNC_STATUS_SUCCESS && $sc->GetParameter($spa, "getchanges") === true && $windowSize > 0) {
+                        if($status == SYNC_STATUS_SUCCESS && $sc->GetParameter($spa, "getchanges") == true && $windowSize > 0) {
                             self::$topCollector->AnnounceInformation(sprintf("Streaming data of %d objects", (($changecount > $windowSize)?$windowSize:$changecount)));
 
                             // Output message changes per folder
@@ -959,7 +970,7 @@ class Sync extends RequestProcessor {
                 throw new StatusException(sprintf("Sync->getImporter(): no importer for folder id '%s'", $spa->GetFolderId()), SYNC_STATUS_FOLDERHIERARCHYCHANGED);
 
             // if there is a valid state obtained after importing changes in a previous loop, we use that state
-            if ($actiondata["failstate"] && isset($actiondata["failstate"]["failedsyncstate"])) {
+            if (isset($actiondata["failstate"]) && isset($actiondata["failstate"]["failedsyncstate"])) {
                 $this->importer->Config($actiondata["failstate"]["failedsyncstate"], $spa->GetConflict());
             }
             else
