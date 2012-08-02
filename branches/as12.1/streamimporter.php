@@ -305,23 +305,25 @@ class ImportContentsChangesStream {
         	  !isset($this->_msginfos[$id])) && !isset($this->_readids[$id]) && !isset($this->_flagids[$id])) {
     	    $message->encode($this->_encoder);
 		} else {
-    	    if ((isset($this->_msginfos[$id]) && $this->_msginfos[$id]['read'] != $msginfo['read']) ||
-        	 	isset($this->_readids[$id])) {
-				$this->_encoder->startTag(SYNC_POOMMAIL_READ);
-    			$this->_encoder->content($message->read);
-	    		$this->_encoder->endTag();
-				unset($this->_readids[$id]);
-		    }
-		    if ((isset($this->_msginfos[$id]) && $this->_msginfos[$id]['md5flags'] != $msginfo['md5flags']) ||
-        	 	isset($this->_flagids[$id])) {
-				if ($message->poommailflag->flagstatus == 0 || $message->poommailflag->flagstatus == "") {
-				    $this->_encoder->startTag(SYNC_POOMMAIL_FLAG,false,true);
-				} else {
-				    $this->_encoder->startTag(SYNC_POOMMAIL_FLAG);
-	        	    $message->poommailflag->encode($this->_encoder);
-	    		    $this->_encoder->endTag();
+			 if ($class == 'syncsms' || $class == 'syncmail') {
+    	    	if ((isset($this->_msginfos[$id]) && $this->_msginfos[$id]['read'] != $msginfo['read']) ||
+        	 		isset($this->_readids[$id])) {
+					$this->_encoder->startTag(SYNC_POOMMAIL_READ);
+	    			$this->_encoder->content($message->read);
+		    		$this->_encoder->endTag();
+					unset($this->_readids[$id]);
+			    }
+			    if ((isset($this->_msginfos[$id]) && $this->_msginfos[$id]['md5flags'] != $msginfo['md5flags']) ||
+	        	 	isset($this->_flagids[$id])) {
+					if ($message->poommailflag->flagstatus == 0 || $message->poommailflag->flagstatus == "") {
+					    $this->_encoder->startTag(SYNC_POOMMAIL_FLAG,false,true);
+					} else {
+					    $this->_encoder->startTag(SYNC_POOMMAIL_FLAG);
+		        	    $message->poommailflag->encode($this->_encoder);
+		    		    $this->_encoder->endTag();
+					}
+					unset($this->_flagids[$id]);
 				}
-				unset($this->_flagids[$id]);
 		    }
         }
 /*        if (!in_array($id, $this->_readids) && !in_array($id, $this->_flagids)) {

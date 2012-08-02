@@ -49,7 +49,8 @@ debugLog("Set max_execution_time to ". ini_get('max_execution_time'));
 //debugLog(print_r($_GET,true));
 //debugLog(print_r($_POST,true));
 //debugLog(print_r(apache_request_headers(),true));
-register_shutdown_function("shutdownCommunication");
+if (WBXML_DEBUG == true)
+	register_shutdown_function("shutdownCommunication");
 $cachestatus = SYNCCACHE_UNCHANGED; 
 $input = fopen("php://input", "r");
 $output = fopen("php://output", "w+");
@@ -385,7 +386,8 @@ if (!headers_sent()) { // dw2412 need to do this since i.E. getAttachmentData Re
 		    header("Content-Encoding: gzip");
 		    header("Content-Length: ".$gzlen);
 		    flush();
-		    sleep(2);
+		    if (WBXML_DEBUG == true)
+				sleep(2);
 		    debugLog("Header Connection aborted :".(connection_aborted() ? "yes" : "no" ));
 		    debugLog("Header Connection status  :".connection_status());
     	    print $gz_data;
@@ -393,7 +395,8 @@ if (!headers_sent()) { // dw2412 need to do this since i.E. getAttachmentData Re
 		    debugLog("GZip Results: Original Size ".$len." / Compress Size ".$gzlen." byte(s) --> Send uncompressed data");
 		    header("Content-Length: ".$len);
 		    flush();
-		    sleep(2);
+			if (WBXML_DEBUG == true)
+		    	sleep(2);
 		    debugLog("Header Connection aborted :".(connection_aborted() ? "yes" : "no" ));
 		    debugLog("Header Connection status  :".connection_status());
 		    print $data;
@@ -402,7 +405,8 @@ if (!headers_sent()) { // dw2412 need to do this since i.E. getAttachmentData Re
 		debugLog("Output Results: GZip not used send Original Size ".$len." byte(s) --> Send uncompressed data");
 		header("Content-Length: ".$len);
 		flush();
-		sleep(2);
+		if (WBXML_DEBUG == true)
+			sleep(2);
 		debugLog("Header Connection aborted :".(connection_aborted() ? "yes" : "no" ));
 		debugLog("Header Connection status  :".connection_status());
 		print $data;
