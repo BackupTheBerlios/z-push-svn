@@ -278,7 +278,7 @@ class ImportContentsChangesStream {
 
         $this->_seenObjects[] = $id;
 
-        if (!isset($this->_msginfos[$id]) && ($message->flags === false || $message->flags === SYNC_NEWMESSAGE)) 
+        if (!isset($this->_msginfos[$id]) || ($message->flags === false || $message->flags === SYNC_NEWMESSAGE)) 
     	    $this->_encoder->startTag(SYNC_ADD);
         else
     	    $this->_encoder->startTag(SYNC_MODIFY);
@@ -315,7 +315,7 @@ class ImportContentsChangesStream {
 			    }
 			    if ((isset($this->_msginfos[$id]) && $this->_msginfos[$id]['md5flags'] != $msginfo['md5flags']) ||
 	        	 	isset($this->_flagids[$id])) {
-					if ($message->poommailflag->flagstatus == 0 || $message->poommailflag->flagstatus == "") {
+					if (!isset($message->poommailflag->flagstatus) || $message->poommailflag->flagstatus == 0 || $message->poommailflag->flagstatus == "") {
 					    $this->_encoder->startTag(SYNC_POOMMAIL_FLAG,false,true);
 					} else {
 					    $this->_encoder->startTag(SYNC_POOMMAIL_FLAG);
