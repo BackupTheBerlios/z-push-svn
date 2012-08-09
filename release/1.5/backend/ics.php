@@ -2932,6 +2932,13 @@ class BackendICS {
         }
 
         $mapimessage = mapi_folder_createmessage($outbox);
+        //message properties to be set
+        $mapiprops = array();
+        // only save the outgoing in sent items folder if the mobile requests it
+        if (isset($storeprops[PR_IPM_SENTMAIL_ENTRYID]))
+            $mapiprops[PR_SENTMAIL_ENTRYID] = $storeprops[PR_IPM_SENTMAIL_ENTRYID];
+        else
+            debugLog("PR_SENTMAIL_ENTRYID is not set. The sent message will not be moved to Sent Items.");
 
         if($forward)
             $orig = $forward;
@@ -2989,6 +2996,8 @@ class BackendICS {
                 }
             }
 
+            if (!empty($mapiprops))
+                mapi_setprops($mapimessage, $mapiprops);
             mapi_message_savechanges($mapimessage);
             mapi_message_submitmessage($mapimessage);
             $hr = mapi_last_hresult();
