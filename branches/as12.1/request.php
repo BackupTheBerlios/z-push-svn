@@ -4089,8 +4089,7 @@ function HandleSearch($backend, $devid, $protocolversion) {
 				        	    break;
 						}
 					}
-      	    		if(!$decoder->getElementEndTag())
-                  		return false;
+      	    		if (count($searchpicture) > 0) $decoder->getElementEndTag();
                   	break;
 	            case SYNC_RIGHTSMANAGEMENT_RIGHTSMANAGEMENTSUPPORT :
 					$rightsmanagementsupport = $decoder->getElementContent();
