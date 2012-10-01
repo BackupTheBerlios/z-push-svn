@@ -811,38 +811,41 @@ function HandleGetItemEstimate($backend, $protocolversion, $devid) {
     while($decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDER)) {
         $collection = array();
 
-        if(!$decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDERTYPE))
-            return false;
+        while (1) {
+            if($decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDERTYPE)) {
+                $class = $decoder->getElementContent();
 
-        $class = $decoder->getElementContent();
+                if(!$decoder->getElementEndTag())
+                    return false; // SYNC_GETITEMESTIMATE_FOLDERTYPE
+            }
 
-        if(!$decoder->getElementEndTag())
-            return false;
+            elseif($decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDERID)) {
+                $collectionid = $decoder->getElementContent();
 
-        if($decoder->getElementStartTag(SYNC_GETITEMESTIMATE_FOLDERID)) {
-            $collectionid = $decoder->getElementContent();
+                if(!$decoder->getElementEndTag())
+                    return false; // SYNC_GETITEMESTIMATE_FOLDERID
+            }
 
-            if(!$decoder->getElementEndTag())
-                return false;
+            elseif($decoder->getElementStartTag(SYNC_FILTERTYPE)) {
+                $filtertype = $decoder->getElementContent();
+
+                if(!$decoder->getElementEndTag())
+                    return false; // SYNC_FILTERTYPE
+            }
+
+            elseif($decoder->getElementStartTag(SYNC_SYNCKEY)) {
+                $synckey = $decoder->getElementContent();
+
+                if(!$decoder->getElementEndTag())
+                    return false; // SYNC_SYNCKEY
+            }
+
+            $e = $decoder->peek();
+            if($e[EN_TYPE] == EN_TYPE_ENDTAG) {
+                $decoder->getElementEndTag(); // SYNC_GETITEMESTIMATE_FOLDER
+                break;
+            }
         }
-
-        if(!$decoder->getElementStartTag(SYNC_FILTERTYPE))
-            return false;
-
-        $filtertype = $decoder->getElementContent();
-
-        if(!$decoder->getElementEndTag())
-            return false;
-
-        if(!$decoder->getElementStartTag(SYNC_SYNCKEY))
-            return false;
-
-        $synckey = $decoder->getElementContent();
-
-        if(!$decoder->getElementEndTag())
-            return false;
-        if(!$decoder->getElementEndTag())
-            return false;
 
         // compatibility mode - get folderid from the state directory
         if (!isset($collectionid)) {
