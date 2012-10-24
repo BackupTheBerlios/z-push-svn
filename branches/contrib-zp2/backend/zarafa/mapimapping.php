@@ -6,7 +6,7 @@
 *
 * Created   :   29.04.2011
 *
-* Copyright 2007 - 2011 Zarafa Deutschland GmbH
+* Copyright 2007 - 2012 Zarafa Deutschland GmbH
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU Affero General Public License, version 3,
@@ -319,6 +319,8 @@ class MAPIMapping {
             "sourcekey"             => PR_SOURCE_KEY,
             "representingentryid"   => PR_SENT_REPRESENTING_ENTRYID,
             "representingname"      => PR_SENT_REPRESENTING_NAME,
+            "sentrepresentingemail" => PR_SENT_REPRESENTING_EMAIL_ADDRESS,
+            "sentrepresentingaddt"  => PR_SENT_REPRESENTING_ADDRTYPE,
             "reminderset"           => "PT_BOOLEAN:PSETID_Common:0x8503",
             "remindertime"          => "PT_LONG:PSETID_Common:0x8501",
             "meetingstatus"         => "PT_LONG:PSETID_Appointment:0x8217",

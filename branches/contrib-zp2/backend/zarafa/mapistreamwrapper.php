@@ -7,7 +7,7 @@
 *
 * Created   :   24.11.2011
 *
-* Copyright 2007 - 2011 Zarafa Deutschland GmbH
+* Copyright 2007 - 2012 Zarafa Deutschland GmbH
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU Affero General Public License, version 3,
@@ -48,7 +48,6 @@ class MAPIStreamWrapper {
     private $mapistream;
     private $position;
     private $streamlength;
-    private $streampad = 0; // pad stream with 0 string for stream converter (streamlength must be multiple of 4)
 
     /**
      * Opens the stream
@@ -77,10 +76,6 @@ class MAPIStreamWrapper {
         $stat = mapi_stream_stat($this->mapistream);
         $this->streamlength = $stat["cb"];
 
-        // pad the stream to the multiple of 4
-        if ($this->streamlength % 4 != 0 )
-            $this->streampad = $this->streamlength + 4 - ($this->streamlength % 4);
-
         ZLog::Write(LOGLEVEL_DEBUG, sprintf("MAPIStreamWrapper::stream_open(): initialized mapistream: %s streamlength: %d", $this->mapistream, $this->streamlength));
 
         return true;
@@ -95,11 +90,9 @@ class MAPIStreamWrapper {
      * @return string
      */
     public function stream_read($len) {
+        $len = ($this->position + $len > $this->streamlength) ? ($this->streamlength - $this->position) : $len;
         $data = mapi_stream_read($this->mapistream, $len);
         $this->position += strlen($data);
-        if ($this->position == $this->streamlength && $this->streampad != 0 )
-            $data = str_pad($data, $this->streampad, 0x0);
-
         return $data;
     }
 

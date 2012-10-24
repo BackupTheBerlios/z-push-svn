@@ -12,7 +12,7 @@
 *
 * Created   :   01.10.2007
 *
-* Copyright 2007 - 2011 Zarafa Deutschland GmbH
+* Copyright 2007 - 2012 Zarafa Deutschland GmbH
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU Affero General Public License, version 3,
@@ -172,6 +172,13 @@ class Streamer implements Serializable {
                                 if(!$decoder->getElementEndTag())
                                     return false;
                             }
+                            // explode comma or semicolon strings into arrays
+                            else if($map[self::STREAMER_TYPE] == self::STREAMER_TYPE_COMMA_SEPARATED || $map[self::STREAMER_TYPE] == self::STREAMER_TYPE_SEMICOLON_SEPARATED) {
+                                $glue = ($map[self::STREAMER_TYPE] == self::STREAMER_TYPE_COMMA_SEPARATED)?", ":"; ";
+                                $decoded = explode($glue, $decoder->getElementContent());
+                                if(!$decoder->getElementEndTag())
+                                    return false;
+                            }
                             else {
                                 $subdecoder = new $map[self::STREAMER_TYPE]();
                                 if($subdecoder->Decode($decoder) === false)
@@ -309,8 +316,13 @@ class Streamer implements Serializable {
                     }
                     else if(isset($map[self::STREAMER_TYPE]) && $map[self::STREAMER_TYPE] == self::STREAMER_TYPE_STREAM) {
                         //encode stream with base64
-                        //TODO stream chunked without loading the complete attachment into memory
                         $stream = $this->$map[self::STREAMER_VAR];
+                        $stat = fstat($stream);
+                        // the padding size muss be calculated for the entire stream,
+                        // the base64 filter seems to process 8192 byte chunks correctly itself
+                        $padding = (isset($stat['size']) && $stat['size'] > 8192) ? ($stat['size'] % 3) : 0;
+
+                        $paddingfilter = stream_filter_append($stream, 'padding.'.$padding);
                         $base64filter = stream_filter_append($stream, 'convert.base64-encode');
                         $d = "";
                         while (!feof($stream)) {
@@ -318,6 +330,7 @@ class Streamer implements Serializable {
                         }
                         $encoder->content($d);
                         stream_filter_remove($base64filter);
+                        stream_filter_remove($paddingfilter);
                     }
                     // implode comma or semicolon arrays into a string
                     else if(isset($map[self::STREAMER_TYPE]) && is_array($this->$map[self::STREAMER_VAR]) &&

@@ -6,7 +6,7 @@
 *
 * Created   :   01.10.2007
 *
-* Copyright 2007 - 2011 Zarafa Deutschland GmbH
+* Copyright 2007 - 2012 Zarafa Deutschland GmbH
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU Affero General Public License, version 3,
@@ -275,6 +275,9 @@ define("SYNC_POOMCAL_APPOINTMENTREPLYTIME","POOMCAL:AppointmentReplyTime"); //14
 define("SYNC_POOMCAL_RESPONSETYPE","POOMCAL:ResponseType"); //14.0
 define("SYNC_POOMCAL_CALENDARTYPE","POOMCAL:CalendarType"); //14.0
 define("SYNC_POOMCAL_ISLEAPMONTH","POOMCAL:IsLeapMonth"); //14.0
+define("SYNC_POOMCAL_FIRSTDAYOFWEEK","POOMCAL:FirstDayOfWeek"); //post 14.0
+define("SYNC_POOMCAL_ONLINEMEETINGINTERNALLINK","POOMCAL:OnlineMeetingInternalLink"); //post 14.0
+define("SYNC_POOMCAL_ONLINEMEETINGEXTERNALLINK","POOMCAL:OnlineMeetingExternalLink"); //post 14.0
 
 // Move
 define("SYNC_MOVE_MOVES","Move:Moves");
@@ -1037,4 +1040,11 @@ define("MAPI_E_NOT_ENOUGH_MEMORY_64BIT", 2147942414);
 define("SYNC_SETTINGSOOF_BODYTYPE_HTML", "HTML");
 define("SYNC_SETTINGSOOF_BODYTYPE_TEXT", "TEXT");
 
+define("SYNC_FILEAS_FIRSTLAST", 1);
+define("SYNC_FILEAS_LASTFIRST", 2);
+define("SYNC_FILEAS_COMPANYONLY", 3);
+define("SYNC_FILEAS_COMPANYLAST", 4);
+define("SYNC_FILEAS_COMPANYFIRST", 5);
+define("SYNC_FILEAS_LASTCOMPANY", 6);
+define("SYNC_FILEAS_FIRSTCOMPANY", 7);
 ?>

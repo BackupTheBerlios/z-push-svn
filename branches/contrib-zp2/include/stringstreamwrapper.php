@@ -7,7 +7,7 @@
 *
 * Created   :   24.11.2011
 *
-* Copyright 2007 - 2011 Zarafa Deutschland GmbH
+* Copyright 2007 - 2012 Zarafa Deutschland GmbH
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU Affero General Public License, version 3,
@@ -48,7 +48,6 @@ class StringStreamWrapper {
     private $stringstream;
     private $position;
     private $stringlength;
-    private $streampad = 0; // pad stream with 0 string for stream converter (streamlength must be multiple of 4)
 
     /**
      * Opens the stream
@@ -74,11 +73,6 @@ class StringStreamWrapper {
         $this->stringstream = $contextOptions[self::PROTOCOL]['string'];
 
         $this->stringlength = strlen($this->stringstream);
-
-        // pad the stream to the multiple of 4
-        if ($this->stringlength % 4 != 0 )
-            $this->streampad = $this->stringlength + 4 - ($this->stringlength % 4);
-
         ZLog::Write(LOGLEVEL_DEBUG, sprintf("StringStreamWrapper::stream_open(): initialized stream length: %d", $this->stringlength));
 
         return true;
@@ -95,8 +89,6 @@ class StringStreamWrapper {
     public function stream_read($len) {
         $data = substr($this->stringstream, $this->position, $len);
         $this->position += strlen($data);
-        if ($this->position == $this->stringlength && $this->streampad != 0 )
-            $data = str_pad($data, $this->streampad, 0x0);
         return $data;
     }
 
