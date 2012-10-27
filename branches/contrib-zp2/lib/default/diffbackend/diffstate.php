@@ -136,20 +136,12 @@ class DiffState implements IChanges {
                 break;
 
             if($this->syncstate[$iold]["id"] == $new[$inew]["id"]) {
-                // Both messages are still available, compare flags, star and mod
+                // Both messages are still available, compare flags and mod
                 if(isset($this->syncstate[$iold]["flags"]) && isset($new[$inew]["flags"]) && $this->syncstate[$iold]["flags"] != $new[$inew]["flags"]) {
                     // Flags changed
                     $change["type"] = "flags";
                     $change["id"] = $new[$inew]["id"];
                     $change["flags"] = $new[$inew]["flags"];
-                    $changes[] = $change;
-                }
-
-                if(isset($this->syncstate[$iold]["star"]) && isset($new[$inew]["star"]) && $this->syncstate[$iold]["star"] != $new[$inew]["star"]) {
-                    // Star changed
-                    $change["type"] = "star";
-                    $change["id"] = $new[$inew]["id"];
-                    $change["star"] = $new[$inew]["star"];
                     $changes[] = $change;
                 }
 
@@ -172,7 +164,6 @@ class DiffState implements IChanges {
                     // Message in new seems to be new (add)
                     $change["type"] = "change";
                     $change["flags"] = SYNC_NEWMESSAGE;
-                    $change["star"] = SYNC_NEWMESSAGE;
                     $change["id"] = $new[$inew]["id"];
                     $changes[] = $change;
                     $inew++;
@@ -192,7 +183,6 @@ class DiffState implements IChanges {
             // All data left in new have been added
             $change["type"] = "change";
             $change["flags"] = SYNC_NEWMESSAGE;
-            $change["star"] = SYNC_NEWMESSAGE;
             $change["id"] = $new[$inew]["id"];
             $changes[] = $change;
             $inew++;
@@ -229,9 +219,6 @@ class DiffState implements IChanges {
                     if($type == "flags") {
                         // Update flags
                         $this->syncstate[$i]["flags"] = $change["flags"];
-                    } else if($type == "star") {
-                        // Update star
-                        $this->syncstate[$i]["star"] = $change["star"];
                     } else if($type == "delete") {
                         // Delete item
                         array_splice($this->syncstate, $i, 1);

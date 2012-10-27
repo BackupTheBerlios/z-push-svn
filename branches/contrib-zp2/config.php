@@ -191,8 +191,6 @@
     define('IMAP_INLINE_FORWARD', false);
     // use imap_mail() to send emails (default) - if false mail() is used
     define('IMAP_USE_IMAPMAIL', true);
-    // excluded mail folders, separated by |
-    define('IMAP_EXCLUDED_FOLDERS', 'dovecot.sieve');
 
 
     // ************************
