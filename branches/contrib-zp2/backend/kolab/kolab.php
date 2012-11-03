@@ -3283,7 +3283,7 @@
                     }
                     if ( $r == -1)
                     {
-                        $this->Log("ACL group $gr not found (acces authorized)");
+                        $this->Log("ACL group $grp not found (acces authorized)");
                     }
                 }
                 return 1;
