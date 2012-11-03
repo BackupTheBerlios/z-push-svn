@@ -1689,9 +1689,9 @@
                 {
                     //parsing error 
                     debugLog("ERROR ".$kcontact->message);
-                    debugLog("Xml kolab :     $body")  ;
+                    debugLog("Xml kolab :     $kolabXml")  ;
                     $this->Log("ERROR ".$kcontact->message);
-                    $this->Log("XML : $body")  ;   
+                    $this->Log("XML : $kolabXml")  ;   
                     unset($kcontact);
                     return ""; 
                 }  
@@ -2258,7 +2258,7 @@
             return array($object['uid'],$h['date'],$header  .$mail[0]."\r\n" .$mail[1]);
 
         }
-        private function kolabWriteReccurence($reccurence)
+        private function kolabWriteReccurence($recurrence)
         {
             $month=array("dummy","january","february","march","april","may","june","july","august","september","october","november","december");
             $rec=array();
@@ -2377,7 +2377,7 @@
                             if ($ktask['start'])
                             {
                                 $offset=date('Z',$ktask['start']);
-                                $task->utcstartdate=$kstart['start'];
+                                $task->utcstartdate=$ktask['start'];
                                 $task->startdate=$ktask['start'] + $offset;
                             }
                             if($ktask['due'])
@@ -2616,7 +2616,6 @@
         }
         private function CacheIndexDeletebyId($folderid,$id)
         {
-
             $this->_cache->open(KOLAB_INDEX."/".$this->_username."_".$this->_devid);  
             $uid= $this->_cache->find("IMAP:".$folderid."/".$id);
             $this->_cache->delete("IMAP:".$folderid."/".$id);
@@ -2624,11 +2623,9 @@
             $this->_cache->delete("ENDDATE:".$folderid."/".$uid);   
             $this->_cache->delete("FLMODE:".$uid); 
             $this->_cache->close();
-            return $result;
         }
         private function CacheCheckVersion()
         {
-
             $this->_cache->open(KOLAB_INDEX."/".$this->_username."_".$this->_devid); 
             $version= $this->_cache->find("CACHEVERSION"); 
             if ( $version != KOLABBACKEND_VERSION)
@@ -2698,7 +2695,6 @@
                 }                           
             }
             return $nday;
-
         }
         private function KolabPda2DofW($value)
         {
@@ -2728,7 +2724,6 @@
         }
         private function KolabStat($fid,$o)
         {
-
             if ( !$o)
             {
                 return false;
@@ -2746,8 +2741,7 @@
                 $message = $mobj->decode(array('decode_headers' => true, 'decode_bodies' => true, 'include_bodies' => true, 'input' => $mail, 'crlf' => "\n", 'charset' => 'utf-8'));
                 if ($this->kolabFolderType($fid) == 2)
                 {
-
-                    $ev=$this->KolabReadEvent($message,false) ;
+                    $ev=$this->KolabReadEvent($message,false);
                     if (! $ev)
                     {
                         return false ;
@@ -2815,7 +2809,6 @@
         }
         private function getImapFolderType($folder)
         {
-            
             if (function_exists("imap_getannotation"))
             {
                 $result = imap_getannotation($this->_mbox, $folder, "/vendor/kolab/folder-type", "value.shared");
@@ -2881,10 +2874,7 @@
                 }
             }
             return $anno;
-
-
         }
-
         private function kolabFolderType($name)
         {
             if ( $name == "VIRTUAL/calendar")
@@ -2950,7 +2940,6 @@
                 }
                 return SYNC_FOLDER_TYPE_USER_TASK;
             }
-
             if ( $type == "event")
             {
                 if ( $this->hasDefaultEventFolder == false )
