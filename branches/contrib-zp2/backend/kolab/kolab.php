@@ -636,11 +636,11 @@
                             //check if key is duplicated 
                             if (isset($checkId[$message["id"]]))
                             {
-                                $this->Log("Key : " .$message["id"] ." duplicated folder :" . $folder ." Imap id : " . $checkId[$message["id"]]);
-                                debugLog("Key : " .$message["id"] ." duplicated folder :" . $folder ." Imap id : " . $checkId[$message["id"]]);
+                                $this->Log("Key : " .$message["id"] ." duplicated folder :" . $folderid ." Imap id : " . $checkId[$message["id"]]);
+                                debugLog("Key : " .$message["id"] ." duplicated folder :" . $folderid ." Imap id : " . $checkId[$message["id"]]);
                                 //rewrite the index to have the good imapid 
                                 $id=array_pop(explode("/",$checkId[$message["id"]]));
-                                $this->CacheCreateIndex($folder,$message["id"],$id); 
+                                $this->CacheCreateIndex($folderid,$message["id"],$id); 
                                 continue; 
                             }
                             else
