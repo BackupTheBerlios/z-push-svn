@@ -1672,7 +1672,6 @@
                             $name=$part->ctype_parameters["name"];  
                             $images[$name]=$part->body;
                         }
-                        $n++;
                     }
                 }
                 if (! $kolabXml)
@@ -1695,7 +1694,6 @@
                     $this->Log("XML : $body")  ;   
                     unset($kcontact);
                     return ""; 
-
                 }  
                 //mappage
                 $contact=new SyncContact();   
@@ -1827,7 +1825,7 @@
                 }
                 return $contact;
             }
-            return ""     ;
+            return "";
         }
         private function checkPhoneNumber($phone)
         {
@@ -2066,11 +2064,10 @@
                             }
                             return $event;
                         }
-                        $n++;
                     }
                 }
             }
-            return ""     ;
+            return "";
 
         }
         private function kolabReadRecurrence($kevent,$type=0)
