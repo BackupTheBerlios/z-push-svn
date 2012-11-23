@@ -960,11 +960,22 @@ class BackendIMAP extends BackendDiff {
                 $message = array();
                 $message["mod"] = $date;
                 $message["id"] = $overview->uid;
-                // 'seen' aka 'read' is the only flag we want to know about
-                $message["flags"] = 0;
-
-                if(array_key_exists( "seen", $vars) && $overview->seen)
+                
+                // 'seen' aka 'read'
+                if(array_key_exists("seen", $vars) && $overview->seen) {
                     $message["flags"] = 1;
+                }
+                else {
+                    $message["flags"] = 0;
+                }
+                
+                // 'flagged' aka 'FollowUp' aka 'starred'
+                if (array_key_exists("flagged", $vars) && $overview->flagged) {
+                    $message["star"] = 1;
+                }
+                else {
+                    $message["star"] = 0;
+                }                
 
                 array_push($messages, $message);
             }
@@ -1107,6 +1118,17 @@ class BackendIMAP extends BackendDiff {
             $output->internetcpid = INTERNET_CPID_UTF8;
             if (Request::GetProtocolVersion() >= 12.0) {
                 $output->contentclass = "urn:content-classes:message";
+
+                $output->flag = new SyncMailFlags();
+                if (isset($stat["star"]) && $stat["star"]) {
+                    //flagstatus 0: clear, 1: complete, 2: active
+                    $output->flag->flagstatus = SYNC_FLAGSTATUS_ACTIVE;
+                    //flagtype: for follow up
+                    $output->flag->flagtype = "FollowUp";                    
+                }
+                else {
+                    $output->flag->flagstatus = SYNC_FLAGSTATUS_CLEAR;
+                }
             }
             /* END fmbiete's contribution r1528, ZP-320 */
 
@@ -1263,11 +1285,22 @@ class BackendIMAP extends BackendDiff {
         $entry = array();
         $entry["mod"] = (array_key_exists( "date", $vars)) ? $overview[0]->date : "";
         $entry["id"] = $overview[0]->uid;
-        // 'seen' aka 'read' is the only flag we want to know about
-        $entry["flags"] = 0;
-
-        if(array_key_exists( "seen", $vars) && $overview[0]->seen)
+        
+        // 'seen' aka 'read'
+        if (array_key_exists("seen", $vars) && $overview[0]->seen) {
             $entry["flags"] = 1;
+        }
+        else {
+            $entry["flags"] = 0;
+        }
+
+        // 'flagged' aka 'FollowUp' aka 'starred'
+        if (array_key_exists("flagged", $vars) && $overview[0]->flagged) {
+            $entry["star"] = 1;
+        }
+        else {
+            $entry["star"] = 0;
+        }
 
         return $entry;
     }
@@ -1358,6 +1391,35 @@ class BackendIMAP extends BackendDiff {
 
         return $status;
     }
+
+    /**
+     * Changes the 'star' flag of a message on disk
+     *
+     * @param string        $folderid       id of the folder
+     * @param string        $id             id of the message
+     * @param int           $flags          read flag of the message
+     * @param ContentParameters   $contentParameters
+     *
+     * @access public
+     * @return boolean                      status of the operation
+     * @throws StatusException              could throw specific SYNC_STATUS_* exceptions
+     */
+    public function SetStarFlag($folderid, $id, $flags, $contentParameters) {
+        ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->SetStarFlag('%s','%s','%s')", $folderid, $id, $flags));
+        $folderImapid = $this->getImapIdFromFolderId($folderid);
+
+        $this->imap_reopenFolder($folderImapid);
+
+        if ($flags == 0) {
+            // set as "UnFlagged" (unstarred)
+            $status = @imap_clearflag_full ( $this->mbox, $id, "\\Flagged", ST_UID);
+        } else {
+            // set as "Flagged" (starred)
+            $status = @imap_setflag_full($this->mbox, $id, "\\Flagged",ST_UID);
+        }
+
+        return $status;
+    }  
 
     /**
      * Called when the user has requested to delete (really delete) a message
