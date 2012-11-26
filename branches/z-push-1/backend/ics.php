@@ -881,7 +881,7 @@ class ImportContentsChangesICS extends MAPIMapping {
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) ? true : false));
 
-        if(isset($appointment->reminder) && $appointment->reminder > 0) {
+        if(isset($appointment->reminder) && $appointment->reminder >= 0) {
             //start is in seconds and reminder in minutes, so it needs to be multiplied by 60
             // Set 'flagdueby' to correct value (start - reminderminutes)
             mapi_setprops($mapimessage, array(
