@@ -1721,6 +1721,29 @@ class PHPContentsImportProxy extends MAPIMapping {
             if(isset($attendee->name) && isset($attendee->email) && $attendee->email != "" && (!isset($message->organizeremail) || (isset($message->organizeremail) && $attendee->email != $message->organizeremail)))
                 array_push($message->attendees, $attendee);
         }
+
+        // Status 0 = no meeting, status 1 = organizer, status 2/3/4/5 = tentative/accepted/declined/notresponded
+        if(isset($messageprops[$meetingstatustag]) && $messageprops[$meetingstatustag] > 1) {
+            if (!isset($message->attendees) || !is_array($message->attendees))
+                $message->attendees = array();
+            // Work around iOS6 cancellation issue when there are no attendees for this meeting. Just add ourselves as the sole attendee.
+            if(count($message->attendees) == 0) {
+                debugLog("MAPIProvider->getAppointment: adding ourself as an attendee for iOS6 workaround");
+                $attendee = new SyncAttendee();
+
+                global $auth_user;
+                $meinfo = mapi_zarafa_getuser_by_name($this->_store, $auth_user);
+
+                if (is_array($meinfo)) {
+                    $attendee->email = w2u($meinfo["emailaddress"]);
+                    $attendee->mame = w2u($meinfo["fullname"]);
+                    $attendee->attendeetype = MAPI_TO;
+
+                    array_push($message->attendees, $attendee);
+                }
+            }
+        }
+
         // Force the 'alldayevent' in the object at all times. (non-existent == 0)
         if(!isset($message->alldayevent) || $message->alldayevent == "")
             $message->alldayevent = 0;
