@@ -1026,9 +1026,35 @@ class ImportContentsChangesICS extends MAPIMapping {
             mapi_setprops($mapimessage, array($isrecurringtag => false));
         }
 
+        //always set the PR_SENT_REPRESENTING_* props so that the attendee status update also works with the webaccess
+        $p = array(PR_SENT_REPRESENTING_ENTRYID, PR_SENT_REPRESENTING_NAME, PR_SENT_REPRESENTING_ADDRTYPE, PR_SENT_REPRESENTING_EMAIL_ADDRESS, PR_SENT_REPRESENTING_SEARCH_KEY);
+        $representingprops = mapi_getprops($mapimessage, $p);
+
+        if (!isset($representingprops[PR_SENT_REPRESENTING_ENTRYID])) {
+            global $auth_user;
+            $props[PR_SENT_REPRESENTING_NAME] = $auth_user;
+            $props[PR_SENT_REPRESENTING_EMAIL_ADDRESS] = $auth_user;
+            $props[PR_SENT_REPRESENTING_ADDRTYPE] = "ZARAFA";
+            $props[PR_SENT_REPRESENTING_ENTRYID] = mapi_createoneoff($auth_user, "ZARAFA", $auth_user);
+            $props[PR_SENT_REPRESENTING_SEARCH_KEY] = $props[PR_SENT_REPRESENTING_ADDRTYPE].":".$props[PR_SENT_REPRESENTING_EMAIL_ADDRESS];
+            mapi_setprops($mapimessage, $props);
+        }
+
         // Do attendees
         if(isset($appointment->attendees) && is_array($appointment->attendees)) {
             $recips = array();
+            // Outlook XP requires organizer in the attendee list as well
+            $org = array();
+            $org[PR_ENTRYID] = isset($representingprops[PR_SENT_REPRESENTING_ENTRYID]) ? $representingprops[PR_SENT_REPRESENTING_ENTRYID] : $props[PR_SENT_REPRESENTING_ENTRYID];
+            $org[PR_DISPLAY_NAME] = isset($representingprops[PR_SENT_REPRESENTING_NAME]) ? $representingprops[PR_SENT_REPRESENTING_NAME] : $props[PR_SENT_REPRESENTING_NAME];
+            $org[PR_ADDRTYPE] = isset($representingprops[PR_SENT_REPRESENTING_ADDRTYPE]) ? $representingprops[PR_SENT_REPRESENTING_ADDRTYPE] : $props[PR_SENT_REPRESENTING_ADDRTYPE];
+            $org[PR_EMAIL_ADDRESS] = isset($representingprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS]) ? $representingprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS] : $props[PR_SENT_REPRESENTING_EMAIL_ADDRESS];
+            $org[PR_SEARCH_KEY] = isset($representingprops[PR_SENT_REPRESENTING_SEARCH_KEY]) ? $representingprops[PR_SENT_REPRESENTING_SEARCH_KEY] : $props[PR_SENT_REPRESENTING_SEARCH_KEY];
+            $org[PR_RECIPIENT_FLAGS] = recipOrganizer | recipSendable;
+            $org[PR_RECIPIENT_TYPE] = MAPI_TO;
+
+            array_push($recips, $org);
+
             //open addresss book for user resolve
             $addrbook = mapi_openaddressbook($this->_session);
             foreach($appointment->attendees as $attendee) {
@@ -1045,6 +1071,7 @@ class ImportContentsChangesICS extends MAPIMapping {
                     $recip[PR_ADDRTYPE] = $userinfo[0][PR_ADDRTYPE];
                     $recip[PR_ENTRYID] = $userinfo[0][PR_ENTRYID];
                     $recip[PR_RECIPIENT_TYPE] = MAPI_TO;
+                    $recip[PR_RECIPIENT_FLAGS] = recipSendable;
                 }
                 else {
                     $recip[PR_DISPLAY_NAME] = u2w($attendee->name);
