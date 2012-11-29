@@ -881,7 +881,7 @@ class ImportContentsChangesICS extends MAPIMapping {
         mapi_setprops($mapimessage, array(
             $this->_getPropIDFromString("PT_BOOLEAN:{00062008-0000-0000-C000-000000000046}:0x8503") => isset($appointment->reminder) ? true : false));
 
-        if(isset($appointment->reminder) && $appointment->reminder > 0) {
+        if(isset($appointment->reminder) && $appointment->reminder >= 0) {
             //start is in seconds and reminder in minutes, so it needs to be multiplied by 60
             // Set 'flagdueby' to correct value (start - reminderminutes)
             mapi_setprops($mapimessage, array(
@@ -1026,9 +1026,35 @@ class ImportContentsChangesICS extends MAPIMapping {
             mapi_setprops($mapimessage, array($isrecurringtag => false));
         }
 
+        //always set the PR_SENT_REPRESENTING_* props so that the attendee status update also works with the webaccess
+        $p = array(PR_SENT_REPRESENTING_ENTRYID, PR_SENT_REPRESENTING_NAME, PR_SENT_REPRESENTING_ADDRTYPE, PR_SENT_REPRESENTING_EMAIL_ADDRESS, PR_SENT_REPRESENTING_SEARCH_KEY);
+        $representingprops = mapi_getprops($mapimessage, $p);
+
+        if (!isset($representingprops[PR_SENT_REPRESENTING_ENTRYID])) {
+            global $auth_user;
+            $props[PR_SENT_REPRESENTING_NAME] = $auth_user;
+            $props[PR_SENT_REPRESENTING_EMAIL_ADDRESS] = $auth_user;
+            $props[PR_SENT_REPRESENTING_ADDRTYPE] = "ZARAFA";
+            $props[PR_SENT_REPRESENTING_ENTRYID] = mapi_createoneoff($auth_user, "ZARAFA", $auth_user);
+            $props[PR_SENT_REPRESENTING_SEARCH_KEY] = $props[PR_SENT_REPRESENTING_ADDRTYPE].":".$props[PR_SENT_REPRESENTING_EMAIL_ADDRESS];
+            mapi_setprops($mapimessage, $props);
+        }
+
         // Do attendees
         if(isset($appointment->attendees) && is_array($appointment->attendees)) {
             $recips = array();
+            // Outlook XP requires organizer in the attendee list as well
+            $org = array();
+            $org[PR_ENTRYID] = isset($representingprops[PR_SENT_REPRESENTING_ENTRYID]) ? $representingprops[PR_SENT_REPRESENTING_ENTRYID] : $props[PR_SENT_REPRESENTING_ENTRYID];
+            $org[PR_DISPLAY_NAME] = isset($representingprops[PR_SENT_REPRESENTING_NAME]) ? $representingprops[PR_SENT_REPRESENTING_NAME] : $props[PR_SENT_REPRESENTING_NAME];
+            $org[PR_ADDRTYPE] = isset($representingprops[PR_SENT_REPRESENTING_ADDRTYPE]) ? $representingprops[PR_SENT_REPRESENTING_ADDRTYPE] : $props[PR_SENT_REPRESENTING_ADDRTYPE];
+            $org[PR_EMAIL_ADDRESS] = isset($representingprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS]) ? $representingprops[PR_SENT_REPRESENTING_EMAIL_ADDRESS] : $props[PR_SENT_REPRESENTING_EMAIL_ADDRESS];
+            $org[PR_SEARCH_KEY] = isset($representingprops[PR_SENT_REPRESENTING_SEARCH_KEY]) ? $representingprops[PR_SENT_REPRESENTING_SEARCH_KEY] : $props[PR_SENT_REPRESENTING_SEARCH_KEY];
+            $org[PR_RECIPIENT_FLAGS] = recipOrganizer | recipSendable;
+            $org[PR_RECIPIENT_TYPE] = MAPI_TO;
+
+            array_push($recips, $org);
+
             //open addresss book for user resolve
             $addrbook = mapi_openaddressbook($this->_session);
             foreach($appointment->attendees as $attendee) {
@@ -1045,6 +1071,7 @@ class ImportContentsChangesICS extends MAPIMapping {
                     $recip[PR_ADDRTYPE] = $userinfo[0][PR_ADDRTYPE];
                     $recip[PR_ENTRYID] = $userinfo[0][PR_ENTRYID];
                     $recip[PR_RECIPIENT_TYPE] = MAPI_TO;
+                    $recip[PR_RECIPIENT_FLAGS] = recipSendable;
                 }
                 else {
                     $recip[PR_DISPLAY_NAME] = u2w($attendee->name);
@@ -1694,6 +1721,29 @@ class PHPContentsImportProxy extends MAPIMapping {
             if(isset($attendee->name) && isset($attendee->email) && $attendee->email != "" && (!isset($message->organizeremail) || (isset($message->organizeremail) && $attendee->email != $message->organizeremail)))
                 array_push($message->attendees, $attendee);
         }
+
+        // Status 0 = no meeting, status 1 = organizer, status 2/3/4/5 = tentative/accepted/declined/notresponded
+        if(isset($messageprops[$meetingstatustag]) && $messageprops[$meetingstatustag] > 1) {
+            if (!isset($message->attendees) || !is_array($message->attendees))
+                $message->attendees = array();
+            // Work around iOS6 cancellation issue when there are no attendees for this meeting. Just add ourselves as the sole attendee.
+            if(count($message->attendees) == 0) {
+                debugLog("MAPIProvider->getAppointment: adding ourself as an attendee for iOS6 workaround");
+                $attendee = new SyncAttendee();
+
+                global $auth_user;
+                $meinfo = mapi_zarafa_getuser_by_name($this->_store, $auth_user);
+
+                if (is_array($meinfo)) {
+                    $attendee->email = w2u($meinfo["emailaddress"]);
+                    $attendee->mame = w2u($meinfo["fullname"]);
+                    $attendee->attendeetype = MAPI_TO;
+
+                    array_push($message->attendees, $attendee);
+                }
+            }
+        }
+
         // Force the 'alldayevent' in the object at all times. (non-existent == 0)
         if(!isset($message->alldayevent) || $message->alldayevent == "")
             $message->alldayevent = 0;
