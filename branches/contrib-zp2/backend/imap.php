@@ -48,7 +48,7 @@ include_once('include/mimeDecode.php');
 require_once('include/z_RFC822.php');
 
 
-class BackendIMAP extends BackendDiff {
+class BackendIMAP extends BackendDiff implements ISearchProvider {
     protected $wasteID;
     protected $sentID;
     protected $server;
@@ -60,6 +60,15 @@ class BackendIMAP extends BackendDiff {
     protected $sinkfolders;
     protected $sinkstates;
     protected $excludedFolders; /* fmbiete's contribution r1527, ZP-319 */
+
+    public function BackendIMAP() {
+        $this->wasteID = false;
+        $this->sentID = false;
+        $this->mboxFolder = "";
+
+        if (!function_exists("imap_open"))
+            throw new FatalException("BackendIMAP(): php-imap module is not installed", 0, null, LOGLEVEL_FATAL);
+    }
 
     /**----------------------------------------------------------------------------------------------------------
      * default backend methods
@@ -1524,6 +1533,238 @@ class BackendIMAP extends BackendDiff {
             // return the new id "as string""
             return $newid . "";
         }
+    }
+
+
+    /**
+     * Returns the BackendIMAP as it implements the ISearchProvider interface
+     * This could be overwritten by the global configuration
+     *
+     * @access public
+     * @return object       Implementation of ISearchProvider
+     */
+    public function GetSearchProvider() {
+        return $this;
+    }
+
+
+    /**----------------------------------------------------------------------------------------------------------
+     * public ISearchProvider methods
+     */
+
+    /**
+     * Indicates if a search type is supported by this SearchProvider
+     *
+     * @param string        $searchtype
+     *
+     * @access public
+     * @return boolean
+     */
+    public function SupportsType($searchtype) {
+        return ($searchtype == ISearchProvider::SEARCH_MAILBOX);
+    }
+
+
+    /**
+     * Queries the IMAP backend
+     *
+     * @param string        $searchquery        string to be searched for
+     * @param string        $searchrange        specified searchrange
+     *
+     * @access public
+     * @return array        search results
+     */
+    public function GetGALSearchResults($searchquery, $searchrange) {
+        return false;
+    }
+
+    /**
+     * Searches for the emails on the server
+     *
+     * @param ContentParameter $cpo
+     * @param string $prefix If used with the combined backend here will come the backend id and delimiter
+     *
+     * @return array
+     */
+    public function GetMailboxSearchResults($cpo, $prefix = '') {
+        ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults()"));
+
+        $items = false;
+        $searchFolderId = $cpo->GetSearchFolderid();
+        $searchRange = explode('-', $cpo->GetSearchRange());
+        $filter = $this->getSearchRestriction($cpo);
+
+        // Open the folder to search
+        $search = true;
+
+        if (empty($searchFolderId)) {
+            $searchFolderId = $this->getFolderIdFromImapId('INBOX');
+        }
+
+        // Convert searchFolderId to IMAP id
+        $imapId = $this->getImapIdFromFolderId($searchFolderId);
+
+        $listMessages = array();
+        $numMessages = 0;
+        ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: Filter <%s>", $filter));
+
+        if ($cpo->GetSearchDeepTraversal()) { // Recursive search
+            ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: Recursive search %s", $imapId));
+            $listFolders = @imap_list($this->mbox, $this->server, "*");
+            if ($listFolders === false) {
+                ZLog::Write(LOGLEVEL_WARN, sprintf("BackendIMAP->GetMailboxSearchResults: Error recursive list %s", imap_last_error()));
+            }
+            else {
+                foreach ($listFolders as $subFolder) {
+                    if (@imap_reopen($this->mbox, $subFolder)) {
+                        $imapSubFolder = str_replace($this->server, "", $subFolder);
+                        $subFolderId = $this->getFolderIdFromImapId($imapSubFolder);
+                        if ($subFolderId !== false) { // only search found folders
+                            $subList = @imap_search($this->mbox, $filter, SE_UID, "UTF-8");
+                            if ($subList !== false) {
+                                $numMessages += count($subList);
+                                ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: SubSearch in %s : %s ocurrences", $imapSubFolder, count($subList)));
+                                $listMessages[] = array($subFolderId => $subList);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else { // Search in folder
+            if (@imap_reopen($this->mbox, $this->server . $imapId)) {
+                $subList = @imap_search($this->mbox, $filter, SE_UID, "UTF-8");
+                if ($subList !== false) {
+                    $numMessages += count($subList);
+                    ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: Search in %s : %s ocurrences", $imapId, count($subList)));
+                    $listMessages[] = array($searchFolderId => $subList);
+                }
+            }
+        }
+            
+
+        if ($numMessages > 0) {
+            // range for the search results
+            $rangestart = 0;
+            $rangeend = SEARCH_MAXRESULTS - 1;
+
+            if (is_array($searchRange) && isset($searchRange[0]) && isset($searchRange[1])) {
+                $rangestart = $searchRange[0];
+                $rangeend = $searchRange[1];
+            }
+                    
+            $querycnt = $numMessages;
+            $items = array();
+            $querylimit = (($rangeend + 1) < $querycnt) ? ($rangeend + 1) : $querycnt + 1;
+            $items['range'] = $rangestart.'-'.($querylimit - 1);
+            $items['searchtotal'] = $querycnt;
+                        
+            ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: %s entries found, returning %s", $items['searchtotal'], $items['range']));
+
+            $p = 0;
+            $pc = 0;
+            for ($i = $rangestart, $j = 0; $i <= $rangeend && $i < $querycnt; $i++, $j++) {
+                $keys = array_keys($listMessages[$p]);
+                $cntFolder = count($listMessages[$p][$keys[0]]);
+                if ($pc >= $cntFolder) {
+                    $p++;
+                    $pc = 0;
+                    $keys = array_keys($listMessages[$p]);
+                }
+                ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: %s %s %s %s", $p, $pc, $keys[0], $listMessages[$p][$keys[0]][$pc]));
+                $foundFolderId = $keys[0];
+                $items[$j]['class'] = 'Email';
+                $items[$j]['longid'] = $prefix . $foundFolderId . ":" . $listMessages[$p][$foundFolderId][$pc];
+                $items[$j]['folderid'] = $prefix . $foundFolderId;
+                $pc++;
+            }
+        }
+        else {
+            ZLog::Write(LOGLEVEL_DEBUG, sprintf("BackendIMAP->GetMailboxSearchResults: No messages found!"));
+        }
+
+        return $items;
+    }
+
+    /**
+    * Terminates a search for a given PID
+    *
+    * @param int $pid
+    *
+    * @return boolean
+    */
+    public function TerminateSearch($pid) {
+        return true;
+    }
+
+    /**
+     * Disconnects from IMAP
+     *
+     * @access public
+     * @return boolean
+     */
+    public function Disconnect() {
+        // Don't close the mailbox, we will need it open in the Backend methods
+        return true;
+    }
+
+
+    /**
+     * Creates a search restriction
+     *
+     * @param ContentParameter $cpo
+     * @return string
+     */
+    private function getSearchRestriction($cpo) {
+        $searchText = $cpo->GetSearchFreeText();
+        $searchGreater = $cpo->GetSearchValueGreater();
+        $searchLess = $cpo->GetSearchValueLess();
+
+        $filter = '';
+        if ($searchGreater != '') {
+            $filter .= ' SINCE "' . $searchGreater . '"';
+        } else {
+            // Only search in sync messages
+            $limitdate = new DateTime();
+            switch (SYNC_FILTERTIME_MAX) {
+                case SYNC_FILTERTYPE_1DAY:
+                    $limitdate = $limitdate->sub(new DateInterval("P1D"));
+                    break;
+                case SYNC_FILTERTYPE_3DAYS:
+                    $limitdate = $limitdate->sub(new DateInterval("P3D"));
+                    break;
+                case SYNC_FILTERTYPE_1WEEK:
+                    $limitdate = $limitdate->sub(new DateInterval("P1W"));
+                    break;
+                case SYNC_FILTERTYPE_2WEEKS:
+                    $limitdate = $limitdate->sub(new DateInterval("P2W"));
+                    break;
+                case SYNC_FILTERTYPE_1MONTH:
+                    $limitdate = $limitdate->sub(new DateInterval("P1M"));
+                    break;
+                case SYNC_FILTERTYPE_3MONTHS:
+                    $limitdate = $limitdate->sub(new DateInterval("P3M"));
+                    break;
+                case SYNC_FILTERTYPE_6MONTHS:
+                    $limitdate = $limitdate->sub(new DateInterval("P6M"));
+                    break;
+                default:
+                    $limitdate = false;
+                    break;
+            }
+
+            if ($limitdate !== false) {
+                // date format : 7 Jan 2012
+                $filter .= ' SINCE "' . ($limitdate->format("d M Y")) . '"';
+            }
+        }
+        if ($searchLess != '') {
+            $filter .= ' BEFORE "' . $searchLess . '"';
+        }
+
+        $filter .= ' BODY "' . $searchText . '"';
+        
+        return $filter;
     }
 
 
