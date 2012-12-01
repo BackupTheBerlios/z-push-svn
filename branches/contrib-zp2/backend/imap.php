@@ -105,7 +105,7 @@ class BackendIMAP extends BackendDiff {
             return true;
         }
         else {
-            ZLog::Write(LOGLEVEL_ERROR, "BackendIMAP->Logon(): can't connect: " . imap_last_error());
+            ZLog::Write(LOGLEVEL_ERROR, sprintf("BackendIMAP->Logon(): can't connect as user %s: %s", $username, imap_last_error()));
             return false;
         }
     }
