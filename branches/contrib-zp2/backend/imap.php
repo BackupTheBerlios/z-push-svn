@@ -1587,7 +1587,7 @@ class BackendIMAP extends BackendDiff implements ISearchProvider {
             // open new folder
             $stat = $this->imap_reopenFolder($newfolderImapid);
             if (! $s1)
-                throw new StatusException(sprintf("BackendIMAP->MoveMessage('%s','%s','%s'): Error, openeing the destination folder: %s", $folderid, $id, $newfolderid, imap_last_error()), SYNC_MOVEITEMSSTATUS_CANNOTMOVE);
+                throw new StatusException(sprintf("BackendIMAP->MoveMessage('%s','%s','%s'): Error, opening the destination folder: %s", $folderid, $id, $newfolderid, imap_last_error()), SYNC_MOVEITEMSSTATUS_CANNOTMOVE);
 
 
             // remove all flags
