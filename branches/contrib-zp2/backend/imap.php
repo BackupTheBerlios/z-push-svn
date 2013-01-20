@@ -1216,25 +1216,31 @@ class BackendIMAP extends BackendDiff implements ISearchProvider {
             $output->cc = array();
             $output->reply_to = array();
             foreach(array("to" => $toaddr, "cc" => $ccaddr, "reply_to" => $replytoaddr) as $type => $addrlist) {
-                foreach($addrlist as $addr) {
-                    $address = $addr->mailbox . "@" . $addr->host;
-                    $name = $addr->personal;
+                if ($addrlist === false) {
+                    //If we couldn't parse the addresslist we put the raw header (decoded)
+                    array_push($output->$type, $message->headers[$type]);
+                }
+                else {
+                    foreach($addrlist as $addr) {
+                        $address = $addr->mailbox . "@" . $addr->host;
+                        $name = $addr->personal;
 
-                    if (!isset($output->displayto) && $name != "")
-                        $output->displayto = $name;
+                        if (!isset($output->displayto) && $name != "")
+                            $output->displayto = $name;
 
-                    if($name == "" || $name == $address)
-                        $fulladdr = w2u($address);
-                    else {
-                        if (substr($name, 0, 1) != '"' && substr($name, -1) != '"') {
-                            $fulladdr = "\"" . w2u($name) ."\" <" . w2u($address) . ">";
-                        }
+                        if($name == "" || $name == $address)
+                            $fulladdr = w2u($address);
                         else {
-                            $fulladdr = w2u($name) ." <" . w2u($address) . ">";
+                            if (substr($name, 0, 1) != '"' && substr($name, -1) != '"') {
+                                $fulladdr = "\"" . w2u($name) ."\" <" . w2u($address) . ">";
+                            }
+                            else {
+                                $fulladdr = w2u($name) ." <" . w2u($address) . ">";
+                            }
                         }
-                    }
 
-                    array_push($output->$type, $fulladdr);
+                        array_push($output->$type, $fulladdr);
+                    }
                 }
             }
 
