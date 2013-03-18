@@ -524,7 +524,7 @@ class BackendCombined extends Backend implements ISearchProvider {
         $pos = strpos($folderid, $this->config['delimiter']);
         if($pos === false)
             return false;
-        return substr($folderid,0,$pos);
+        return substr($folderid, 0, $pos);
     }
 
     /**
