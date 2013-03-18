@@ -1,0 +1,3 @@
+This is a CardDAV backend based in the vcarddir backend.
+
+I have only tested it with davical, so if you test it with other carddav server let me know.
