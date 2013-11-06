@@ -219,10 +219,10 @@ class ZPush {
         if (!file_exists(LOGFILEDIR))
             throw new FatalMisconfigurationException("The configured LOGFILEDIR does not exist or can not be accessed.");
 
-        if (!touch(LOGFILE))
+        if ((!file_exists(LOGFILE) && !touch(LOGFILE)) || !is_writable(LOGFILE))
             throw new FatalMisconfigurationException("The configured LOGFILE can not be modified.");
 
-        if (!touch(LOGERRORFILE))
+        if ((!file_exists(LOGERRORFILE) && !touch(LOGERRORFILE)) || !is_writable(LOGERRORFILE))
             throw new FatalMisconfigurationException("The configured LOGERRORFILE can not be modified.");
 
         // set time zone
@@ -258,6 +258,12 @@ class ZPush {
         }
         else if (SINK_FORCERECHECK !== false && (!is_int(SINK_FORCERECHECK) || SINK_FORCERECHECK < 1))
             throw new FatalMisconfigurationException("The SINK_FORCERECHECK value must be 'false' or a number higher than 0.");
+
+        if (!defined('SYNC_CONTACTS_MAXPICTURESIZE')) {
+            define('SYNC_CONTACTS_MAXPICTURESIZE', 49152);
+        }
+        else if ((!is_int(SYNC_CONTACTS_MAXPICTURESIZE) || SYNC_CONTACTS_MAXPICTURESIZE < 1))
+            throw new FatalMisconfigurationException("The SYNC_CONTACTS_MAXPICTURESIZE value must be a number higher than 0.");
 
         // the check on additional folders will not throw hard errors, as this is probably changed on live systems
         if (isset($additionalFolders) && !is_array($additionalFolders))

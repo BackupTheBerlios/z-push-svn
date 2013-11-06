@@ -69,7 +69,7 @@ class FileStateMachine implements IStateMachine {
         $this->getDirectoryForDevice(Request::GetDeviceID());
         $this->userfilename = STATE_DIR . 'users';
 
-        if (!touch($this->userfilename))
+        if ((!file_exists($this->userfilename) && !touch($this->userfilename)) || !is_writable($this->userfilename))
             throw new FatalMisconfigurationException("Not possible to write to the configured state directory.");
     }
 
